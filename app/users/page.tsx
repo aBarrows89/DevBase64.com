@@ -171,14 +171,39 @@ function UsersContent() {
 
   const getRoleBadgeColor = (role: string) => {
     switch (role) {
+      case "super_admin":
+        return "bg-red-500/20 text-red-400";
       case "admin":
         return "bg-purple-500/20 text-purple-400";
+      case "department_manager":
+        return "bg-blue-500/20 text-blue-400";
+      case "warehouse_manager":
+        return "bg-orange-500/20 text-orange-400";
       case "member":
         return "bg-cyan-500/20 text-cyan-400";
       case "viewer":
         return "bg-slate-500/20 text-slate-400";
       default:
         return "bg-slate-500/20 text-slate-400";
+    }
+  };
+
+  const getRoleDisplayName = (role: string) => {
+    switch (role) {
+      case "super_admin":
+        return "Super Admin";
+      case "admin":
+        return "Admin";
+      case "department_manager":
+        return "Department Manager";
+      case "warehouse_manager":
+        return "Warehouse Manager";
+      case "member":
+        return "Member";
+      case "viewer":
+        return "Viewer";
+      default:
+        return role;
     }
   };
 
@@ -254,7 +279,7 @@ function UsersContent() {
                     </td>
                     <td className="px-6 py-4">
                       <span className={`px-2 py-1 text-xs font-medium rounded-full ${getRoleBadgeColor(user.role)}`}>
-                        {user.role}
+                        {getRoleDisplayName(user.role)}
                       </span>
                     </td>
                     <td className="px-6 py-4">
@@ -374,7 +399,10 @@ function UsersContent() {
                   onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
                   className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-cyan-500"
                 >
+                  <option value="super_admin">Super Admin</option>
                   <option value="admin">Admin</option>
+                  <option value="department_manager">Department Manager</option>
+                  <option value="warehouse_manager">Warehouse Manager</option>
                   <option value="member">Member</option>
                   <option value="viewer">Viewer</option>
                 </select>
@@ -432,7 +460,10 @@ function UsersContent() {
                   onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
                   className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-cyan-500"
                 >
+                  <option value="super_admin">Super Admin</option>
                   <option value="admin">Admin</option>
+                  <option value="department_manager">Department Manager</option>
+                  <option value="warehouse_manager">Warehouse Manager</option>
                   <option value="member">Member</option>
                   <option value="viewer">Viewer</option>
                 </select>

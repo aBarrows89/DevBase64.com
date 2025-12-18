@@ -7,7 +7,7 @@ export default defineSchema({
     email: v.string(),
     passwordHash: v.string(),
     name: v.string(),
-    role: v.string(), // "admin" | "member" | "viewer"
+    role: v.string(), // "super_admin" | "admin" | "department_manager" | "warehouse_manager" | "member" | "viewer"
     isActive: v.boolean(),
     forcePasswordChange: v.boolean(),
     createdAt: v.number(),
@@ -282,4 +282,131 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_created", ["createdAt"])
     .index("by_assigned", ["assignedTo"]),
+
+  // ============ PERSONNEL MANAGEMENT ============
+  // Personnel profiles (hired applicants become personnel)
+  personnel: defineTable({
+    firstName: v.string(),
+    lastName: v.string(),
+    email: v.string(),
+    phone: v.string(),
+    applicationId: v.optional(v.id("applications")), // Link to original application
+    position: v.string(), // Job title
+    department: v.string(), // "Warehouse", "Sales", "Management", etc.
+    employeeType: v.string(), // "full_time" | "part_time" | "seasonal"
+    hireDate: v.string(), // YYYY-MM-DD
+    hourlyRate: v.optional(v.number()),
+    status: v.string(), // "active" | "on_leave" | "terminated"
+    terminationDate: v.optional(v.string()),
+    terminationReason: v.optional(v.string()),
+    emergencyContact: v.optional(v.object({
+      name: v.string(),
+      phone: v.string(),
+      relationship: v.string(),
+    })),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_department", ["department"])
+    .index("by_status", ["status"])
+    .index("by_email", ["email"]),
+
+  // Write-ups / Disciplinary Records
+  writeUps: defineTable({
+    personnelId: v.id("personnel"),
+    date: v.string(), // YYYY-MM-DD
+    category: v.string(), // "attendance" | "behavior" | "safety" | "performance" | "policy_violation"
+    severity: v.string(), // "verbal_warning" | "written_warning" | "final_warning" | "suspension"
+    description: v.string(),
+    actionTaken: v.optional(v.string()),
+    followUpRequired: v.boolean(),
+    followUpDate: v.optional(v.string()),
+    followUpNotes: v.optional(v.string()),
+    issuedBy: v.id("users"),
+    acknowledgedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_personnel", ["personnelId"])
+    .index("by_date", ["date"])
+    .index("by_severity", ["severity"]),
+
+  // Attendance Records
+  attendance: defineTable({
+    personnelId: v.id("personnel"),
+    date: v.string(), // YYYY-MM-DD
+    status: v.string(), // "present" | "absent" | "late" | "excused" | "no_call_no_show"
+    scheduledStart: v.optional(v.string()), // HH:MM
+    scheduledEnd: v.optional(v.string()), // HH:MM
+    actualStart: v.optional(v.string()), // HH:MM
+    actualEnd: v.optional(v.string()), // HH:MM
+    hoursWorked: v.optional(v.number()),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_personnel", ["personnelId"])
+    .index("by_date", ["date"])
+    .index("by_personnel_date", ["personnelId", "date"]),
+
+  // Merits / Commendations
+  merits: defineTable({
+    personnelId: v.id("personnel"),
+    date: v.string(), // YYYY-MM-DD
+    type: v.string(), // "performance" | "attendance" | "teamwork" | "safety" | "customer_service" | "initiative"
+    title: v.string(),
+    description: v.string(),
+    issuedBy: v.id("users"),
+    createdAt: v.number(),
+  })
+    .index("by_personnel", ["personnelId"])
+    .index("by_date", ["date"])
+    .index("by_type", ["type"]),
+
+  // Shift Planning (whiteboard style)
+  shifts: defineTable({
+    date: v.string(), // YYYY-MM-DD
+    name: v.optional(v.string()), // Shift name like "Morning", "Evening", etc.
+    startTime: v.string(), // HH:MM
+    endTime: v.string(), // HH:MM
+    position: v.string(), // "Receiving", "Shipping", "Inventory", etc.
+    department: v.string(),
+    requiredCount: v.number(), // How many people needed
+    assignedPersonnel: v.array(v.id("personnel")),
+    notes: v.optional(v.string()),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_date", ["date"])
+    .index("by_department", ["department"])
+    .index("by_date_department", ["date", "department"]),
+
+  // Performance Reviews
+  performanceReviews: defineTable({
+    personnelId: v.id("personnel"),
+    reviewPeriod: v.string(), // "Q1 2025", "Annual 2024", etc.
+    reviewDate: v.string(), // YYYY-MM-DD
+    reviewedBy: v.id("users"),
+    overallRating: v.number(), // 1-5 scale
+    categories: v.array(v.object({
+      name: v.string(), // "Attendance", "Quality of Work", "Teamwork", etc.
+      rating: v.number(), // 1-5
+      notes: v.optional(v.string()),
+    })),
+    strengths: v.array(v.string()),
+    areasForImprovement: v.array(v.string()),
+    goals: v.array(v.object({
+      goal: v.string(),
+      targetDate: v.optional(v.string()),
+      completed: v.boolean(),
+    })),
+    employeeComments: v.optional(v.string()),
+    managerNotes: v.optional(v.string()),
+    acknowledgedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_personnel", ["personnelId"])
+    .index("by_date", ["reviewDate"]),
 });

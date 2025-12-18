@@ -11,13 +11,18 @@
 import type * as aiInterview from "../aiInterview.js";
 import type * as aiMatching from "../aiMatching.js";
 import type * as applications from "../applications.js";
+import type * as attendance from "../attendance.js";
 import type * as auth from "../auth.js";
 import type * as contactMessages from "../contactMessages.js";
 import type * as dealerInquiries from "../dealerInquiries.js";
 import type * as jobs from "../jobs.js";
+import type * as merits from "../merits.js";
 import type * as messages from "../messages.js";
+import type * as personnel from "../personnel.js";
 import type * as projects from "../projects.js";
 import type * as repositories from "../repositories.js";
+import type * as shifts from "../shifts.js";
+import type * as writeUps from "../writeUps.js";
 
 import type {
   ApiFromModules,
@@ -29,13 +34,18 @@ declare const fullApi: ApiFromModules<{
   aiInterview: typeof aiInterview;
   aiMatching: typeof aiMatching;
   applications: typeof applications;
+  attendance: typeof attendance;
   auth: typeof auth;
   contactMessages: typeof contactMessages;
   dealerInquiries: typeof dealerInquiries;
   jobs: typeof jobs;
+  merits: typeof merits;
   messages: typeof messages;
+  personnel: typeof personnel;
   projects: typeof projects;
   repositories: typeof repositories;
+  shifts: typeof shifts;
+  writeUps: typeof writeUps;
 }>;
 
 /**

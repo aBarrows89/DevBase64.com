@@ -494,17 +494,17 @@ export const clearScheduledInterview = mutation({
 export const getUpcomingInterviews = query({
   args: {},
   handler: async (ctx) => {
-    const applications = await ctx.db
-      .query("applications")
-      .withIndex("by_status", (q) => q.eq("status", "scheduled"))
-      .collect();
+    // Get all applications and filter for those with scheduled interview dates
+    // Don't filter by status since interview can be scheduled regardless of status
+    const applications = await ctx.db.query("applications").collect();
 
     const today = new Date().toISOString().split("T")[0];
 
-    // Filter to only future interviews and sort by date/time
+    // Filter to only applications with scheduled interview dates in the future
     const upcoming = applications
       .filter((app) => {
         if (!app.scheduledInterviewDate) return false;
+        // Include today and future dates, exclude past interviews
         return app.scheduledInterviewDate >= today;
       })
       .sort((a, b) => {

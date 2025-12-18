@@ -5,7 +5,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 
-export type UserRole = "admin" | "member" | "viewer";
+export type UserRole = "super_admin" | "admin" | "department_manager" | "warehouse_manager" | "member" | "viewer";
 
 export interface User {
   _id: Id<"users">;
@@ -26,6 +26,12 @@ interface AuthContextType {
   logout: () => void;
   canEdit: boolean;
   canManageUsers: boolean;
+  canManageAdmins: boolean;
+  // Personnel management permissions
+  canViewPersonnel: boolean;
+  canManagePersonnel: boolean;
+  canEditShifts: boolean;
+  canViewShifts: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -105,12 +111,66 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     : null;
 
-  const canEdit = user?.role === "admin" || user?.role === "member";
-  const canManageUsers = user?.role === "admin";
+  // Super Admin & Admin have full edit access
+  const canEdit =
+    user?.role === "super_admin" ||
+    user?.role === "admin" ||
+    user?.role === "department_manager" ||
+    user?.role === "member";
+
+  // Only Super Admin can manage other admins, Admin can manage non-admin users
+  const canManageUsers =
+    user?.role === "super_admin" ||
+    user?.role === "admin";
+
+  // Super Admin can create/edit admin users
+  const canManageAdmins = user?.role === "super_admin";
+
+  // Personnel management permissions
+  // View personnel: super_admin, admin, department_manager, warehouse_manager
+  const canViewPersonnel =
+    user?.role === "super_admin" ||
+    user?.role === "admin" ||
+    user?.role === "department_manager" ||
+    user?.role === "warehouse_manager";
+
+  // Manage personnel (add, edit, delete records): super_admin, admin, department_manager, warehouse_manager
+  const canManagePersonnel =
+    user?.role === "super_admin" ||
+    user?.role === "admin" ||
+    user?.role === "department_manager" ||
+    user?.role === "warehouse_manager";
+
+  // Edit shifts: super_admin, admin, department_manager, warehouse_manager
+  const canEditShifts =
+    user?.role === "super_admin" ||
+    user?.role === "admin" ||
+    user?.role === "department_manager" ||
+    user?.role === "warehouse_manager";
+
+  // View shifts: everyone except viewer
+  const canViewShifts =
+    user?.role === "super_admin" ||
+    user?.role === "admin" ||
+    user?.role === "department_manager" ||
+    user?.role === "warehouse_manager" ||
+    user?.role === "member";
 
   return (
     <AuthContext.Provider
-      value={{ user, isLoading, login, logout, canEdit, canManageUsers }}
+      value={{
+        user,
+        isLoading,
+        login,
+        logout,
+        canEdit,
+        canManageUsers,
+        canManageAdmins,
+        canViewPersonnel,
+        canManagePersonnel,
+        canEditShifts,
+        canViewShifts,
+      }}
     >
       {children}
     </AuthContext.Provider>

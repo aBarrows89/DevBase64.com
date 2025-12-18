@@ -58,6 +58,12 @@ function ApplicationDetailContent({ id }: { id: string }) {
   const updateNotes = useMutation(api.applications.updateNotes);
   const scheduleInterview = useMutation(api.applications.scheduleInterview);
   const clearScheduledInterview = useMutation(api.applications.clearScheduledInterview);
+  const createPersonnel = useMutation(api.personnel.createFromApplication);
+
+  // Check if personnel record already exists for this application
+  const existingPersonnel = useQuery(api.personnel.getByApplicationId, {
+    applicationId: id as Id<"applications">,
+  });
 
   // Notes state
   const [notesInput, setNotesInput] = useState("");
@@ -71,6 +77,17 @@ function ApplicationDetailContent({ id }: { id: string }) {
   const [scheduleLocation, setScheduleLocation] = useState("In-person");
   const [isScheduling, setIsScheduling] = useState(false);
 
+  // Hiring state
+  const [showHireModal, setShowHireModal] = useState(false);
+  const [isHiring, setIsHiring] = useState(false);
+  const [hireForm, setHireForm] = useState({
+    position: "",
+    department: "",
+    employeeType: "full_time",
+    hireDate: new Date().toISOString().split("T")[0],
+    hourlyRate: "",
+  });
+
   const handleDelete = async () => {
     if (!application) return;
     setIsDeleting(true);
@@ -81,6 +98,27 @@ function ApplicationDetailContent({ id }: { id: string }) {
       console.error("Failed to delete application:", error);
       setIsDeleting(false);
       setShowDeleteConfirm(false);
+    }
+  };
+
+  const handleHire = async () => {
+    if (!application || !hireForm.position || !hireForm.department) return;
+    setIsHiring(true);
+    try {
+      const personnelId = await createPersonnel({
+        applicationId: application._id,
+        position: hireForm.position,
+        department: hireForm.department,
+        employeeType: hireForm.employeeType,
+        hireDate: hireForm.hireDate,
+        hourlyRate: hireForm.hourlyRate ? parseFloat(hireForm.hourlyRate) : undefined,
+      });
+      setShowHireModal(false);
+      // Navigate to the new personnel record
+      router.push(`/personnel/${personnelId}`);
+    } catch (error) {
+      console.error("Failed to hire applicant:", error);
+      setIsHiring(false);
     }
   };
 
@@ -220,6 +258,36 @@ function ApplicationDetailContent({ id }: { id: string }) {
               </div>
             </div>
             <div className="flex items-center gap-4">
+              {/* Show "View Personnel Record" button if already hired */}
+              {existingPersonnel && (
+                <button
+                  onClick={() => router.push(`/personnel/${existingPersonnel._id}`)}
+                  className="px-4 py-2 bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg hover:bg-green-500/30 transition-colors flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  View Personnel Record
+                </button>
+              )}
+              {/* Show "Hire" button if not already hired */}
+              {!existingPersonnel && application.status !== "rejected" && (
+                <button
+                  onClick={() => {
+                    setHireForm({
+                      ...hireForm,
+                      position: application.appliedJobTitle,
+                    });
+                    setShowHireModal(true);
+                  }}
+                  className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                  </svg>
+                  Hire Applicant
+                </button>
+              )}
               <select
                 value={application.status}
                 onChange={(e) => handleStatusChange(e.target.value)}
@@ -1068,6 +1136,121 @@ function ApplicationDetailContent({ id }: { id: string }) {
                     className="px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isScheduling ? "Scheduling..." : "Schedule Interview"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Hire Applicant Modal */}
+          {showHireModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+              <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 max-w-lg mx-4 w-full">
+                <h3 className="text-xl font-bold text-white mb-2">Hire Applicant</h3>
+                <p className="text-slate-400 text-sm mb-6">
+                  Create a personnel record for {application.firstName} {application.lastName}. This will also update their application status to &quot;Hired&quot;.
+                </p>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-2">Position *</label>
+                    <input
+                      type="text"
+                      placeholder="e.g., Warehouse Associate"
+                      value={hireForm.position}
+                      onChange={(e) => setHireForm({ ...hireForm, position: e.target.value })}
+                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-cyan-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-2">Department *</label>
+                    <input
+                      type="text"
+                      placeholder="e.g., Warehouse, Sales, Operations"
+                      value={hireForm.department}
+                      onChange={(e) => setHireForm({ ...hireForm, department: e.target.value })}
+                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-cyan-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-2">Employee Type *</label>
+                    <select
+                      value={hireForm.employeeType}
+                      onChange={(e) => setHireForm({ ...hireForm, employeeType: e.target.value })}
+                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-cyan-500"
+                    >
+                      <option value="full_time">Full Time</option>
+                      <option value="part_time">Part Time</option>
+                      <option value="contract">Contract</option>
+                      <option value="seasonal">Seasonal</option>
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-2">Hire Date *</label>
+                      <input
+                        type="date"
+                        value={hireForm.hireDate}
+                        onChange={(e) => setHireForm({ ...hireForm, hireDate: e.target.value })}
+                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-2">Hourly Rate</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="e.g., 18.00"
+                        value={hireForm.hourlyRate}
+                        onChange={(e) => setHireForm({ ...hireForm, hourlyRate: e.target.value })}
+                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 mt-6">
+                  <button
+                    onClick={() => {
+                      setShowHireModal(false);
+                      setHireForm({
+                        position: "",
+                        department: "",
+                        employeeType: "full_time",
+                        hireDate: new Date().toISOString().split("T")[0],
+                        hourlyRate: "",
+                      });
+                    }}
+                    disabled={isHiring}
+                    className="px-4 py-2 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleHire}
+                    disabled={!hireForm.position || !hireForm.department || isHiring}
+                    className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {isHiring ? (
+                      <>
+                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                        Creating Personnel Record...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                        </svg>
+                        Create Personnel Record
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
