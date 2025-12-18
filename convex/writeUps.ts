@@ -1,6 +1,14 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
+// Helper to check if a write-up is expired (90 days from date)
+function isWriteUpExpired(date: string): boolean {
+  const writeUpDate = new Date(date);
+  const now = new Date();
+  const diffDays = Math.floor((now.getTime() - writeUpDate.getTime()) / (1000 * 60 * 60 * 24));
+  return diffDays >= 90;
+}
+
 // ============ QUERIES ============
 
 // Get write-ups for a personnel
@@ -12,13 +20,18 @@ export const listByPersonnel = query({
       .withIndex("by_personnel", (q) => q.eq("personnelId", args.personnelId))
       .collect();
 
-    // Get issuer names
+    // Get issuer names and calculate archive status
     const writeUpsWithIssuer = await Promise.all(
       writeUps.map(async (writeUp) => {
         const issuer = await ctx.db.get(writeUp.issuedBy);
+        const expired = isWriteUpExpired(writeUp.date);
         return {
           ...writeUp,
           issuerName: issuer?.name || "Unknown",
+          // isArchived is true if manually archived OR if 90 days have passed
+          isArchived: writeUp.isArchived || expired,
+          // Track if it's auto-expired vs manually archived
+          isExpired: expired,
         };
       })
     );
@@ -33,6 +46,7 @@ export const listByPersonnel = query({
 export const listAll = query({
   args: {
     severity: v.optional(v.string()),
+    includeArchived: v.optional(v.boolean()), // Default false - only show active write-ups
   },
   handler: async (ctx, args) => {
     let writeUps;
@@ -46,22 +60,30 @@ export const listAll = query({
       writeUps = await ctx.db.query("writeUps").collect();
     }
 
-    // Enrich with personnel and issuer names
+    // Enrich with personnel and issuer names and archive status
     const enriched = await Promise.all(
       writeUps.map(async (writeUp) => {
         const personnel = await ctx.db.get(writeUp.personnelId);
         const issuer = await ctx.db.get(writeUp.issuedBy);
+        const expired = isWriteUpExpired(writeUp.date);
         return {
           ...writeUp,
           personnelName: personnel
             ? `${personnel.firstName} ${personnel.lastName}`
             : "Unknown",
           issuerName: issuer?.name || "Unknown",
+          isArchived: writeUp.isArchived || expired,
+          isExpired: expired,
         };
       })
     );
 
-    return enriched.sort(
+    // Filter out archived unless requested
+    const filtered = args.includeArchived
+      ? enriched
+      : enriched.filter(w => !w.isArchived);
+
+    return filtered.sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
     );
   },

@@ -5,7 +5,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 
-export type UserRole = "super_admin" | "admin" | "department_manager" | "warehouse_manager" | "member" | "viewer";
+export type UserRole = "super_admin" | "admin" | "department_manager" | "warehouse_manager" | "member";
 
 export interface User {
   _id: Id<"users">;
@@ -32,6 +32,10 @@ interface AuthContextType {
   canManagePersonnel: boolean;
   canEditShifts: boolean;
   canViewShifts: boolean;
+  // Super admin and warehouse manager - delete write-ups and attendance records
+  canDeleteRecords: boolean;
+  // Edit personnel info (email, phone, etc.) - super_admin and admin only
+  canEditPersonnelInfo: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -156,6 +160,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user?.role === "warehouse_manager" ||
     user?.role === "member";
 
+  // Super admin and warehouse manager - can delete write-ups and attendance records
+  const canDeleteRecords =
+    user?.role === "super_admin" ||
+    user?.role === "warehouse_manager";
+
+  // Edit personnel info (email, phone, etc.) - super_admin and admin only
+  const canEditPersonnelInfo =
+    user?.role === "super_admin" ||
+    user?.role === "admin";
+
   return (
     <AuthContext.Provider
       value={{
@@ -170,6 +184,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         canManagePersonnel,
         canEditShifts,
         canViewShifts,
+        canDeleteRecords,
+        canEditPersonnelInfo,
       }}
     >
       {children}

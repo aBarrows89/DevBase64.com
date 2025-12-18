@@ -7,7 +7,7 @@ export default defineSchema({
     email: v.string(),
     passwordHash: v.string(),
     name: v.string(),
-    role: v.string(), // "super_admin" | "admin" | "department_manager" | "warehouse_manager" | "member" | "viewer"
+    role: v.string(), // "super_admin" | "admin" | "department_manager" | "warehouse_manager" | "member"
     isActive: v.boolean(),
     forcePasswordChange: v.boolean(),
     createdAt: v.number(),
@@ -325,6 +325,8 @@ export default defineSchema({
     followUpNotes: v.optional(v.string()),
     issuedBy: v.id("users"),
     acknowledgedAt: v.optional(v.number()),
+    // Write-ups expire/archive after 90 days from date - not counted for incentives
+    isArchived: v.optional(v.boolean()), // Auto-set based on 90-day rule, but can be manually archived
     createdAt: v.number(),
   })
     .index("by_personnel", ["personnelId"])

@@ -181,8 +181,6 @@ function UsersContent() {
         return "bg-orange-500/20 text-orange-400";
       case "member":
         return "bg-cyan-500/20 text-cyan-400";
-      case "viewer":
-        return "bg-slate-500/20 text-slate-400";
       default:
         return "bg-slate-500/20 text-slate-400";
     }
@@ -200,8 +198,6 @@ function UsersContent() {
         return "Warehouse Manager";
       case "member":
         return "Member";
-      case "viewer":
-        return "Viewer";
       default:
         return role;
     }
@@ -404,7 +400,6 @@ function UsersContent() {
                   <option value="department_manager">Department Manager</option>
                   <option value="warehouse_manager">Warehouse Manager</option>
                   <option value="member">Member</option>
-                  <option value="viewer">Viewer</option>
                 </select>
               </div>
               <div className="flex gap-3 pt-4">
@@ -465,7 +460,6 @@ function UsersContent() {
                   <option value="department_manager">Department Manager</option>
                   <option value="warehouse_manager">Warehouse Manager</option>
                   <option value="member">Member</option>
-                  <option value="viewer">Viewer</option>
                 </select>
               </div>
               <div>

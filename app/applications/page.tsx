@@ -8,6 +8,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Doc, Id } from "@/convex/_generated/dataModel";
 import { useTheme } from "../theme-context";
+import { useAuth } from "../auth-context";
 
 type Application = Doc<"applications">;
 
@@ -32,13 +33,17 @@ const statusColors: Record<string, string> = {
 function ApplicationsContent() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
+  const { user } = useAuth();
   const router = useRouter();
   const applications = useQuery(api.applications.getAll) || [];
   const stats = useQuery(api.applications.getStats);
   const updateStatus = useMutation(api.applications.updateStatus);
+  const deleteApplication = useMutation(api.applications.remove);
 
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [deleteConfirmId, setDeleteConfirmId] = useState<Id<"applications"> | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const filteredApplications = applications.filter((app) => {
     const matchesStatus =
@@ -59,6 +64,21 @@ function ApplicationsContent() {
   ) => {
     await updateStatus({ applicationId, status: newStatus });
   };
+
+  const handleDelete = async () => {
+    if (!deleteConfirmId) return;
+    setIsDeleting(true);
+    try {
+      await deleteApplication({ applicationId: deleteConfirmId });
+      setDeleteConfirmId(null);
+    } catch (error) {
+      console.error("Failed to delete application:", error);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const canDeleteApplications = user?.role === "super_admin" || user?.role === "admin";
 
   return (
     <div className={`flex h-screen ${isDark ? "bg-slate-900" : "bg-[#f2f2f7]"}`}>
@@ -212,15 +232,28 @@ function ApplicationsContent() {
                         {new Date(app.createdAt).toLocaleDateString()}
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            router.push(`/applications/${app._id}`);
-                          }}
-                          className={`text-sm ${isDark ? "text-cyan-400 hover:text-cyan-300" : "text-blue-600 hover:text-blue-700"}`}
-                        >
-                          View Details
-                        </button>
+                        <div className="flex items-center justify-end gap-3">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/applications/${app._id}`);
+                            }}
+                            className={`text-sm ${isDark ? "text-cyan-400 hover:text-cyan-300" : "text-blue-600 hover:text-blue-700"}`}
+                          >
+                            View
+                          </button>
+                          {canDeleteApplications && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteConfirmId(app._id);
+                              }}
+                              className="text-sm text-red-400 hover:text-red-300"
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -236,6 +269,36 @@ function ApplicationsContent() {
           </div>
         </div>
       </main>
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className={`w-full max-w-md mx-4 rounded-xl p-6 ${isDark ? "bg-slate-800 border border-slate-700" : "bg-white border border-gray-200 shadow-xl"}`}>
+            <h3 className={`text-lg font-semibold mb-2 ${isDark ? "text-white" : "text-gray-900"}`}>
+              Delete Application
+            </h3>
+            <p className={`mb-6 ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+              Are you sure you want to delete this application? This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setDeleteConfirmId(null)}
+                disabled={isDeleting}
+                className={`px-4 py-2 rounded-lg ${isDark ? "text-slate-300 hover:bg-slate-700" : "text-gray-700 hover:bg-gray-100"}`}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50"
+              >
+                {isDeleting ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

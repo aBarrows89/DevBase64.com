@@ -302,7 +302,7 @@ function ApplicationDetailContent({ id }: { id: string }) {
                   </option>
                 ))}
               </select>
-              {user?.role === "admin" && (
+              {(user?.role === "super_admin" || user?.role === "admin") && (
                 <button
                   onClick={() => setShowDeleteConfirm(true)}
                   className="px-4 py-2 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/30 transition-colors"

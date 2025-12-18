@@ -60,12 +60,13 @@ function PersonnelDetailContent() {
   const router = useRouter();
   const params = useParams();
   const personnelId = params.id as Id<"personnel">;
-  const { user, canViewPersonnel, canManagePersonnel } = useAuth();
+  const { user, canViewPersonnel, canManagePersonnel, canDeleteRecords, canEditPersonnelInfo } = useAuth();
 
   const [activeTab, setActiveTab] = useState("overview");
   const [showWriteUpModal, setShowWriteUpModal] = useState(false);
   const [showMeritModal, setShowMeritModal] = useState(false);
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
+  const [showEditPersonnelModal, setShowEditPersonnelModal] = useState(false);
 
   // Queries
   const personnel = useQuery(api.personnel.getWithStats, { personnelId });
@@ -78,6 +79,8 @@ function PersonnelDetailContent() {
   const createMerit = useMutation(api.merits.create);
   const upsertAttendance = useMutation(api.attendance.upsert);
   const updatePersonnel = useMutation(api.personnel.update);
+  const deleteWriteUp = useMutation(api.writeUps.remove);
+  const deleteAttendance = useMutation(api.attendance.remove);
 
   // Form states
   const [writeUpForm, setWriteUpForm] = useState({
@@ -97,14 +100,32 @@ function PersonnelDetailContent() {
 
   const [attendanceForm, setAttendanceForm] = useState({
     date: new Date().toISOString().split("T")[0],
-    status: "present",
-    scheduledStart: "09:00",
-    scheduledEnd: "17:00",
-    actualStart: "",
-    actualEnd: "",
-    hoursWorked: 8,
+    status: "absent",
     notes: "",
   });
+
+  const [editPersonnelForm, setEditPersonnelForm] = useState({
+    email: "",
+    phone: "",
+    position: "",
+    department: "",
+    hourlyRate: 0,
+    notes: "",
+  });
+
+  // Initialize edit form when personnel data loads
+  const initEditForm = () => {
+    if (personnel) {
+      setEditPersonnelForm({
+        email: personnel.email,
+        phone: personnel.phone,
+        position: personnel.position,
+        department: personnel.department,
+        hourlyRate: personnel.hourlyRate || 0,
+        notes: personnel.notes || "",
+      });
+    }
+  };
 
   // Redirect if user doesn't have permission
   if (!canViewPersonnel) {
@@ -184,24 +205,39 @@ function PersonnelDetailContent() {
       personnelId,
       date: attendanceForm.date,
       status: attendanceForm.status,
-      scheduledStart: attendanceForm.scheduledStart || undefined,
-      scheduledEnd: attendanceForm.scheduledEnd || undefined,
-      actualStart: attendanceForm.actualStart || undefined,
-      actualEnd: attendanceForm.actualEnd || undefined,
-      hoursWorked: attendanceForm.hoursWorked || undefined,
       notes: attendanceForm.notes || undefined,
     });
     setShowAttendanceModal(false);
     setAttendanceForm({
       date: new Date().toISOString().split("T")[0],
-      status: "present",
-      scheduledStart: "09:00",
-      scheduledEnd: "17:00",
-      actualStart: "",
-      actualEnd: "",
-      hoursWorked: 8,
+      status: "absent",
       notes: "",
     });
+  };
+
+  const handleUpdatePersonnel = async () => {
+    await updatePersonnel({
+      personnelId,
+      email: editPersonnelForm.email,
+      phone: editPersonnelForm.phone,
+      position: editPersonnelForm.position,
+      department: editPersonnelForm.department,
+      hourlyRate: editPersonnelForm.hourlyRate || undefined,
+      notes: editPersonnelForm.notes || undefined,
+    });
+    setShowEditPersonnelModal(false);
+  };
+
+  const handleDeleteWriteUp = async (writeUpId: Id<"writeUps">) => {
+    if (confirm("Are you sure you want to delete this write-up? This action cannot be undone.")) {
+      await deleteWriteUp({ writeUpId });
+    }
+  };
+
+  const handleDeleteAttendance = async (attendanceId: Id<"attendance">) => {
+    if (confirm("Are you sure you want to delete this attendance record? This action cannot be undone.")) {
+      await deleteAttendance({ attendanceId });
+    }
   };
 
   return (
@@ -296,9 +332,26 @@ function PersonnelDetailContent() {
 
               {/* Profile Info */}
               <div className={`rounded-xl p-6 ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
-                <h2 className={`text-lg font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
-                  Profile Information
-                </h2>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                    Profile Information
+                  </h2>
+                  {canEditPersonnelInfo && (
+                    <button
+                      onClick={() => {
+                        initEditForm();
+                        setShowEditPersonnelModal(true);
+                      }}
+                      className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${
+                        isDark
+                          ? "bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 border border-cyan-500/30"
+                          : "bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200"
+                      }`}
+                    >
+                      Edit
+                    </button>
+                  )}
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <p className={`text-xs font-medium ${isDark ? "text-slate-500" : "text-gray-500"}`}>Email</p>
@@ -362,17 +415,38 @@ function PersonnelDetailContent() {
                   {writeUps.map((writeUp) => (
                     <div
                       key={writeUp._id}
-                      className={`rounded-xl p-6 ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}
+                      className={`rounded-xl p-6 ${
+                        writeUp.isArchived
+                          ? isDark
+                            ? "bg-slate-800/30 border border-slate-700/50 opacity-70"
+                            : "bg-gray-50 border border-gray-200 opacity-70"
+                          : isDark
+                            ? "bg-slate-800/50 border border-slate-700"
+                            : "bg-white border border-gray-200 shadow-sm"
+                      }`}
                     >
                       <div className="flex items-start justify-between">
-                        <div>
-                          <div className="flex items-center gap-3 mb-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2 flex-wrap">
                             <span className={`px-2 py-1 text-xs font-medium rounded border ${severityColors[writeUp.severity] || severityColors.verbal}`}>
                               {writeUp.severity.charAt(0).toUpperCase() + writeUp.severity.slice(1)}
                             </span>
                             <span className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                               {new Date(writeUp.date).toLocaleDateString()}
                             </span>
+                            {writeUp.isArchived && (
+                              <span className={`px-2 py-1 text-xs font-medium rounded border ${
+                                writeUp.isExpired
+                                  ? isDark
+                                    ? "bg-slate-600/50 text-slate-400 border-slate-500/30"
+                                    : "bg-gray-200 text-gray-500 border-gray-300"
+                                  : isDark
+                                    ? "bg-purple-500/20 text-purple-400 border-purple-500/30"
+                                    : "bg-purple-100 text-purple-600 border-purple-200"
+                              }`}>
+                                {writeUp.isExpired ? "Expired (90+ days)" : "Archived"}
+                              </span>
+                            )}
                           </div>
                           <h3 className={`font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
                             {writeUp.category}
@@ -386,9 +460,23 @@ function PersonnelDetailContent() {
                             </p>
                           )}
                         </div>
-                        <p className={`text-xs ${isDark ? "text-slate-500" : "text-gray-500"}`}>
-                          By: {writeUp.issuerName}
-                        </p>
+                        <div className="flex flex-col items-end gap-2 ml-4">
+                          <p className={`text-xs ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                            By: {writeUp.issuerName}
+                          </p>
+                          {canDeleteRecords && (
+                            <button
+                              onClick={() => handleDeleteWriteUp(writeUp._id)}
+                              className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                                isDark
+                                  ? "bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30"
+                                  : "bg-red-50 hover:bg-red-100 text-red-600 border border-red-200"
+                              }`}
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -429,6 +517,9 @@ function PersonnelDetailContent() {
                         <th className={`text-left px-6 py-4 text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Time In</th>
                         <th className={`text-left px-6 py-4 text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Time Out</th>
                         <th className={`text-left px-6 py-4 text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Hours</th>
+                        {canDeleteRecords && (
+                          <th className={`text-right px-6 py-4 text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Actions</th>
+                        )}
                       </tr>
                     </thead>
                     <tbody>
@@ -451,6 +542,20 @@ function PersonnelDetailContent() {
                           <td className={`px-6 py-4 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
                             {record.hoursWorked?.toFixed(1) || "-"}
                           </td>
+                          {canDeleteRecords && (
+                            <td className="px-6 py-4 text-right">
+                              <button
+                                onClick={() => handleDeleteAttendance(record._id)}
+                                className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                                  isDark
+                                    ? "bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30"
+                                    : "bg-red-50 hover:bg-red-100 text-red-600 border border-red-200"
+                                }`}
+                              >
+                                Delete
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>
@@ -692,13 +797,16 @@ function PersonnelDetailContent() {
           </div>
         )}
 
-        {/* Attendance Modal */}
+        {/* Attendance Modal - Absence Tracking Only */}
         {showAttendanceModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
             <div className={`w-full max-w-md rounded-xl p-6 ${isDark ? "bg-slate-800" : "bg-white"}`}>
               <h2 className={`text-lg font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
-                Add Attendance Record
+                Record Absence
               </h2>
+              <p className={`text-sm mb-4 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                Track when personnel are not present. Time clock integration coming soon.
+              </p>
               <div className="space-y-4">
                 <div>
                   <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
@@ -713,55 +821,18 @@ function PersonnelDetailContent() {
                 </div>
                 <div>
                   <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                    Status
+                    Absence Type
                   </label>
                   <select
                     value={attendanceForm.status}
                     onChange={(e) => setAttendanceForm({ ...attendanceForm, status: e.target.value })}
                     className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"} border focus:outline-none`}
                   >
-                    <option value="present">Present</option>
                     <option value="absent">Absent</option>
                     <option value="late">Late</option>
                     <option value="excused">Excused</option>
                     <option value="no_call_no_show">No Call No Show</option>
                   </select>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                      Time In
-                    </label>
-                    <input
-                      type="time"
-                      value={attendanceForm.actualStart}
-                      onChange={(e) => setAttendanceForm({ ...attendanceForm, actualStart: e.target.value })}
-                      className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"} border focus:outline-none`}
-                    />
-                  </div>
-                  <div>
-                    <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                      Time Out
-                    </label>
-                    <input
-                      type="time"
-                      value={attendanceForm.actualEnd}
-                      onChange={(e) => setAttendanceForm({ ...attendanceForm, actualEnd: e.target.value })}
-                      className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"} border focus:outline-none`}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                    Hours Worked
-                  </label>
-                  <input
-                    type="number"
-                    step="0.5"
-                    value={attendanceForm.hoursWorked}
-                    onChange={(e) => setAttendanceForm({ ...attendanceForm, hoursWorked: parseFloat(e.target.value) || 0 })}
-                    className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"} border focus:outline-none`}
-                  />
                 </div>
                 <div>
                   <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
@@ -770,8 +841,8 @@ function PersonnelDetailContent() {
                   <textarea
                     value={attendanceForm.notes}
                     onChange={(e) => setAttendanceForm({ ...attendanceForm, notes: e.target.value })}
-                    placeholder="Any additional notes"
-                    rows={2}
+                    placeholder="Reason for absence, call-in details, etc."
+                    rows={3}
                     className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white placeholder-slate-500" : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400"} border focus:outline-none`}
                   />
                 </div>
@@ -785,9 +856,109 @@ function PersonnelDetailContent() {
                 </button>
                 <button
                   onClick={handleAddAttendance}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-red-500 hover:bg-red-400 text-white" : "bg-red-600 hover:bg-red-700 text-white"}`}
+                >
+                  Record Absence
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Personnel Modal */}
+        {showEditPersonnelModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className={`w-full max-w-md rounded-xl p-6 ${isDark ? "bg-slate-800" : "bg-white"}`}>
+              <h2 className={`text-lg font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
+                Edit Personnel Information
+              </h2>
+              <div className="space-y-4">
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={editPersonnelForm.email}
+                    onChange={(e) => setEditPersonnelForm({ ...editPersonnelForm, email: e.target.value })}
+                    className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"} border focus:outline-none`}
+                  />
+                </div>
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    Phone
+                  </label>
+                  <input
+                    type="tel"
+                    value={editPersonnelForm.phone}
+                    onChange={(e) => setEditPersonnelForm({ ...editPersonnelForm, phone: e.target.value })}
+                    className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"} border focus:outline-none`}
+                  />
+                </div>
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    Position
+                  </label>
+                  <input
+                    type="text"
+                    value={editPersonnelForm.position}
+                    onChange={(e) => setEditPersonnelForm({ ...editPersonnelForm, position: e.target.value })}
+                    className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"} border focus:outline-none`}
+                  />
+                </div>
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    Department
+                  </label>
+                  <select
+                    value={editPersonnelForm.department}
+                    onChange={(e) => setEditPersonnelForm({ ...editPersonnelForm, department: e.target.value })}
+                    className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"} border focus:outline-none`}
+                  >
+                    <option value="Warehouse">Warehouse</option>
+                    <option value="Sales">Sales</option>
+                    <option value="Management">Management</option>
+                    <option value="Administration">Administration</option>
+                    <option value="Delivery">Delivery</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    Hourly Rate ($)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editPersonnelForm.hourlyRate}
+                    onChange={(e) => setEditPersonnelForm({ ...editPersonnelForm, hourlyRate: parseFloat(e.target.value) || 0 })}
+                    className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"} border focus:outline-none`}
+                  />
+                </div>
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    Notes
+                  </label>
+                  <textarea
+                    value={editPersonnelForm.notes}
+                    onChange={(e) => setEditPersonnelForm({ ...editPersonnelForm, notes: e.target.value })}
+                    placeholder="Additional notes"
+                    rows={3}
+                    className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white placeholder-slate-500" : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400"} border focus:outline-none`}
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => setShowEditPersonnelModal(false)}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-slate-700 hover:bg-slate-600 text-white" : "bg-gray-100 hover:bg-gray-200 text-gray-900"}`}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUpdatePersonnel}
                   className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-cyan-500 hover:bg-cyan-400 text-white" : "bg-blue-600 hover:bg-blue-700 text-white"}`}
                 >
-                  Save
+                  Save Changes
                 </button>
               </div>
             </div>
