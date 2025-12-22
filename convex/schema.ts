@@ -412,4 +412,26 @@ export default defineSchema({
   })
     .index("by_personnel", ["personnelId"])
     .index("by_date", ["reviewDate"]),
+
+  // ============ PROJECT SUGGESTIONS ============
+  projectSuggestions: defineTable({
+    suggestedBy: v.id("users"),
+    suggestedTo: v.id("users"),
+    title: v.string(),
+    description: v.string(),
+    priority: v.optional(v.string()), // "low" | "medium" | "high" | "urgent"
+    status: v.string(), // "pending" | "approved" | "denied"
+    // Approval fields
+    reviewedBy: v.optional(v.id("users")),
+    reviewedAt: v.optional(v.number()),
+    denialReason: v.optional(v.string()),
+    estimatedTimeline: v.optional(v.string()), // e.g., "2 weeks", "1 month", etc.
+    // If approved, link to created project
+    projectId: v.optional(v.id("projects")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_suggested_to", ["suggestedTo"])
+    .index("by_suggested_by", ["suggestedBy"])
+    .index("by_status", ["status"]),
 });

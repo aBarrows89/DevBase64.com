@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import Protected from "./protected";
 import Sidebar from "@/components/Sidebar";
 import { useAuth } from "./auth-context";
@@ -313,14 +314,14 @@ function DashboardContent() {
               <div className="space-y-3">
                 {upcomingInterviews && upcomingInterviews.length > 0 ? (
                   upcomingInterviews.slice(0, 5).map((interview) => (
-                    <a
+                    <Link
                       key={interview._id}
                       href={`/applications/${interview._id}`}
                       className={`block p-4 rounded-lg border transition-colors ${isDark ? "bg-slate-900/50 border-slate-700/50 hover:border-slate-600" : "bg-gray-50 border-gray-100 hover:border-gray-300"}`}
                     >
                       <div className="flex items-center justify-between">
                         <div>
-                          <h3 className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                          <h3 className={`font-medium hover:underline ${isDark ? "text-white" : "text-gray-900"}`}>
                             {interview.firstName} {interview.lastName}
                           </h3>
                           <p className={`text-sm ${isDark ? "text-slate-500" : "text-gray-500"}`}>
@@ -344,7 +345,7 @@ function DashboardContent() {
                           {interview.scheduledInterviewLocation}
                         </p>
                       )}
-                    </a>
+                    </Link>
                   ))
                 ) : (
                   <div className={`text-center py-8 ${isDark ? "text-slate-500" : "text-gray-400"}`}>

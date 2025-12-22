@@ -4,13 +4,14 @@ import { useState } from "react";
 import Protected from "../protected";
 import Sidebar from "@/components/Sidebar";
 import KanbanBoard from "@/components/KanbanBoard";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Doc, Id } from "@/convex/_generated/dataModel";
 import { useAuth } from "../auth-context";
 
 type Project = Doc<"projects">;
 type Task = Doc<"tasks">;
+type User = Doc<"users">;
 
 const PRIORITY_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   urgent: { bg: "bg-red-500/20", text: "text-red-400", border: "border-red-500/30" },
@@ -29,12 +30,23 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
 function ProjectsContent() {
   const { user } = useAuth();
   const projects = useQuery(api.projects.getAll) || [];
+  const users = useQuery(api.auth.getAllUsers) || [];
   const updateStatus = useMutation(api.projects.updateStatus);
   const createProject = useMutation(api.projects.create);
   const updateProject = useMutation(api.projects.update);
   const deleteProject = useMutation(api.projects.remove);
 
+  // Task mutations and actions
+  const createTask = useMutation(api.tasks.create);
+  const updateTaskStatus = useMutation(api.tasks.updateStatus);
+  const deleteTask = useMutation(api.tasks.remove);
+  const generateTasks = useAction(api.aiTasks.generateTasks);
+
   const [isCreating, setIsCreating] = useState(false);
+  const [isGeneratingTasks, setIsGeneratingTasks] = useState(false);
+  const [showAddTask, setShowAddTask] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [taskFilter, setTaskFilter] = useState<"all" | "mine">("all"); // For task filtering
   const [selectedProjectId, setSelectedProjectId] = useState<Id<"projects"> | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -44,6 +56,7 @@ function ProjectsContent() {
     priority: "medium",
     dueDate: "",
     estimatedHours: "",
+    assignedTo: "",
   });
 
   // Fetch project with tasks when a project is selected
@@ -59,6 +72,7 @@ function ProjectsContent() {
     status: "",
     dueDate: "",
     estimatedHours: "",
+    assignedTo: "",
   });
 
   const handleStatusChange = async (projectId: string, newStatus: string) => {
@@ -77,6 +91,7 @@ function ProjectsContent() {
       status: project.status,
       dueDate: project.dueDate || "",
       estimatedHours: project.estimatedHours?.toString() || "",
+      assignedTo: project.assignedTo || "",
     });
   };
 
@@ -96,6 +111,7 @@ function ProjectsContent() {
       status: editForm.status,
       dueDate: editForm.dueDate || undefined,
       estimatedHours: editForm.estimatedHours ? parseFloat(editForm.estimatedHours) : undefined,
+      assignedTo: editForm.assignedTo ? editForm.assignedTo as Id<"users"> : undefined,
     });
     setIsEditing(false);
   };
@@ -120,6 +136,7 @@ function ProjectsContent() {
       estimatedHours: newProject.estimatedHours
         ? parseFloat(newProject.estimatedHours)
         : undefined,
+      assignedTo: newProject.assignedTo ? newProject.assignedTo as Id<"users"> : undefined,
     });
 
     setNewProject({
@@ -128,9 +145,56 @@ function ProjectsContent() {
       priority: "medium",
       dueDate: "",
       estimatedHours: "",
+      assignedTo: "",
     });
     setIsCreating(false);
   };
+
+  // Task handlers
+  const handleGenerateTasks = async () => {
+    if (!selectedProjectId || !projectWithTasks) return;
+    setIsGeneratingTasks(true);
+    try {
+      await generateTasks({
+        projectId: selectedProjectId,
+        projectName: projectWithTasks.name,
+        projectDescription: projectWithTasks.description,
+      });
+    } catch (error) {
+      console.error("Failed to generate tasks:", error);
+    } finally {
+      setIsGeneratingTasks(false);
+    }
+  };
+
+  const handleAddTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedProjectId || !newTaskTitle.trim()) return;
+    await createTask({
+      projectId: selectedProjectId,
+      title: newTaskTitle.trim(),
+    });
+    setNewTaskTitle("");
+    setShowAddTask(false);
+  };
+
+  const handleToggleTaskStatus = async (taskId: Id<"tasks">, currentStatus: string) => {
+    const nextStatus = currentStatus === "todo" ? "in_progress" : currentStatus === "in_progress" ? "done" : "todo";
+    await updateTaskStatus({ taskId, status: nextStatus });
+  };
+
+  const handleDeleteTask = async (taskId: Id<"tasks">) => {
+    await deleteTask({ taskId });
+  };
+
+  // Check if user is admin or above
+  const isAdmin = user?.role === "super_admin" || user?.role === "admin" || user?.role === "department_manager";
+
+  // Filter tasks based on taskFilter
+  const filteredTasks = projectWithTasks?.tasks?.filter((task: Task) => {
+    if (taskFilter === "all") return true;
+    return task.assignedTo === user?._id;
+  }) || [];
 
   return (
     <div className="flex h-screen bg-slate-900">
@@ -268,6 +332,24 @@ function ProjectsContent() {
                   }
                   className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Assign To
+                </label>
+                <select
+                  value={newProject.assignedTo}
+                  onChange={(e) =>
+                    setNewProject({ ...newProject, assignedTo: e.target.value })
+                  }
+                  className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                >
+                  <option value="">Unassigned</option>
+                  {users.map((u) => (
+                    <option key={u._id} value={u._id}>{u.name}</option>
+                  ))}
+                </select>
               </div>
 
               <div className="flex gap-3 pt-4">
@@ -433,6 +515,19 @@ function ProjectsContent() {
                         className="w-full bg-transparent text-white text-sm focus:outline-none"
                       />
                     </div>
+                    <div className="p-4 bg-slate-900/50 rounded-lg">
+                      <p className="text-xs text-slate-500 mb-1">Assigned To</p>
+                      <select
+                        value={editForm.assignedTo}
+                        onChange={(e) => setEditForm({ ...editForm, assignedTo: e.target.value })}
+                        className="w-full bg-transparent text-white text-sm focus:outline-none"
+                      >
+                        <option value="" className="bg-slate-800">Unassigned</option>
+                        {users.map((u) => (
+                          <option key={u._id} value={u._id} className="bg-slate-800">{u.name}</option>
+                        ))}
+                      </select>
+                    </div>
                   </>
                 ) : (
                   <>
@@ -462,6 +557,15 @@ function ProjectsContent() {
                         <p className="text-white text-sm font-medium">{projectWithTasks.actualHours}h</p>
                       </div>
                     )}
+                    {(() => {
+                      const assignedUser = users.find(u => u._id === projectWithTasks.assignedTo);
+                      return assignedUser ? (
+                        <div className="p-4 bg-slate-900/50 rounded-lg">
+                          <p className="text-xs text-slate-500 mb-1">Assigned To</p>
+                          <p className="text-white text-sm font-medium">{assignedUser.name}</p>
+                        </div>
+                      ) : null;
+                    })()}
                   </>
                 )}
               </div>
@@ -495,16 +599,107 @@ function ProjectsContent() {
               {/* Tasks Section */}
               <div className="mb-6">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-medium text-slate-400">
-                    Tasks ({projectWithTasks.tasks?.length || 0})
-                  </h3>
+                  <div className="flex items-center gap-4">
+                    <h3 className="text-sm font-medium text-slate-400">
+                      Tasks ({filteredTasks.length}{taskFilter === "mine" ? ` of ${projectWithTasks.tasks?.length || 0}` : ""})
+                    </h3>
+                    {/* Task Filter Toggle */}
+                    {isAdmin && (
+                      <div className="flex items-center gap-1 bg-slate-900/50 rounded-lg p-1">
+                        <button
+                          onClick={() => setTaskFilter("all")}
+                          className={`px-2 py-1 text-xs rounded ${
+                            taskFilter === "all"
+                              ? "bg-cyan-500/20 text-cyan-400"
+                              : "text-slate-400 hover:text-white"
+                          }`}
+                        >
+                          All Tasks
+                        </button>
+                        <button
+                          onClick={() => setTaskFilter("mine")}
+                          className={`px-2 py-1 text-xs rounded ${
+                            taskFilter === "mine"
+                              ? "bg-cyan-500/20 text-cyan-400"
+                              : "text-slate-400 hover:text-white"
+                          }`}
+                        >
+                          My Tasks
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleGenerateTasks}
+                      disabled={isGeneratingTasks}
+                      className="px-3 py-1.5 text-xs bg-purple-500/20 text-purple-400 border border-purple-500/30 rounded-lg hover:bg-purple-500/30 transition-colors disabled:opacity-50 flex items-center gap-1"
+                    >
+                      {isGeneratingTasks ? (
+                        <>
+                          <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          </svg>
+                          AI Generate
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => setShowAddTask(true)}
+                      className="px-3 py-1.5 text-xs bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-lg hover:bg-cyan-500/30 transition-colors flex items-center gap-1"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Add Task
+                    </button>
+                  </div>
                 </div>
-                {projectWithTasks.tasks && projectWithTasks.tasks.length > 0 ? (
+
+                {/* Add Task Form */}
+                {showAddTask && (
+                  <form onSubmit={handleAddTask} className="mb-3 flex gap-2">
+                    <input
+                      type="text"
+                      value={newTaskTitle}
+                      onChange={(e) => setNewTaskTitle(e.target.value)}
+                      placeholder="Enter task title..."
+                      className="flex-1 px-3 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-cyan-500"
+                      autoFocus
+                    />
+                    <button
+                      type="submit"
+                      className="px-4 py-2 bg-cyan-500 text-white text-sm rounded-lg hover:bg-cyan-600"
+                    >
+                      Add
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddTask(false);
+                        setNewTaskTitle("");
+                      }}
+                      className="px-4 py-2 bg-slate-700 text-white text-sm rounded-lg hover:bg-slate-600"
+                    >
+                      Cancel
+                    </button>
+                  </form>
+                )}
+
+                {filteredTasks.length > 0 ? (
                   <div className="space-y-2">
-                    {projectWithTasks.tasks.sort((a, b) => a.order - b.order).map((task: Task) => (
+                    {filteredTasks.sort((a: Task, b: Task) => a.order - b.order).map((task: Task) => (
                       <div
                         key={task._id}
-                        className={`flex items-center gap-3 p-3 rounded-lg border ${
+                        className={`flex items-center gap-3 p-3 rounded-lg border group ${
                           task.status === "done"
                             ? "bg-green-500/10 border-green-500/20"
                             : task.status === "in_progress"
@@ -512,12 +707,37 @@ function ProjectsContent() {
                             : "bg-slate-900/50 border-slate-700"
                         }`}
                       >
-                        <div className={`w-2 h-2 rounded-full ${
-                          task.status === "done" ? "bg-green-400" : task.status === "in_progress" ? "bg-cyan-400" : "bg-slate-500"
-                        }`} />
-                        <span className={`flex-1 text-sm ${task.status === "done" ? "text-slate-400 line-through" : "text-white"}`}>
-                          {task.title}
-                        </span>
+                        {/* Clickable status indicator */}
+                        <button
+                          onClick={() => handleToggleTaskStatus(task._id, task.status)}
+                          className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
+                            task.status === "done"
+                              ? "bg-green-400 border-green-400"
+                              : task.status === "in_progress"
+                              ? "border-cyan-400 bg-cyan-400/20"
+                              : "border-slate-500 hover:border-cyan-400"
+                          }`}
+                          title={`Click to change status (${task.status} → ${task.status === "todo" ? "in_progress" : task.status === "in_progress" ? "done" : "todo"})`}
+                        >
+                          {task.status === "done" && (
+                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                          {task.status === "in_progress" && (
+                            <div className="w-2 h-2 bg-cyan-400 rounded-full" />
+                          )}
+                        </button>
+                        <div className="flex-1">
+                          <span className={`text-sm ${task.status === "done" ? "text-slate-400 line-through" : "text-white"}`}>
+                            {task.title}
+                          </span>
+                          {task.estimatedMinutes && (
+                            <span className="ml-2 text-xs text-slate-500">
+                              ~{task.estimatedMinutes < 60 ? `${task.estimatedMinutes}m` : `${Math.round(task.estimatedMinutes / 60)}h`}
+                            </span>
+                          )}
+                        </div>
                         <span className={`text-xs px-2 py-0.5 rounded ${
                           task.status === "done" ? "bg-green-500/20 text-green-400" :
                           task.status === "in_progress" ? "bg-cyan-500/20 text-cyan-400" :
@@ -525,12 +745,23 @@ function ProjectsContent() {
                         }`}>
                           {task.status.replace("_", " ")}
                         </span>
+                        <button
+                          onClick={() => handleDeleteTask(task._id)}
+                          className="p-1 text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Delete task"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
                       </div>
                     ))}
                   </div>
                 ) : (
                   <div className="text-center py-8 text-slate-500 text-sm">
-                    No tasks yet. Tasks can be added to help track progress.
+                    {taskFilter === "mine" && projectWithTasks.tasks?.length > 0
+                      ? "No tasks assigned to you. Switch to 'All Tasks' to see other tasks."
+                      : "No tasks yet. Click 'AI Generate' to create tasks from the project description or 'Add Task' to add manually."}
                   </div>
                 )}
               </div>

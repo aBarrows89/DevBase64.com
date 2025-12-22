@@ -44,19 +44,46 @@ function ApplicationsContent() {
   const [searchTerm, setSearchTerm] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState<Id<"applications"> | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [sortBy, setSortBy] = useState<"score" | "position" | "date">("date");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
-  const filteredApplications = applications.filter((app) => {
-    const matchesStatus =
-      filterStatus === "all" || app.status === filterStatus;
-    const matchesSearch =
-      searchTerm === "" ||
-      `${app.firstName} ${app.lastName}`
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      app.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      app.appliedJobTitle.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesStatus && matchesSearch;
-  });
+  const handleSort = (column: "score" | "position" | "date") => {
+    if (sortBy === column) {
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(column);
+      setSortOrder(column === "score" ? "desc" : "asc");
+    }
+  };
+
+  const filteredApplications = applications
+    .filter((app) => {
+      const matchesStatus =
+        filterStatus === "all" || app.status === filterStatus;
+      const matchesSearch =
+        searchTerm === "" ||
+        `${app.firstName} ${app.lastName}`
+          .toLowerCase()
+          .includes(searchTerm.toLowerCase()) ||
+        app.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        app.appliedJobTitle.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesStatus && matchesSearch;
+    })
+    .sort((a, b) => {
+      let comparison = 0;
+
+      if (sortBy === "score") {
+        const scoreA = a.candidateAnalysis?.overallScore ?? -1;
+        const scoreB = b.candidateAnalysis?.overallScore ?? -1;
+        comparison = scoreA - scoreB;
+      } else if (sortBy === "position") {
+        comparison = a.appliedJobTitle.localeCompare(b.appliedJobTitle);
+      } else if (sortBy === "date") {
+        comparison = a.createdAt - b.createdAt;
+      }
+
+      return sortOrder === "asc" ? comparison : -comparison;
+    });
 
   const handleStatusChange = async (
     applicationId: Id<"applications">,
@@ -166,17 +193,59 @@ function ApplicationsContent() {
                     <th className={`text-left px-6 py-4 text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                       Applicant
                     </th>
-                    <th className={`text-left px-6 py-4 text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                      Position
+                    <th
+                      onClick={() => handleSort("position")}
+                      className={`text-left px-6 py-4 text-sm font-medium cursor-pointer select-none transition-colors ${
+                        isDark
+                          ? sortBy === "position" ? "text-cyan-400" : "text-slate-400 hover:text-slate-300"
+                          : sortBy === "position" ? "text-blue-600" : "text-gray-500 hover:text-gray-700"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1">
+                        Position
+                        {sortBy === "position" && (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={sortOrder === "asc" ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"} />
+                          </svg>
+                        )}
+                      </div>
                     </th>
-                    <th className={`text-left px-6 py-4 text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                      Score
+                    <th
+                      onClick={() => handleSort("score")}
+                      className={`text-left px-6 py-4 text-sm font-medium cursor-pointer select-none transition-colors ${
+                        isDark
+                          ? sortBy === "score" ? "text-cyan-400" : "text-slate-400 hover:text-slate-300"
+                          : sortBy === "score" ? "text-blue-600" : "text-gray-500 hover:text-gray-700"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1">
+                        Score
+                        {sortBy === "score" && (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={sortOrder === "asc" ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"} />
+                          </svg>
+                        )}
+                      </div>
                     </th>
                     <th className={`text-left px-6 py-4 text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                       Status
                     </th>
-                    <th className={`text-left px-6 py-4 text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                      Applied
+                    <th
+                      onClick={() => handleSort("date")}
+                      className={`text-left px-6 py-4 text-sm font-medium cursor-pointer select-none transition-colors ${
+                        isDark
+                          ? sortBy === "date" ? "text-cyan-400" : "text-slate-400 hover:text-slate-300"
+                          : sortBy === "date" ? "text-blue-600" : "text-gray-500 hover:text-gray-700"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1">
+                        Applied
+                        {sortBy === "date" && (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={sortOrder === "asc" ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"} />
+                          </svg>
+                        )}
+                      </div>
                     </th>
                     <th className={`text-right px-6 py-4 text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                       Actions
