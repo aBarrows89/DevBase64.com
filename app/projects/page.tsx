@@ -198,7 +198,21 @@ function ProjectsContent() {
 
   const handleToggleTaskStatus = async (taskId: Id<"tasks">, currentStatus: string) => {
     const nextStatus = currentStatus === "todo" ? "in_progress" : currentStatus === "in_progress" ? "done" : "todo";
-    await updateTaskStatus({ taskId, status: nextStatus });
+    try {
+      await updateTaskStatus({ taskId, status: nextStatus });
+    } catch (error) {
+      console.error("Failed to update task status:", error);
+      alert(`Failed to update task status: ${error instanceof Error ? error.message : "Unknown error"}`);
+    }
+  };
+
+  const handleSetTaskStatus = async (taskId: Id<"tasks">, newStatus: string) => {
+    try {
+      await updateTaskStatus({ taskId, status: newStatus });
+    } catch (error) {
+      console.error("Failed to update task status:", error);
+      alert(`Failed to update task status: ${error instanceof Error ? error.message : "Unknown error"}`);
+    }
   };
 
   const handleDeleteTask = async (taskId: Id<"tasks">) => {
@@ -760,13 +774,19 @@ function ProjectsContent() {
                             </span>
                           )}
                         </div>
-                        <span className={`text-xs px-2 py-0.5 rounded ${
-                          task.status === "done" ? "bg-green-500/20 text-green-400" :
-                          task.status === "in_progress" ? "bg-cyan-500/20 text-cyan-400" :
-                          "bg-slate-700 text-slate-400"
-                        }`}>
-                          {task.status.replace("_", " ")}
-                        </span>
+                        <select
+                          value={task.status}
+                          onChange={(e) => handleSetTaskStatus(task._id, e.target.value)}
+                          className={`text-xs px-2 py-0.5 rounded cursor-pointer border-0 focus:outline-none focus:ring-1 focus:ring-cyan-500 ${
+                            task.status === "done" ? "bg-green-500/20 text-green-400" :
+                            task.status === "in_progress" ? "bg-cyan-500/20 text-cyan-400" :
+                            "bg-slate-700 text-slate-400"
+                          }`}
+                        >
+                          <option value="todo" className="bg-slate-800 text-slate-300">todo</option>
+                          <option value="in_progress" className="bg-slate-800 text-cyan-400">in progress</option>
+                          <option value="done" className="bg-slate-800 text-green-400">done</option>
+                        </select>
                         <button
                           onClick={() => handleDeleteTask(task._id)}
                           className="p-1 text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
