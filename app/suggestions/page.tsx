@@ -240,11 +240,11 @@ function SuggestionsContent() {
                     <div className="text-sm text-slate-400">
                       {activeTab === "inbox" ? (
                         <span>
-                          From: {suggestion.suggestedByUser?.name || "Unknown"}
+                          From: {(suggestion as any).suggestedByUser?.name || "Unknown"}
                         </span>
                       ) : (
                         <span>
-                          To: {suggestion.suggestedToUser?.name || "Unknown"}
+                          To: {(suggestion as any).suggestedToUser?.name || "Unknown"}
                         </span>
                       )}
                       <span className="mx-2">|</span>
