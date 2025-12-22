@@ -313,6 +313,111 @@ Return ONLY valid JSON, no markdown code blocks, no other text.`;
   },
 });
 
+// Reanalyze a single application with AI
+export const reanalyzeApplication = action({
+  args: {
+    applicationId: v.id("applications"),
+  },
+  handler: async (ctx, args): Promise<{ success: boolean; error?: string; overallScore?: number; recommendedAction?: string }> => {
+    // Get the application
+    const application = await ctx.runQuery(api.applications.getById, {
+      applicationId: args.applicationId,
+    }) as any;
+
+    if (!application) {
+      throw new Error("Application not found");
+    }
+
+    if (!application.resumeText || application.resumeText.trim().length < 50) {
+      return { success: false, error: "No resume text available for analysis" };
+    }
+
+    // Run the AI analysis
+    const analysis = await ctx.runAction(api.aiMatching.analyzeResume, {
+      resumeText: application.resumeText,
+    }) as any;
+
+    // Build the AI analysis object for storage
+    const topMatch = analysis.jobMatches[0];
+    const aiAnalysis = topMatch
+      ? {
+          suggestedJobId: topMatch.jobId as any,
+          suggestedJobTitle: topMatch.jobTitle,
+          matchScore: topMatch.score,
+          allScores: analysis.jobMatches.map((m: any) => ({
+            jobId: m.jobId as any,
+            jobTitle: m.jobTitle,
+            score: m.score,
+            matchedKeywords: m.matchedKeywords,
+            reasoning: m.reasoning,
+          })),
+          extractedSkills: analysis.extractedSkills,
+          summary: analysis.summary,
+        }
+      : undefined;
+
+    // Update the application with the new analysis
+    await ctx.runMutation(api.applications.updateAIAnalysis, {
+      applicationId: args.applicationId,
+      aiAnalysis,
+      candidateAnalysis: analysis.candidateAnalysis,
+    });
+
+    return {
+      success: true,
+      overallScore: analysis.candidateAnalysis.overallScore,
+      recommendedAction: analysis.candidateAnalysis.recommendedAction,
+    };
+  },
+});
+
+// Reanalyze all applications that have resume text
+export const reanalyzeAllApplications = action({
+  args: {},
+  handler: async (ctx): Promise<{ total: number; processed: number; skipped: number; errors: number; scores: { name: string; score: number; action: string }[] }> => {
+    // Get all applications
+    const applications = await ctx.runQuery(api.applications.getAll) as any[];
+
+    const results: { total: number; processed: number; skipped: number; errors: number; scores: { name: string; score: number; action: string }[] } = {
+      total: applications.length,
+      processed: 0,
+      skipped: 0,
+      errors: 0,
+      scores: [],
+    };
+
+    for (const app of applications) {
+      // Skip if no resume text
+      if (!app.resumeText || app.resumeText.trim().length < 50) {
+        results.skipped++;
+        continue;
+      }
+
+      try {
+        const result = await ctx.runAction(api.aiMatching.reanalyzeApplication, {
+          applicationId: app._id,
+        }) as { success: boolean; overallScore?: number; recommendedAction?: string };
+
+        if (result.success) {
+          results.processed++;
+          results.scores.push({
+            name: `${app.firstName} ${app.lastName}`,
+            score: result.overallScore!,
+            action: result.recommendedAction!,
+          });
+        } else {
+          results.skipped++;
+        }
+      } catch (error) {
+        console.error(`Error reanalyzing ${app.firstName} ${app.lastName}:`, error);
+        results.errors++;
+      }
+    }
+
+    return results;
+  },
+});
+
 // Fallback analysis without AI (basic regex extraction)
 function fallbackAnalysis(resumeText: string, jobs: any[]) {
   // Extract contact information using regex patterns

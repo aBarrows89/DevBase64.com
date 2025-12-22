@@ -375,6 +375,7 @@ export default defineSchema({
     department: v.string(),
     requiredCount: v.number(), // How many people needed
     assignedPersonnel: v.array(v.id("personnel")),
+    leadId: v.optional(v.id("personnel")), // Department lead for this shift
     notes: v.optional(v.string()),
     createdBy: v.id("users"),
     createdAt: v.number(),

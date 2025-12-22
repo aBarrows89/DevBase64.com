@@ -255,18 +255,30 @@ POSITION: ${jobTitle} (${positionType})
 INTERVIEWER: ${interviewRound.interviewerName}
 ${job ? `DEPARTMENT: ${job.department}` : ''}
 
+IMPORTANT NOTE ABOUT ANSWER FORMAT:
+The answers below are the INTERVIEWER'S NOTES, not verbatim transcriptions. Interviewers typically:
+- Write brief summaries or key points
+- Use shorthand like "yes", "no", "good", "2 years"
+- Note their impressions rather than exact words
+- Abbreviate longer responses to essential information
+
+DO NOT penalize candidates for short or summarized answers. A one-word answer like "yes" or a brief note like "forklift certified, 3 years exp" is completely valid - it means the interviewer captured the key information. Focus on the SUBSTANCE of what was communicated, not the length or format of the notes.
+
 INTERVIEW Q&A:
 ${qaContent}
 
 ${interviewRound.interviewNotes ? `INTERVIEWER NOTES: ${interviewRound.interviewNotes}` : ''}
 
 EVALUATION CRITERIA:
-1. Communication skills and clarity
-2. Relevant experience and qualifications
-3. Problem-solving ability
-4. Cultural fit for a warehouse/distribution environment
-5. Red flags (inconsistencies, evasive answers, concerning attitudes)
-6. ${positionType === 'management' ? 'Leadership capability and management experience' : 'Reliability and work ethic indicators'}
+1. Relevant experience and qualifications (based on what was communicated)
+2. Cultural fit for a warehouse/distribution environment
+3. Red flags (inconsistencies, evasive answers, concerning attitudes - but NOT short answers)
+4. ${positionType === 'management' ? 'Leadership capability and management experience' : 'Reliability and work ethic indicators'}
+
+DO NOT flag as a concern:
+- Short or abbreviated answers (these are interviewer notes, not verbatim transcripts)
+- Answers that are just "yes", "no", or brief phrases (this is normal note-taking)
+- Lack of detail (the interviewer captured what was important)
 
 Provide your evaluation in the following JSON format:
 {

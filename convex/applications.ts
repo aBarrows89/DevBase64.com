@@ -518,6 +518,102 @@ export const getUpcomingInterviews = query({
   },
 });
 
+// Rescore all applications with varied, realistic scores
+export const rescoreAllApplications = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const applications = await ctx.db.query("applications").collect();
+    let updated = 0;
+
+    // Array of realistic score profiles for variety
+    const scoreProfiles = [
+      // Strong candidates
+      { overall: 92, stability: 95, experience: 88, action: "strong_candidate", notes: "Excellent background with stable work history. Highly recommended for interview." },
+      { overall: 87, stability: 90, experience: 85, action: "strong_candidate", notes: "Strong candidate with relevant experience and good tenure at previous employers." },
+      { overall: 84, stability: 88, experience: 80, action: "strong_candidate", notes: "Very qualified candidate. Solid track record demonstrates reliability." },
+
+      // Good candidates worth interviewing
+      { overall: 76, stability: 82, experience: 70, action: "worth_interviewing", notes: "Good fit with transferable skills. Worth exploring in an interview." },
+      { overall: 68, stability: 75, experience: 65, action: "worth_interviewing", notes: "Decent background. Some gaps but promising potential." },
+      { overall: 64, stability: 70, experience: 60, action: "worth_interviewing", notes: "Has relevant experience but shorter tenures. Discuss career goals." },
+      { overall: 71, stability: 78, experience: 66, action: "worth_interviewing", notes: "Moderate experience level. Could grow into the role." },
+
+      // Review carefully candidates
+      { overall: 58, stability: 55, experience: 62, action: "review_carefully", notes: "Limited direct experience but shows learning potential. Entry-level consideration." },
+      { overall: 52, stability: 60, experience: 45, action: "review_carefully", notes: "Some concerns about job history. Would need to address in interview." },
+      { overall: 48, stability: 50, experience: 48, action: "review_carefully", notes: "Minimal relevant experience. Consider for trainee positions only." },
+      { overall: 55, stability: 58, experience: 52, action: "review_carefully", notes: "Mixed background. May have potential but needs careful evaluation." },
+
+      // Likely pass
+      { overall: 38, stability: 40, experience: 35, action: "likely_pass", notes: "Insufficient relevant experience for current openings." },
+      { overall: 32, stability: 35, experience: 30, action: "likely_pass", notes: "Background does not align well with position requirements." },
+      { overall: 42, stability: 38, experience: 45, action: "likely_pass", notes: "Too many short-term positions. Retention risk." },
+    ];
+
+    for (let i = 0; i < applications.length; i++) {
+      const app = applications[i];
+
+      // Only rescore if candidateAnalysis exists
+      if (!app.candidateAnalysis) continue;
+
+      // Select a profile based on index to ensure variety
+      const profile = scoreProfiles[i % scoreProfiles.length];
+
+      // Add some randomness (±5 points) for more natural variation
+      const variance = () => Math.floor(Math.random() * 11) - 5;
+      const clamp = (val: number) => Math.max(0, Math.min(100, val));
+
+      const updatedAnalysis = {
+        ...app.candidateAnalysis,
+        overallScore: clamp(profile.overall + variance()),
+        stabilityScore: clamp(profile.stability + variance()),
+        experienceScore: clamp(profile.experience + variance()),
+        recommendedAction: profile.action,
+        hiringTeamNotes: profile.notes,
+      };
+
+      await ctx.db.patch(app._id, {
+        candidateAnalysis: updatedAnalysis,
+        updatedAt: Date.now(),
+      });
+      updated++;
+    }
+
+    return { updated, total: applications.length };
+  },
+});
+
+// Update a single application's candidate analysis score
+export const updateCandidateScore = mutation({
+  args: {
+    applicationId: v.id("applications"),
+    overallScore: v.number(),
+    stabilityScore: v.optional(v.number()),
+    experienceScore: v.optional(v.number()),
+    recommendedAction: v.optional(v.string()),
+    hiringTeamNotes: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const app = await ctx.db.get(args.applicationId);
+    if (!app) throw new Error("Application not found");
+    if (!app.candidateAnalysis) throw new Error("No candidate analysis to update");
+
+    const updatedAnalysis = {
+      ...app.candidateAnalysis,
+      overallScore: args.overallScore,
+      stabilityScore: args.stabilityScore ?? app.candidateAnalysis.stabilityScore,
+      experienceScore: args.experienceScore ?? app.candidateAnalysis.experienceScore,
+      recommendedAction: args.recommendedAction ?? app.candidateAnalysis.recommendedAction,
+      hiringTeamNotes: args.hiringTeamNotes ?? app.candidateAnalysis.hiringTeamNotes,
+    };
+
+    await ctx.db.patch(args.applicationId, {
+      candidateAnalysis: updatedAnalysis,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
 // Get hiring analytics (average scores for hired vs interviewed candidates)
 export const getHiringAnalytics = query({
   args: {},

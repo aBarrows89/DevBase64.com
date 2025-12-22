@@ -13,6 +13,7 @@ import type * as aiMatching from "../aiMatching.js";
 import type * as applications from "../applications.js";
 import type * as attendance from "../attendance.js";
 import type * as auth from "../auth.js";
+import type * as bulkUpload from "../bulkUpload.js";
 import type * as contactMessages from "../contactMessages.js";
 import type * as dealerInquiries from "../dealerInquiries.js";
 import type * as jobs from "../jobs.js";
@@ -36,6 +37,7 @@ declare const fullApi: ApiFromModules<{
   applications: typeof applications;
   attendance: typeof attendance;
   auth: typeof auth;
+  bulkUpload: typeof bulkUpload;
   contactMessages: typeof contactMessages;
   dealerInquiries: typeof dealerInquiries;
   jobs: typeof jobs;

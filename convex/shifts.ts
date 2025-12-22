@@ -13,7 +13,7 @@ export const listByDate = query({
       .withIndex("by_date", (q) => q.eq("date", args.date))
       .collect();
 
-    // Enrich with personnel names
+    // Enrich with personnel names and lead info
     const enriched = await Promise.all(
       shifts.map(async (shift) => {
         const assignedNames = await Promise.all(
@@ -25,9 +25,18 @@ export const listByDate = query({
           })
         );
         const createdBy = await ctx.db.get(shift.createdBy);
+
+        // Get lead name if set
+        let leadName: string | undefined;
+        if (shift.leadId) {
+          const lead = await ctx.db.get(shift.leadId);
+          leadName = lead ? `${lead.firstName} ${lead.lastName}` : undefined;
+        }
+
         return {
           ...shift,
           assignedNames,
+          leadName,
           createdByName: createdBy?.name || "Unknown",
         };
       })
@@ -315,6 +324,41 @@ export const unassignPersonnel = mutation({
       assignedPersonnel: shift.assignedPersonnel.filter(
         (id) => id !== args.personnelId
       ),
+      updatedAt: Date.now(),
+    });
+
+    return args.shiftId;
+  },
+});
+
+// Set department lead
+export const setLead = mutation({
+  args: {
+    shiftId: v.id("shifts"),
+    personnelId: v.id("personnel"),
+  },
+  handler: async (ctx, args) => {
+    const shift = await ctx.db.get(args.shiftId);
+    if (!shift) throw new Error("Shift not found");
+
+    await ctx.db.patch(args.shiftId, {
+      leadId: args.personnelId,
+      updatedAt: Date.now(),
+    });
+
+    return args.shiftId;
+  },
+});
+
+// Remove department lead
+export const removeLead = mutation({
+  args: { shiftId: v.id("shifts") },
+  handler: async (ctx, args) => {
+    const shift = await ctx.db.get(args.shiftId);
+    if (!shift) throw new Error("Shift not found");
+
+    await ctx.db.patch(args.shiftId, {
+      leadId: undefined,
       updatedAt: Date.now(),
     });
 

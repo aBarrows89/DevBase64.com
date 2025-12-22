@@ -9,132 +9,26 @@ import { Id } from "@/convex/_generated/dataModel";
 import { useTheme } from "../theme-context";
 import { useAuth } from "../auth-context";
 
-const DAYS_OF_WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
 function formatDate(date: Date): string {
   return date.toISOString().split("T")[0];
 }
 
-function getWeekDates(currentDate: Date): Date[] {
-  const dates: Date[] = [];
-  const start = new Date(currentDate);
-  start.setDate(start.getDate() - start.getDay()); // Start of week (Sunday)
-
-  for (let i = 0; i < 7; i++) {
-    const date = new Date(start);
-    date.setDate(start.getDate() + i);
-    dates.push(date);
-  }
-  return dates;
+function formatDisplayDate(date: Date): string {
+  return date.toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
 }
 
-interface ShiftCardProps {
-  shift: {
-    _id: Id<"shifts">;
-    name?: string;
-    startTime: string;
-    endTime: string;
-    position: string;
-    department: string;
-    requiredCount: number;
-    assignedNames: string[];
-    assignedPersonnel: Id<"personnel">[];
-  };
-  isDark: boolean;
-  canEdit: boolean;
-  onDelete: (id: Id<"shifts">) => void;
-  onAssign: (shift: ShiftCardProps["shift"]) => void;
-}
-
-function ShiftCard({ shift, isDark, canEdit, onDelete, onAssign }: ShiftCardProps) {
-  const isFilled = shift.assignedPersonnel.length >= shift.requiredCount;
-  const isPartial = shift.assignedPersonnel.length > 0 && shift.assignedPersonnel.length < shift.requiredCount;
-
-  return (
-    <div
-      className={`p-3 rounded-lg border mb-2 ${
-        isFilled
-          ? isDark
-            ? "bg-green-500/10 border-green-500/30"
-            : "bg-green-50 border-green-200"
-          : isPartial
-            ? isDark
-              ? "bg-amber-500/10 border-amber-500/30"
-              : "bg-amber-50 border-amber-200"
-            : isDark
-              ? "bg-red-500/10 border-red-500/30"
-              : "bg-red-50 border-red-200"
-      }`}
-    >
-      <div className="flex items-start justify-between">
-        <div className="flex-1 min-w-0">
-          <div className={`text-xs font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-            {shift.startTime} - {shift.endTime}
-          </div>
-          <div className={`font-medium truncate ${isDark ? "text-white" : "text-gray-900"}`}>
-            {shift.name || shift.position}
-          </div>
-          <div className={`text-xs ${isDark ? "text-slate-500" : "text-gray-500"}`}>
-            {shift.department}
-          </div>
-        </div>
-        {canEdit && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(shift._id);
-            }}
-            className={`p-1 rounded hover:bg-red-500/20 ${isDark ? "text-slate-500 hover:text-red-400" : "text-gray-400 hover:text-red-500"}`}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        )}
-      </div>
-
-      {/* Assigned Personnel */}
-      <div className="mt-2">
-        <div className={`text-xs font-medium mb-1 ${isDark ? "text-slate-500" : "text-gray-500"}`}>
-          Assigned ({shift.assignedPersonnel.length}/{shift.requiredCount}):
-        </div>
-        {shift.assignedNames.length > 0 ? (
-          <div className="flex flex-wrap gap-1">
-            {shift.assignedNames.map((name, idx) => (
-              <span
-                key={idx}
-                className={`px-2 py-0.5 text-xs rounded ${
-                  isDark
-                    ? "bg-slate-700 text-slate-300"
-                    : "bg-gray-100 text-gray-700"
-                }`}
-              >
-                {name}
-              </span>
-            ))}
-          </div>
-        ) : (
-          <span className={`text-xs italic ${isDark ? "text-slate-500" : "text-gray-400"}`}>
-            No one assigned
-          </span>
-        )}
-      </div>
-
-      {/* Assign Button */}
-      {canEdit && (
-        <button
-          onClick={() => onAssign(shift)}
-          className={`mt-2 w-full px-2 py-1 text-xs rounded font-medium transition-colors ${
-            isDark
-              ? "bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30"
-              : "bg-blue-50 text-blue-600 hover:bg-blue-100"
-          }`}
-        >
-          {shift.assignedPersonnel.length < shift.requiredCount ? "Assign Staff" : "Manage"}
-        </button>
-      )}
-    </div>
-  );
+interface DepartmentShift {
+  _id: Id<"shifts">;
+  department: string;
+  assignedPersonnel: Id<"personnel">[];
+  assignedNames: string[];
+  leadId?: Id<"personnel">;
+  leadName?: string;
 }
 
 function ShiftsContent() {
@@ -142,44 +36,39 @@ function ShiftsContent() {
   const isDark = theme === "dark";
   const { user, canViewShifts, canEditShifts } = useAuth();
 
-  const [currentWeekStart, setCurrentWeekStart] = useState(() => {
-    const today = new Date();
-    today.setDate(today.getDate() - today.getDay());
-    return today;
-  });
-
+  const [selectedDate, setSelectedDate] = useState(() => formatDate(new Date()));
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
-  const [selectedDate, setSelectedDate] = useState<string>("");
-  const [selectedShift, setSelectedShift] = useState<ShiftCardProps["shift"] | null>(null);
-  const [filterDepartment, setFilterDepartment] = useState<string>("all");
+  const [selectedDepartment, setSelectedDepartment] = useState<DepartmentShift | null>(null);
+  const [newDepartmentName, setNewDepartmentName] = useState("");
+  const [isPrintMode, setIsPrintMode] = useState(false);
+  const [draggedPerson, setDraggedPerson] = useState<{ personnelId: Id<"personnel">; name: string; fromDepartment: string; isLead?: boolean } | null>(null);
 
-  const weekDates = useMemo(() => getWeekDates(currentWeekStart), [currentWeekStart]);
-  const startDate = formatDate(weekDates[0]);
-  const endDate = formatDate(weekDates[6]);
+  // Default departments
+  const DEFAULT_DEPARTMENTS = [
+    "Shipping",
+    "Receiving",
+    "Inventory",
+    "Purchases",
+    "Janitorial",
+  ];
+
+  // Parse selected date
+  const currentDate = useMemo(() => new Date(selectedDate + "T12:00:00"), [selectedDate]);
+  const isToday = formatDate(new Date()) === selectedDate;
 
   // Queries
-  const shifts = useQuery(api.shifts.listByDateRange, {
-    startDate,
-    endDate,
-    department: filterDepartment === "all" ? undefined : filterDepartment,
-  }) || [];
-
-  const departments = useQuery(api.personnel.getDepartments) || [];
+  const shifts = useQuery(api.shifts.listByDate, { date: selectedDate }) || [];
   const activePersonnel = useQuery(api.personnel.list, { status: "active" }) || [];
 
-  const availablePersonnel = useQuery(
-    api.shifts.getAvailablePersonnel,
-    selectedShift
-      ? {
-          date: selectedDate,
-          startTime: selectedShift.startTime,
-          endTime: selectedShift.endTime,
-          department: selectedShift.department,
-          excludeShiftId: selectedShift._id,
-        }
-      : "skip"
-  );
+  // Get all personnel not yet assigned to any shift today
+  const unassignedPersonnel = useMemo(() => {
+    const assignedIds = new Set<string>();
+    shifts.forEach(shift => {
+      shift.assignedPersonnel.forEach(id => assignedIds.add(id));
+    });
+    return activePersonnel.filter(p => !assignedIds.has(p._id));
+  }, [shifts, activePersonnel]);
 
   // Mutations
   const createShift = useMutation(api.shifts.create);
@@ -187,131 +76,199 @@ function ShiftsContent() {
   const assignPersonnel = useMutation(api.shifts.assignPersonnel);
   const unassignPersonnel = useMutation(api.shifts.unassignPersonnel);
   const copyFromDate = useMutation(api.shifts.copyFromDate);
+  const setLead = useMutation(api.shifts.setLead);
+  const removeLead = useMutation(api.shifts.removeLead);
 
-  // Form state
-  const [shiftForm, setShiftForm] = useState({
-    name: "",
-    startTime: "09:00",
-    endTime: "17:00",
-    position: "",
-    department: "",
-    requiredCount: 1,
-    notes: "",
-  });
-
-  // Group shifts by date
-  const shiftsByDate = useMemo(() => {
-    const grouped: Record<string, typeof shifts> = {};
-    for (const date of weekDates) {
-      grouped[formatDate(date)] = [];
-    }
-    for (const shift of shifts) {
-      if (grouped[shift.date]) {
-        grouped[shift.date].push(shift);
-      }
-    }
-    return grouped;
-  }, [shifts, weekDates]);
-
-  // Navigate weeks
-  const goToPreviousWeek = () => {
-    const newStart = new Date(currentWeekStart);
-    newStart.setDate(newStart.getDate() - 7);
-    setCurrentWeekStart(newStart);
+  // Navigate dates
+  const goToPreviousDay = () => {
+    const newDate = new Date(currentDate);
+    newDate.setDate(newDate.getDate() - 1);
+    setSelectedDate(formatDate(newDate));
   };
 
-  const goToNextWeek = () => {
-    const newStart = new Date(currentWeekStart);
-    newStart.setDate(newStart.getDate() + 7);
-    setCurrentWeekStart(newStart);
+  const goToNextDay = () => {
+    const newDate = new Date(currentDate);
+    newDate.setDate(newDate.getDate() + 1);
+    setSelectedDate(formatDate(newDate));
   };
 
   const goToToday = () => {
-    const today = new Date();
-    today.setDate(today.getDate() - today.getDay());
-    setCurrentWeekStart(today);
+    setSelectedDate(formatDate(new Date()));
   };
 
   // Handlers
-  const handleCreateShift = async () => {
-    if (!user || !shiftForm.position || !shiftForm.department || !selectedDate) return;
+  const handleCreateDepartment = async () => {
+    if (!user || !newDepartmentName.trim()) return;
     await createShift({
       date: selectedDate,
-      name: shiftForm.name || undefined,
-      startTime: shiftForm.startTime,
-      endTime: shiftForm.endTime,
-      position: shiftForm.position,
-      department: shiftForm.department,
-      requiredCount: shiftForm.requiredCount,
+      name: newDepartmentName.trim(),
+      startTime: "00:00",
+      endTime: "23:59",
+      position: "Staff",
+      department: newDepartmentName.trim(),
+      requiredCount: 99,
       assignedPersonnel: [],
-      notes: shiftForm.notes || undefined,
       createdBy: user._id as Id<"users">,
     });
     setShowCreateModal(false);
-    setShiftForm({
-      name: "",
-      startTime: "09:00",
-      endTime: "17:00",
-      position: "",
-      department: "",
-      requiredCount: 1,
-      notes: "",
-    });
+    setNewDepartmentName("");
   };
 
-  const handleDeleteShift = async (shiftId: Id<"shifts">) => {
-    if (confirm("Are you sure you want to delete this shift?")) {
+  const handleDeleteDepartment = async (shiftId: Id<"shifts">) => {
+    if (confirm("Are you sure you want to delete this department for today?")) {
       await removeShift({ shiftId });
     }
   };
 
   const handleAssignPersonnel = async (personnelId: Id<"personnel">) => {
-    if (!selectedShift) return;
+    if (!selectedDepartment) return;
     await assignPersonnel({
-      shiftId: selectedShift._id,
+      shiftId: selectedDepartment._id,
       personnelId,
     });
-    // Refresh shift data
-    setSelectedShift(null);
-    setShowAssignModal(false);
   };
 
-  const handleUnassignPersonnel = async (personnelId: Id<"personnel">) => {
-    if (!selectedShift) return;
+  const handleUnassignPersonnel = async (shiftId: Id<"shifts">, personnelId: Id<"personnel">) => {
     await unassignPersonnel({
-      shiftId: selectedShift._id,
+      shiftId,
       personnelId,
     });
   };
 
-  const handleCopyFromPreviousWeek = async () => {
+  const handleCopyFromYesterday = async () => {
     if (!user) return;
-    const prevWeekStart = new Date(currentWeekStart);
-    prevWeekStart.setDate(prevWeekStart.getDate() - 7);
+    const yesterday = new Date(currentDate);
+    yesterday.setDate(yesterday.getDate() - 1);
 
-    for (let i = 0; i < 7; i++) {
-      const sourceDate = new Date(prevWeekStart);
-      sourceDate.setDate(prevWeekStart.getDate() + i);
-      const targetDate = new Date(currentWeekStart);
-      targetDate.setDate(currentWeekStart.getDate() + i);
+    await copyFromDate({
+      sourceDate: formatDate(yesterday),
+      targetDate: selectedDate,
+      createdBy: user._id as Id<"users">,
+    });
+  };
 
-      await copyFromDate({
-        sourceDate: formatDate(sourceDate),
-        targetDate: formatDate(targetDate),
+  // Drag and drop handlers
+  const handleDragStart = (e: React.DragEvent, personnelId: Id<"personnel">, name: string, fromDepartment: string, isLead?: boolean) => {
+    e.dataTransfer.setData("text/plain", personnelId);
+    e.dataTransfer.effectAllowed = "move";
+    setDraggedPerson({ personnelId, name, fromDepartment, isLead });
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  };
+
+  const handleDragEnd = () => {
+    setDraggedPerson(null);
+  };
+
+  const handleDrop = async (targetShift: DepartmentShift) => {
+    if (!draggedPerson) return;
+
+    // If coming from another department, unassign first
+    if (draggedPerson.fromDepartment !== "unassigned") {
+      const sourceShift = shifts.find(s => s.department === draggedPerson.fromDepartment);
+      if (sourceShift) {
+        await unassignPersonnel({
+          shiftId: sourceShift._id,
+          personnelId: draggedPerson.personnelId,
+        });
+      }
+    }
+
+    // Assign to target department
+    await assignPersonnel({
+      shiftId: targetShift._id,
+      personnelId: draggedPerson.personnelId,
+    });
+
+    setDraggedPerson(null);
+  };
+
+  // Drop on lead zone
+  const handleDropLead = async (e: React.DragEvent, targetShift: DepartmentShift) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Get personnel ID from dataTransfer as fallback
+    const personnelIdFromTransfer = e.dataTransfer.getData("text/plain");
+    const person = draggedPerson || (personnelIdFromTransfer ? {
+      personnelId: personnelIdFromTransfer as Id<"personnel">,
+      name: "",
+      fromDepartment: "unassigned",
+      isLead: false
+    } : null);
+
+    if (!person) return;
+
+    // If dragging from lead position to this lead position
+    if (person.isLead && person.fromDepartment !== "unassigned") {
+      const sourceShift = shifts.find(s => s.department === person.fromDepartment);
+      if (sourceShift) {
+        await removeLead({ shiftId: sourceShift._id });
+      }
+    }
+
+    // If coming from unassigned, need to assign them first
+    if (person.fromDepartment === "unassigned") {
+      await assignPersonnel({
+        shiftId: targetShift._id,
+        personnelId: person.personnelId,
+      });
+    } else if (person.fromDepartment !== targetShift.department && !person.isLead) {
+      // Moving from another department's staff to lead position
+      const sourceShift = shifts.find(s => s.department === person.fromDepartment);
+      if (sourceShift) {
+        await unassignPersonnel({
+          shiftId: sourceShift._id,
+          personnelId: person.personnelId,
+        });
+      }
+      await assignPersonnel({
+        shiftId: targetShift._id,
+        personnelId: person.personnelId,
+      });
+    }
+
+    // Set as lead
+    await setLead({
+      shiftId: targetShift._id,
+      personnelId: person.personnelId,
+    });
+
+    setDraggedPerson(null);
+  };
+
+  // Handle remove lead
+  const handleRemoveLead = async (shiftId: Id<"shifts">) => {
+    await removeLead({ shiftId });
+  };
+
+  // Handle create default departments
+  const handleCreateDefaultDepartments = async () => {
+    if (!user) return;
+    for (const dept of DEFAULT_DEPARTMENTS) {
+      await createShift({
+        date: selectedDate,
+        name: dept,
+        startTime: "00:00",
+        endTime: "23:59",
+        position: "Staff",
+        department: dept,
+        requiredCount: 99,
+        assignedPersonnel: [],
         createdBy: user._id as Id<"users">,
       });
     }
   };
 
-  const openCreateModal = (date: string) => {
-    setSelectedDate(date);
-    setShowCreateModal(true);
-  };
-
-  const openAssignModal = (shift: ShiftCardProps["shift"], date: string) => {
-    setSelectedShift(shift);
-    setSelectedDate(date);
-    setShowAssignModal(true);
+  const handlePrint = () => {
+    setIsPrintMode(true);
+    setTimeout(() => {
+      window.print();
+      setIsPrintMode(false);
+    }, 100);
   };
 
   // Permission check
@@ -333,6 +290,49 @@ function ShiftsContent() {
     );
   }
 
+  // Print mode layout
+  if (isPrintMode) {
+    return (
+      <div className="p-8 bg-white min-h-screen print:p-4">
+        <style jsx global>{`
+          @media print {
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .no-print { display: none !important; }
+          }
+        `}</style>
+        <div className="text-center mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">Daily Shift Schedule</h1>
+          <p className="text-lg text-gray-600">{formatDisplayDate(currentDate)}</p>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          {shifts.map((shift) => (
+            <div key={shift._id} className="border border-gray-300 rounded-lg p-4">
+              <h3 className="font-bold text-lg border-b border-gray-300 pb-2 mb-3">
+                {shift.name || shift.department || "Unnamed Department"}
+              </h3>
+              {shift.leadName && (
+                <div className="mb-2 pb-2 border-b border-gray-200">
+                  <span className="text-xs font-medium text-gray-500 uppercase">Lead:</span>
+                  <p className="font-semibold text-gray-800">{shift.leadName}</p>
+                </div>
+              )}
+              <ul className="space-y-1">
+                {shift.assignedNames.map((name, idx) => (
+                  <li key={idx} className="text-gray-700">
+                    {name}
+                  </li>
+                ))}
+                {shift.assignedNames.length === 0 && !shift.leadName && (
+                  <li className="text-gray-400 italic">No staff assigned</li>
+                )}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`flex h-screen ${isDark ? "bg-slate-900" : "bg-[#f2f2f7]"}`}>
       <Sidebar />
@@ -346,47 +346,54 @@ function ShiftsContent() {
                 Shift Planning
               </h1>
               <p className={`text-sm mt-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                Whiteboard-style shift schedule
+                Drag staff between departments
               </p>
             </div>
-            <div className="flex items-center gap-4">
-              {/* Department Filter */}
-              <select
-                value={filterDepartment}
-                onChange={(e) => setFilterDepartment(e.target.value)}
-                className={`px-4 py-2 rounded-lg focus:outline-none ${
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handlePrint}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
                   isDark
-                    ? "bg-slate-800 border border-slate-700 text-white"
-                    : "bg-white border border-gray-200 text-gray-900"
+                    ? "bg-slate-700 hover:bg-slate-600 text-white"
+                    : "bg-gray-100 hover:bg-gray-200 text-gray-900"
                 }`}
               >
-                <option value="all">All Departments</option>
-                {departments.map((dept) => (
-                  <option key={dept} value={dept}>
-                    {dept}
-                  </option>
-                ))}
-              </select>
-
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                </svg>
+                Print
+              </button>
               {canEditShifts && (
-                <button
-                  onClick={handleCopyFromPreviousWeek}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                    isDark
-                      ? "bg-slate-700 hover:bg-slate-600 text-white"
-                      : "bg-gray-100 hover:bg-gray-200 text-gray-900"
-                  }`}
-                >
-                  Copy Previous Week
-                </button>
+                <>
+                  <button
+                    onClick={handleCopyFromYesterday}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                      isDark
+                        ? "bg-slate-700 hover:bg-slate-600 text-white"
+                        : "bg-gray-100 hover:bg-gray-200 text-gray-900"
+                    }`}
+                  >
+                    Copy Yesterday
+                  </button>
+                  <button
+                    onClick={() => setShowCreateModal(true)}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                      isDark
+                        ? "bg-cyan-500 hover:bg-cyan-400 text-white"
+                        : "bg-blue-600 hover:bg-blue-700 text-white"
+                    }`}
+                  >
+                    + Add Department
+                  </button>
+                </>
               )}
             </div>
           </div>
 
-          {/* Week Navigation */}
+          {/* Date Navigation */}
           <div className="flex items-center gap-4 mt-4">
             <button
-              onClick={goToPreviousWeek}
+              onClick={goToPreviousDay}
               className={`p-2 rounded-lg transition-colors ${
                 isDark ? "hover:bg-slate-700 text-slate-400" : "hover:bg-gray-100 text-gray-500"
               }`}
@@ -398,15 +405,19 @@ function ShiftsContent() {
             <button
               onClick={goToToday}
               className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                isDark
-                  ? "bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30"
-                  : "bg-blue-50 text-blue-600 hover:bg-blue-100"
+                isToday
+                  ? isDark
+                    ? "bg-cyan-500 text-white"
+                    : "bg-blue-600 text-white"
+                  : isDark
+                    ? "bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30"
+                    : "bg-blue-50 text-blue-600 hover:bg-blue-100"
               }`}
             >
               Today
             </button>
             <button
-              onClick={goToNextWeek}
+              onClick={goToNextDay}
               className={`p-2 rounded-lg transition-colors ${
                 isDark ? "hover:bg-slate-700 text-slate-400" : "hover:bg-gray-100 text-gray-500"
               }`}
@@ -415,225 +426,307 @@ function ShiftsContent() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </button>
+
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className={`px-4 py-2 rounded-lg focus:outline-none ${
+                isDark
+                  ? "bg-slate-800 border border-slate-700 text-white"
+                  : "bg-white border border-gray-200 text-gray-900"
+              }`}
+            />
+
             <span className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
-              {weekDates[0].toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+              {formatDisplayDate(currentDate)}
             </span>
+
+            {isToday && (
+              <span className={`px-2 py-1 text-xs rounded-full ${isDark ? "bg-cyan-500/20 text-cyan-400" : "bg-blue-100 text-blue-600"}`}>
+                Today
+              </span>
+            )}
           </div>
         </header>
 
-        {/* Whiteboard Grid */}
-        <div className="flex-1 overflow-auto p-4">
-          <div className="grid grid-cols-7 gap-4 min-w-[1200px]">
-            {weekDates.map((date, idx) => {
-              const dateStr = formatDate(date);
-              const dayShifts = shiftsByDate[dateStr] || [];
-              const isToday = formatDate(new Date()) === dateStr;
-
-              return (
+        {/* Main Content */}
+        <div className="flex-1 overflow-auto p-6">
+          <div className="flex gap-6 h-full">
+            {/* Department Columns */}
+            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 auto-rows-min">
+              {shifts.map((shift) => (
                 <div
-                  key={dateStr}
-                  className={`rounded-xl flex flex-col ${
+                  key={shift._id}
+                  className={`rounded-xl border min-h-[200px] ${
                     isDark
-                      ? isToday
-                        ? "bg-cyan-500/10 border-2 border-cyan-500/30"
-                        : "bg-slate-800/50 border border-slate-700"
-                      : isToday
-                        ? "bg-blue-50 border-2 border-blue-200"
-                        : "bg-white border border-gray-200 shadow-sm"
-                  }`}
+                      ? "bg-slate-800/50 border-slate-700"
+                      : "bg-white border-gray-200 shadow-sm"
+                  } ${draggedPerson ? "ring-2 ring-dashed ring-cyan-400/50" : ""}`}
                 >
-                  {/* Day Header */}
-                  <div
-                    className={`p-3 border-b text-center ${
-                      isDark ? "border-slate-700" : "border-gray-200"
-                    }`}
-                  >
-                    <div className={`text-xs font-medium ${isDark ? "text-slate-500" : "text-gray-500"}`}>
-                      {DAYS_OF_WEEK[idx]}
-                    </div>
-                    <div
-                      className={`text-xl font-bold ${
-                        isToday
-                          ? isDark
-                            ? "text-cyan-400"
-                            : "text-blue-600"
-                          : isDark
-                            ? "text-white"
-                            : "text-gray-900"
-                      }`}
-                    >
-                      {date.getDate()}
+                  {/* Department Header */}
+                  <div className={`flex items-center justify-between p-4 border-b ${isDark ? "border-slate-700" : "border-gray-200"}`}>
+                    <h3 className={`font-semibold text-lg ${isDark ? "text-white" : "text-gray-900"}`}>
+                      {shift.department}
+                    </h3>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                        {shift.assignedPersonnel.length}
+                      </span>
+                      {canEditShifts && (
+                        <button
+                          onClick={() => handleDeleteDepartment(shift._id)}
+                          className={`p-1 rounded hover:bg-red-500/20 ${isDark ? "text-slate-500 hover:text-red-400" : "text-gray-400 hover:text-red-500"}`}
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      )}
                     </div>
                   </div>
 
-                  {/* Shifts */}
-                  <div className="flex-1 p-3 min-h-[300px] overflow-y-auto">
-                    {dayShifts.map((shift) => (
-                      <ShiftCard
-                        key={shift._id}
-                        shift={shift}
-                        isDark={isDark}
-                        canEdit={canEditShifts}
-                        onDelete={handleDeleteShift}
-                        onAssign={(s) => openAssignModal(s, dateStr)}
-                      />
-                    ))}
-
-                    {dayShifts.length === 0 && (
-                      <div className={`text-center py-8 ${isDark ? "text-slate-600" : "text-gray-400"}`}>
-                        <svg
-                          className="w-8 h-8 mx-auto mb-2 opacity-50"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                          />
-                        </svg>
-                        <p className="text-xs">No shifts</p>
+                  {/* Department Lead Section */}
+                  <div
+                    className={`p-3 border-b ${isDark ? "border-slate-700" : "border-gray-200"}`}
+                  >
+                    <div className={`flex items-center gap-2 mb-2`}>
+                      <svg className={`w-4 h-4 ${isDark ? "text-amber-400" : "text-amber-500"}`} fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                      </svg>
+                      <span className={`text-xs font-medium ${isDark ? "text-amber-400" : "text-amber-600"}`}>
+                        Department Lead
+                      </span>
+                    </div>
+                    {shift.leadId && shift.leadName ? (
+                      <div
+                        draggable={canEditShifts}
+                        onDragStart={(e) => handleDragStart(e, shift.leadId!, shift.leadName!, shift.department, true)}
+                        onDragEnd={handleDragEnd}
+                        onDragOver={handleDragOver}
+                        onDrop={(e) => handleDropLead(e, shift)}
+                        className={`flex items-center justify-between p-2 rounded-lg ${
+                          isDark
+                            ? "bg-amber-500/10 border border-amber-500/30"
+                            : "bg-amber-50 border border-amber-200"
+                        }`}
+                      >
+                        <span className={`font-medium ${isDark ? "text-amber-300" : "text-amber-700"}`}>
+                          {shift.leadName}
+                        </span>
+                        {canEditShifts && (
+                          <button
+                            onClick={() => handleRemoveLead(shift._id)}
+                            className={`p-1 rounded hover:bg-red-500/20 ${isDark ? "text-amber-400 hover:text-red-400" : "text-amber-500 hover:text-red-500"}`}
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div
+                        onDragOver={handleDragOver}
+                        onDrop={(e) => handleDropLead(e, shift)}
+                        className={`p-4 rounded-lg border-2 border-dashed text-center min-h-[50px] flex items-center justify-center ${
+                        isDark
+                          ? "border-slate-600 text-slate-500"
+                          : "border-gray-300 text-gray-400"
+                      } ${draggedPerson ? "ring-2 ring-amber-400/50 bg-amber-500/10 border-amber-400" : ""}`}>
+                        <span className="text-sm">Drop to set as lead</span>
                       </div>
                     )}
                   </div>
 
-                  {/* Add Shift Button */}
+                  {/* Personnel List */}
+                  <div
+                    onDragOver={handleDragOver}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleDrop(shift);
+                    }}
+                    className="p-3 space-y-2 min-h-[60px]"
+                  >
+                    {shift.assignedNames.map((name, idx) => (
+                      <div
+                        key={shift.assignedPersonnel[idx]}
+                        draggable={canEditShifts}
+                        onDragStart={(e) => handleDragStart(e, shift.assignedPersonnel[idx], name, shift.department)}
+                        onDragEnd={handleDragEnd}
+                        className={`flex items-center justify-between p-3 rounded-lg cursor-move transition-colors ${
+                          isDark
+                            ? "bg-slate-700/50 hover:bg-slate-700"
+                            : "bg-gray-50 hover:bg-gray-100"
+                        }`}
+                      >
+                        <span className={isDark ? "text-white" : "text-gray-900"}>{name}</span>
+                        {canEditShifts && (
+                          <button
+                            onClick={() => handleUnassignPersonnel(shift._id, shift.assignedPersonnel[idx])}
+                            className={`p-1 rounded hover:bg-red-500/20 ${isDark ? "text-slate-500 hover:text-red-400" : "text-gray-400 hover:text-red-500"}`}
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    {shift.assignedNames.length === 0 && (
+                      <div className={`text-center py-8 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                        <p className="text-sm">Drop staff here</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Add Personnel Button */}
                   {canEditShifts && (
                     <div className={`p-3 border-t ${isDark ? "border-slate-700" : "border-gray-200"}`}>
                       <button
-                        onClick={() => openCreateModal(dateStr)}
+                        onClick={() => {
+                          setSelectedDepartment(shift);
+                          setShowAssignModal(true);
+                        }}
                         className={`w-full py-2 rounded-lg text-sm font-medium transition-colors ${
                           isDark
                             ? "bg-slate-700/50 hover:bg-slate-700 text-slate-400 hover:text-white"
                             : "bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-700"
                         }`}
                       >
-                        + Add Shift
+                        + Add Staff
                       </button>
                     </div>
                   )}
                 </div>
-              );
-            })}
+              ))}
+
+              {shifts.length === 0 && (
+                <div className={`col-span-full text-center py-16 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                  <svg
+                    className="w-16 h-16 mx-auto mb-4 opacity-50"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                    />
+                  </svg>
+                  <h3 className={`text-lg font-medium mb-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    No departments for today
+                  </h3>
+                  <p className="text-sm mb-4">Add a department to start assigning staff</p>
+                  {canEditShifts && (
+                    <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                      <button
+                        onClick={handleCreateDefaultDepartments}
+                        className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                          isDark
+                            ? "bg-cyan-500 hover:bg-cyan-400 text-white"
+                            : "bg-blue-600 hover:bg-blue-700 text-white"
+                        }`}
+                      >
+                        Create Default Departments
+                      </button>
+                      <button
+                        onClick={() => setShowCreateModal(true)}
+                        className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                          isDark
+                            ? "bg-slate-700 hover:bg-slate-600 text-white"
+                            : "bg-gray-200 hover:bg-gray-300 text-gray-900"
+                        }`}
+                      >
+                        + Add Custom Department
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Unassigned Personnel Panel */}
+            <div className={`w-64 flex-shrink-0 rounded-xl border ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
+              <div className={`p-4 border-b ${isDark ? "border-slate-700" : "border-gray-200"}`}>
+                <h3 className={`font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  Unassigned Staff
+                </h3>
+                <p className={`text-xs mt-1 ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                  {unassignedPersonnel.length} available
+                </p>
+              </div>
+              <div className="p-3 space-y-2 max-h-[calc(100vh-300px)] overflow-y-auto">
+                {unassignedPersonnel.map((person) => (
+                  <div
+                    key={person._id}
+                    draggable={canEditShifts}
+                    onDragStart={(e) => handleDragStart(e, person._id, `${person.firstName} ${person.lastName}`, "unassigned")}
+                    onDragEnd={handleDragEnd}
+                    className={`p-3 rounded-lg cursor-move transition-colors ${
+                      isDark
+                        ? "bg-slate-700/50 hover:bg-slate-700"
+                        : "bg-gray-50 hover:bg-gray-100"
+                    }`}
+                  >
+                    <div className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                      {person.firstName} {person.lastName}
+                    </div>
+                    <div className={`text-xs ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                      {person.department}
+                    </div>
+                  </div>
+                ))}
+                {unassignedPersonnel.length === 0 && (
+                  <div className={`text-center py-8 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                    <p className="text-sm">All staff assigned</p>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Create Shift Modal */}
+        {/* Create Department Modal */}
         {showCreateModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className={`w-full max-w-md rounded-xl p-6 ${isDark ? "bg-slate-800" : "bg-white"}`}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className={`w-full max-w-md rounded-xl p-6 ${isDark ? "bg-slate-800 border border-slate-700" : "bg-white border border-gray-200 shadow-xl"}`}>
               <h2 className={`text-lg font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
-                Create Shift for {new Date(selectedDate).toLocaleDateString()}
+                Add Department for {formatDisplayDate(currentDate)}
               </h2>
-              <div className="space-y-4">
-                <div>
-                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                    Shift Name (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={shiftForm.name}
-                    onChange={(e) => setShiftForm({ ...shiftForm, name: e.target.value })}
-                    placeholder="e.g., Morning Rush"
-                    className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white placeholder-slate-500" : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400"} border focus:outline-none`}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                      Start Time
-                    </label>
-                    <input
-                      type="time"
-                      value={shiftForm.startTime}
-                      onChange={(e) => setShiftForm({ ...shiftForm, startTime: e.target.value })}
-                      className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"} border focus:outline-none`}
-                    />
-                  </div>
-                  <div>
-                    <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                      End Time
-                    </label>
-                    <input
-                      type="time"
-                      value={shiftForm.endTime}
-                      onChange={(e) => setShiftForm({ ...shiftForm, endTime: e.target.value })}
-                      className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"} border focus:outline-none`}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                    Position
-                  </label>
-                  <input
-                    type="text"
-                    value={shiftForm.position}
-                    onChange={(e) => setShiftForm({ ...shiftForm, position: e.target.value })}
-                    placeholder="e.g., Warehouse Associate"
-                    className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white placeholder-slate-500" : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400"} border focus:outline-none`}
-                  />
-                </div>
-                <div>
-                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                    Department
-                  </label>
-                  <select
-                    value={shiftForm.department}
-                    onChange={(e) => setShiftForm({ ...shiftForm, department: e.target.value })}
-                    className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"} border focus:outline-none`}
-                  >
-                    <option value="">Select department...</option>
-                    {departments.map((dept) => (
-                      <option key={dept} value={dept}>
-                        {dept}
-                      </option>
-                    ))}
-                    <option value="Warehouse">Warehouse</option>
-                    <option value="Shipping">Shipping</option>
-                    <option value="Receiving">Receiving</option>
-                    <option value="Office">Office</option>
-                  </select>
-                </div>
-                <div>
-                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                    Required Staff
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={shiftForm.requiredCount}
-                    onChange={(e) => setShiftForm({ ...shiftForm, requiredCount: parseInt(e.target.value) || 1 })}
-                    className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"} border focus:outline-none`}
-                  />
-                </div>
-                <div>
-                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                    Notes (Optional)
-                  </label>
-                  <textarea
-                    value={shiftForm.notes}
-                    onChange={(e) => setShiftForm({ ...shiftForm, notes: e.target.value })}
-                    placeholder="Any additional notes..."
-                    rows={2}
-                    className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white placeholder-slate-500" : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400"} border focus:outline-none`}
-                  />
-                </div>
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                  Department Name
+                </label>
+                <input
+                  type="text"
+                  value={newDepartmentName}
+                  onChange={(e) => setNewDepartmentName(e.target.value)}
+                  placeholder="e.g., Warehouse, Shipping, Office"
+                  autoFocus
+                  onKeyDown={(e) => e.key === "Enter" && handleCreateDepartment()}
+                  className={`w-full px-4 py-3 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white placeholder-slate-500" : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400"} border focus:outline-none focus:ring-2 focus:ring-cyan-500`}
+                />
               </div>
               <div className="flex gap-3 mt-6">
                 <button
-                  onClick={() => setShowCreateModal(false)}
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    setNewDepartmentName("");
+                  }}
                   className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-slate-700 hover:bg-slate-600 text-white" : "bg-gray-100 hover:bg-gray-200 text-gray-900"}`}
                 >
                   Cancel
                 </button>
                 <button
-                  onClick={handleCreateShift}
-                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-cyan-500 hover:bg-cyan-400 text-white" : "bg-blue-600 hover:bg-blue-700 text-white"}`}
+                  onClick={handleCreateDepartment}
+                  disabled={!newDepartmentName.trim()}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${isDark ? "bg-cyan-500 hover:bg-cyan-400 text-white" : "bg-blue-600 hover:bg-blue-700 text-white"}`}
                 >
-                  Create Shift
+                  Add Department
                 </button>
               </div>
             </div>
@@ -641,73 +734,42 @@ function ShiftsContent() {
         )}
 
         {/* Assign Personnel Modal */}
-        {showAssignModal && selectedShift && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className={`w-full max-w-md rounded-xl p-6 ${isDark ? "bg-slate-800" : "bg-white"}`}>
+        {showAssignModal && selectedDepartment && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className={`w-full max-w-md rounded-xl p-6 ${isDark ? "bg-slate-800 border border-slate-700" : "bg-white border border-gray-200 shadow-xl"}`}>
               <h2 className={`text-lg font-semibold mb-2 ${isDark ? "text-white" : "text-gray-900"}`}>
-                Assign Staff to Shift
+                Add Staff to {selectedDepartment.department}
               </h2>
               <p className={`text-sm mb-4 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                {selectedShift.name || selectedShift.position} ({selectedShift.startTime} - {selectedShift.endTime})
+                Select staff members to assign
               </p>
 
-              {/* Currently Assigned */}
-              {selectedShift.assignedPersonnel.length > 0 && (
-                <div className="mb-4">
-                  <h3 className={`text-sm font-medium mb-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                    Currently Assigned:
-                  </h3>
-                  <div className="space-y-2">
-                    {selectedShift.assignedNames.map((name, idx) => (
-                      <div
-                        key={idx}
-                        className={`flex items-center justify-between p-2 rounded-lg ${isDark ? "bg-slate-700" : "bg-gray-100"}`}
-                      >
-                        <span className={isDark ? "text-white" : "text-gray-900"}>{name}</span>
-                        <button
-                          onClick={() => handleUnassignPersonnel(selectedShift.assignedPersonnel[idx])}
-                          className={`text-xs px-2 py-1 rounded ${isDark ? "bg-red-500/20 text-red-400 hover:bg-red-500/30" : "bg-red-50 text-red-600 hover:bg-red-100"}`}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Available Personnel */}
-              <div>
-                <h3 className={`text-sm font-medium mb-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                  Available Staff:
-                </h3>
-                {availablePersonnel && availablePersonnel.length > 0 ? (
-                  <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {availablePersonnel.map((person) => (
-                      <button
-                        key={person._id}
-                        onClick={() => handleAssignPersonnel(person._id)}
-                        className={`w-full flex items-center justify-between p-3 rounded-lg transition-colors ${
-                          isDark
-                            ? "bg-slate-700/50 hover:bg-slate-700 text-white"
-                            : "bg-gray-50 hover:bg-gray-100 text-gray-900"
-                        }`}
-                      >
-                        <div>
-                          <div className="font-medium">{person.name}</div>
-                          <div className={`text-xs ${isDark ? "text-slate-500" : "text-gray-500"}`}>
-                            {person.position} • {person.department}
-                          </div>
+              <div className="space-y-2 max-h-80 overflow-y-auto">
+                {unassignedPersonnel.length > 0 ? (
+                  unassignedPersonnel.map((person) => (
+                    <button
+                      key={person._id}
+                      onClick={() => handleAssignPersonnel(person._id)}
+                      className={`w-full flex items-center justify-between p-3 rounded-lg transition-colors ${
+                        isDark
+                          ? "bg-slate-700/50 hover:bg-slate-700 text-white"
+                          : "bg-gray-50 hover:bg-gray-100 text-gray-900"
+                      }`}
+                    >
+                      <div className="text-left">
+                        <div className="font-medium">{person.firstName} {person.lastName}</div>
+                        <div className={`text-xs ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                          {person.department} - {person.position}
                         </div>
-                        <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                        </svg>
-                      </button>
-                    ))}
-                  </div>
+                      </div>
+                      <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                    </button>
+                  ))
                 ) : (
-                  <p className={`text-sm text-center py-4 ${isDark ? "text-slate-500" : "text-gray-500"}`}>
-                    No available staff for this time slot
+                  <p className={`text-sm text-center py-8 ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                    All staff have been assigned
                   </p>
                 )}
               </div>
@@ -716,11 +778,11 @@ function ShiftsContent() {
                 <button
                   onClick={() => {
                     setShowAssignModal(false);
-                    setSelectedShift(null);
+                    setSelectedDepartment(null);
                   }}
                   className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-slate-700 hover:bg-slate-600 text-white" : "bg-gray-100 hover:bg-gray-200 text-gray-900"}`}
                 >
-                  Close
+                  Done
                 </button>
               </div>
             </div>

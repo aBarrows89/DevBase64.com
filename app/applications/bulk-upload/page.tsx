@@ -1,0 +1,414 @@
+"use client";
+
+import { useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { useMutation, useAction } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import ProtectedRoute from "@/app/protected";
+import * as pdfjsLib from "pdfjs-dist";
+
+// Set up PDF.js worker
+if (typeof window !== "undefined") {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+}
+
+interface FileStatus {
+  file: File;
+  status: "pending" | "extracting" | "processing" | "success" | "error";
+  error?: string;
+  result?: {
+    candidateName?: string;
+    matchedJob?: string;
+    overallScore?: number;
+    applicationId?: string;
+  };
+}
+
+export default function BulkUploadPage() {
+  const router = useRouter();
+  const processResume = useAction(api.bulkUpload.processResume);
+
+  const [files, setFiles] = useState<FileStatus[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  // Extract text from PDF
+  const extractTextFromPdf = async (file: File): Promise<string> => {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+    let fullText = "";
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items
+        .map((item: any) => item.str)
+        .join(" ");
+      fullText += pageText + "\n";
+    }
+
+    return fullText;
+  };
+
+  // Handle file drop
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+
+    const droppedFiles = Array.from(e.dataTransfer.files).filter(
+      (file) => file.type === "application/pdf"
+    );
+
+    if (droppedFiles.length === 0) {
+      alert("Please drop PDF files only");
+      return;
+    }
+
+    const newFiles: FileStatus[] = droppedFiles.map((file) => ({
+      file,
+      status: "pending",
+    }));
+
+    setFiles((prev) => [...prev, ...newFiles]);
+  }, []);
+
+  // Handle file select via input
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(e.target.files || []).filter(
+      (file) => file.type === "application/pdf"
+    );
+
+    if (selectedFiles.length === 0) return;
+
+    const newFiles: FileStatus[] = selectedFiles.map((file) => ({
+      file,
+      status: "pending",
+    }));
+
+    setFiles((prev) => [...prev, ...newFiles]);
+    e.target.value = ""; // Reset input
+  };
+
+  // Process all pending files
+  const processAllFiles = async () => {
+    setIsProcessing(true);
+
+    for (let i = 0; i < files.length; i++) {
+      if (files[i].status !== "pending") continue;
+
+      // Update status to extracting
+      setFiles((prev) => {
+        const updated = [...prev];
+        updated[i] = { ...updated[i], status: "extracting" };
+        return updated;
+      });
+
+      try {
+        // Extract text from PDF
+        const resumeText = await extractTextFromPdf(files[i].file);
+
+        if (!resumeText || resumeText.trim().length < 50) {
+          throw new Error("Could not extract text from PDF - file may be scanned or image-based");
+        }
+
+        // Update status to processing
+        setFiles((prev) => {
+          const updated = [...prev];
+          updated[i] = { ...updated[i], status: "processing" };
+          return updated;
+        });
+
+        // Process through AI
+        const result = await processResume({
+          resumeText,
+          fileName: files[i].file.name,
+        });
+
+        if (result.success) {
+          setFiles((prev) => {
+            const updated = [...prev];
+            updated[i] = {
+              ...updated[i],
+              status: "success",
+              result: {
+                candidateName: result.candidateName,
+                matchedJob: result.matchedJob,
+                overallScore: result.overallScore,
+                applicationId: result.applicationId,
+              },
+            };
+            return updated;
+          });
+        } else {
+          throw new Error(result.error || "Processing failed");
+        }
+      } catch (error: any) {
+        setFiles((prev) => {
+          const updated = [...prev];
+          updated[i] = {
+            ...updated[i],
+            status: "error",
+            error: error?.message || "Unknown error",
+          };
+          return updated;
+        });
+      }
+    }
+
+    setIsProcessing(false);
+  };
+
+  // Remove a file from the list
+  const removeFile = (index: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // Clear all files
+  const clearAll = () => {
+    setFiles([]);
+  };
+
+  const pendingCount = files.filter((f) => f.status === "pending").length;
+  const successCount = files.filter((f) => f.status === "success").length;
+  const errorCount = files.filter((f) => f.status === "error").length;
+
+  return (
+    <ProtectedRoute>
+      <div className="min-h-screen bg-slate-950 text-white">
+        {/* Header */}
+        <div className="border-b border-slate-800 bg-slate-900/50">
+          <div className="max-w-6xl mx-auto px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => router.push("/applications")}
+                  className="text-slate-400 hover:text-white transition-colors"
+                >
+                  ← Back
+                </button>
+                <h1 className="text-xl font-semibold">Bulk Resume Upload</h1>
+              </div>
+              {files.length > 0 && (
+                <div className="flex items-center gap-3 text-sm">
+                  <span className="text-slate-400">
+                    {files.length} file{files.length !== 1 ? "s" : ""}
+                  </span>
+                  {successCount > 0 && (
+                    <span className="text-green-400">{successCount} processed</span>
+                  )}
+                  {errorCount > 0 && (
+                    <span className="text-red-400">{errorCount} failed</span>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="max-w-6xl mx-auto px-6 py-8">
+          {/* Instructions */}
+          <div className="mb-6 p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
+            <h2 className="font-medium text-cyan-400 mb-2">How it works:</h2>
+            <ol className="text-sm text-slate-300 space-y-1 list-decimal list-inside">
+              <li>Download resumes from Indeed as PDFs</li>
+              <li>Drag and drop all PDFs into the zone below</li>
+              <li>Click "Process All" - AI will extract contact info and match to jobs</li>
+              <li>Review results and view created applications</li>
+            </ol>
+          </div>
+
+          {/* Drop Zone */}
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={handleDrop}
+            className={`border-2 border-dashed rounded-xl p-12 text-center transition-all ${
+              isDragging
+                ? "border-cyan-500 bg-cyan-500/10"
+                : "border-slate-700 hover:border-slate-600 bg-slate-900/50"
+            }`}
+          >
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center">
+                <svg
+                  className="w-8 h-8 text-slate-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                  />
+                </svg>
+              </div>
+              <div>
+                <p className="text-lg font-medium text-white">
+                  Drop PDF resumes here
+                </p>
+                <p className="text-sm text-slate-400 mt-1">
+                  or click to browse
+                </p>
+              </div>
+              <input
+                type="file"
+                multiple
+                accept=".pdf"
+                onChange={handleFileSelect}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                style={{ position: "relative" }}
+              />
+              <label className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 rounded-lg cursor-pointer transition-colors">
+                <input
+                  type="file"
+                  multiple
+                  accept=".pdf"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+                Browse Files
+              </label>
+            </div>
+          </div>
+
+          {/* File List */}
+          {files.length > 0 && (
+            <div className="mt-8">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-medium">Files ({files.length})</h2>
+                <div className="flex gap-3">
+                  <button
+                    onClick={clearAll}
+                    disabled={isProcessing}
+                    className="px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors disabled:opacity-50"
+                  >
+                    Clear All
+                  </button>
+                  <button
+                    onClick={processAllFiles}
+                    disabled={isProcessing || pendingCount === 0}
+                    className="px-6 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:bg-slate-700 disabled:text-slate-500 rounded-lg font-medium transition-colors"
+                  >
+                    {isProcessing ? "Processing..." : `Process All (${pendingCount})`}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                {files.map((fileStatus, index) => (
+                  <div
+                    key={`${fileStatus.file.name}-${index}`}
+                    className={`p-4 rounded-lg border ${
+                      fileStatus.status === "success"
+                        ? "bg-green-900/20 border-green-800"
+                        : fileStatus.status === "error"
+                        ? "bg-red-900/20 border-red-800"
+                        : fileStatus.status === "extracting" || fileStatus.status === "processing"
+                        ? "bg-cyan-900/20 border-cyan-800"
+                        : "bg-slate-800/50 border-slate-700"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        {/* Status Icon */}
+                        <div className="w-8 h-8 flex items-center justify-center">
+                          {fileStatus.status === "pending" && (
+                            <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                          )}
+                          {(fileStatus.status === "extracting" || fileStatus.status === "processing") && (
+                            <div className="w-5 h-5 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
+                          )}
+                          {fileStatus.status === "success" && (
+                            <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                          {fileStatus.status === "error" && (
+                            <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          )}
+                        </div>
+
+                        <div>
+                          <p className="font-medium text-white">{fileStatus.file.name}</p>
+                          <p className="text-sm text-slate-400">
+                            {fileStatus.status === "pending" && "Ready to process"}
+                            {fileStatus.status === "extracting" && "Extracting text from PDF..."}
+                            {fileStatus.status === "processing" && "AI analyzing resume..."}
+                            {fileStatus.status === "success" && fileStatus.result && (
+                              <>
+                                <span className="text-green-400">{fileStatus.result.candidateName}</span>
+                                {" → "}
+                                <span className="text-cyan-400">{fileStatus.result.matchedJob}</span>
+                                {fileStatus.result.overallScore && (
+                                  <span className="ml-2 text-yellow-400">
+                                    Score: {fileStatus.result.overallScore}
+                                  </span>
+                                )}
+                              </>
+                            )}
+                            {fileStatus.status === "error" && (
+                              <span className="text-red-400">{fileStatus.error}</span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {fileStatus.status === "success" && fileStatus.result?.applicationId && (
+                          <button
+                            onClick={() => router.push(`/applications/${fileStatus.result?.applicationId}`)}
+                            className="px-3 py-1 text-sm bg-slate-700 hover:bg-slate-600 rounded transition-colors"
+                          >
+                            View
+                          </button>
+                        )}
+                        {(fileStatus.status === "pending" || fileStatus.status === "error") && (
+                          <button
+                            onClick={() => removeFile(index)}
+                            className="p-1 text-slate-400 hover:text-red-400 transition-colors"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Summary after processing */}
+          {!isProcessing && successCount > 0 && (
+            <div className="mt-8 p-6 bg-green-900/20 border border-green-800 rounded-lg">
+              <h3 className="text-lg font-medium text-green-400 mb-2">
+                Processing Complete
+              </h3>
+              <p className="text-slate-300">
+                Successfully created {successCount} application{successCount !== 1 ? "s" : ""}.
+                {errorCount > 0 && ` ${errorCount} file${errorCount !== 1 ? "s" : ""} failed.`}
+              </p>
+              <button
+                onClick={() => router.push("/applications")}
+                className="mt-4 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-medium transition-colors"
+              >
+                View All Applications
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </ProtectedRoute>
+  );
+}
