@@ -44,6 +44,7 @@ function MessagesContent() {
   const [newMessage, setNewMessage] = useState("");
   const [showNewConversation, setShowNewConversation] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [showMobileChat, setShowMobileChat] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const conversations = useQuery(
@@ -169,10 +170,10 @@ function MessagesContent() {
 
       <main className="flex-1 flex overflow-hidden">
         {/* Conversations List */}
-        <div className="w-80 border-r border-slate-700 flex flex-col">
+        <div className={`${showMobileChat ? "hidden md:flex" : "flex"} w-full md:w-80 border-r border-slate-700 flex-col`}>
           <div className="p-4 border-b border-slate-700">
             <div className="flex items-center justify-between mb-4">
-              <h1 className="text-xl font-bold text-white">Messages</h1>
+              <h1 className="text-lg sm:text-xl font-bold text-white">Messages</h1>
               <button
                 onClick={() => setShowNewConversation(true)}
                 className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
@@ -198,7 +199,10 @@ function MessagesContent() {
             {conversations?.map((conv) => (
               <button
                 key={conv._id}
-                onClick={() => setSelectedConversation(conv)}
+                onClick={() => {
+                  setSelectedConversation(conv);
+                  setShowMobileChat(true);
+                }}
                 className={`w-full p-4 flex items-start gap-3 hover:bg-slate-800/50 transition-colors border-b border-slate-700/50 ${
                   selectedConversation?._id === conv._id ? "bg-slate-800/50" : ""
                 }`}
@@ -259,16 +263,25 @@ function MessagesContent() {
         </div>
 
         {/* Chat Area */}
-        <div className="flex-1 flex flex-col">
+        <div className={`${showMobileChat ? "flex" : "hidden md:flex"} flex-1 flex-col`}>
           {selectedConversation ? (
             <>
               {/* Chat Header */}
-              <div className="p-4 border-b border-slate-700 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white font-medium">
+              <div className="p-3 sm:p-4 border-b border-slate-700 flex items-center gap-3">
+                {/* Back button for mobile */}
+                <button
+                  onClick={() => setShowMobileChat(false)}
+                  className="md:hidden p-2 -ml-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white font-medium flex-shrink-0">
                   {getConversationAvatar(selectedConversation)}
                 </div>
-                <div>
-                  <h2 className="text-white font-medium">
+                <div className="min-w-0 flex-1">
+                  <h2 className="text-white font-medium truncate">
                     {getConversationName(selectedConversation)}
                   </h2>
                   <p className="text-xs text-slate-400">
@@ -280,7 +293,7 @@ function MessagesContent() {
               </div>
 
               {/* Messages */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 sm:space-y-4">
                 {messages?.map((msg) => {
                   const isOwn = msg.senderId === user?._id;
                   return (
@@ -289,7 +302,7 @@ function MessagesContent() {
                       className={`flex ${isOwn ? "justify-end" : "justify-start"}`}
                     >
                       <div
-                        className={`max-w-[70%] ${
+                        className={`max-w-[85%] sm:max-w-[70%] ${
                           isOwn ? "order-2" : "order-1"
                         }`}
                       >
@@ -299,18 +312,18 @@ function MessagesContent() {
                           </p>
                         )}
                         <div
-                          className={`px-4 py-2 rounded-2xl ${
+                          className={`px-3 sm:px-4 py-2 rounded-2xl ${
                             isOwn
                               ? "bg-cyan-500 text-white"
                               : "bg-slate-800 text-white"
                           }`}
                         >
-                          <p className="text-sm whitespace-pre-wrap">
+                          <p className="text-sm whitespace-pre-wrap break-words">
                             {msg.content}
                           </p>
                         </div>
                         <p
-                          className={`text-xs text-slate-500 mt-1 ${
+                          className={`text-[10px] sm:text-xs text-slate-500 mt-1 ${
                             isOwn ? "text-right mr-1" : "ml-1"
                           }`}
                         >
@@ -324,19 +337,19 @@ function MessagesContent() {
               </div>
 
               {/* Message Input */}
-              <div className="p-4 border-t border-slate-700">
-                <form onSubmit={handleSendMessage} className="flex gap-3">
+              <div className="p-3 sm:p-4 border-t border-slate-700">
+                <form onSubmit={handleSendMessage} className="flex gap-2 sm:gap-3">
                   <input
                     type="text"
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
-                    placeholder="Type a message... (use @ to mention)"
-                    className="flex-1 px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                    placeholder="Type a message..."
+                    className="flex-1 px-3 sm:px-4 py-2.5 sm:py-3 bg-slate-800 border border-slate-700 rounded-xl text-white text-sm sm:text-base placeholder-slate-500 focus:outline-none focus:border-cyan-500"
                   />
                   <button
                     type="submit"
                     disabled={!newMessage.trim()}
-                    className="px-6 py-3 bg-cyan-500 text-white font-medium rounded-xl hover:bg-cyan-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-4 sm:px-6 py-2.5 sm:py-3 bg-cyan-500 text-white font-medium rounded-xl hover:bg-cyan-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
                   >
                     <svg
                       className="w-5 h-5"
@@ -387,10 +400,10 @@ function MessagesContent() {
 
       {/* New Conversation Modal */}
       {showNewConversation && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-slate-800 border border-slate-700 rounded-t-xl sm:rounded-xl p-4 sm:p-6 w-full max-w-md max-h-[80vh] sm:max-h-[70vh] flex flex-col">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-white">
+              <h2 className="text-lg sm:text-xl font-semibold text-white">
                 New Conversation
               </h2>
               <button
@@ -419,23 +432,23 @@ function MessagesContent() {
                 placeholder="Search users..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white text-sm sm:text-base placeholder-slate-500 focus:outline-none focus:border-cyan-500"
               />
             </div>
 
-            <div className="max-h-64 overflow-y-auto space-y-2">
+            <div className="flex-1 overflow-y-auto space-y-2 -mx-4 px-4 sm:mx-0 sm:px-0">
               {filteredUsers?.map((u) => (
                 <button
                   key={u._id}
                   onClick={() => handleStartConversation(u)}
                   className="w-full p-3 flex items-center gap-3 hover:bg-slate-700/50 rounded-lg transition-colors"
                 >
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white font-medium">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white font-medium flex-shrink-0">
                     {u.name.charAt(0).toUpperCase()}
                   </div>
-                  <div className="text-left">
-                    <p className="text-white font-medium">{u.name}</p>
-                    <p className="text-sm text-slate-400">{u.email}</p>
+                  <div className="text-left min-w-0">
+                    <p className="text-white font-medium truncate">{u.name}</p>
+                    <p className="text-sm text-slate-400 truncate">{u.email}</p>
                   </div>
                 </button>
               ))}

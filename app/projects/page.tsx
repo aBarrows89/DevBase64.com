@@ -152,16 +152,26 @@ function ProjectsContent() {
 
   // Task handlers
   const handleGenerateTasks = async () => {
-    if (!selectedProjectId || !projectWithTasks) return;
+    if (!selectedProjectId || !projectWithTasks) {
+      console.error("Missing projectId or projectWithTasks");
+      return;
+    }
     setIsGeneratingTasks(true);
     try {
-      await generateTasks({
+      const result = await generateTasks({
         projectId: selectedProjectId,
         projectName: projectWithTasks.name,
         projectDescription: projectWithTasks.description,
       });
+      if (!result.success) {
+        console.error("AI task generation failed:", result.error);
+        alert(`Failed to generate tasks: ${result.error || "Unknown error"}`);
+      } else {
+        console.log(`Generated ${result.tasks?.length || 0} tasks`);
+      }
     } catch (error) {
       console.error("Failed to generate tasks:", error);
+      alert(`Failed to generate tasks: ${error instanceof Error ? error.message : "Unknown error"}`);
     } finally {
       setIsGeneratingTasks(false);
     }
@@ -169,13 +179,21 @@ function ProjectsContent() {
 
   const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedProjectId || !newTaskTitle.trim()) return;
-    await createTask({
-      projectId: selectedProjectId,
-      title: newTaskTitle.trim(),
-    });
-    setNewTaskTitle("");
-    setShowAddTask(false);
+    if (!selectedProjectId || !newTaskTitle.trim()) {
+      console.log("Missing projectId or empty task title");
+      return;
+    }
+    try {
+      await createTask({
+        projectId: selectedProjectId,
+        title: newTaskTitle.trim(),
+      });
+      setNewTaskTitle("");
+      setShowAddTask(false);
+    } catch (error) {
+      console.error("Failed to add task:", error);
+      alert(`Failed to add task: ${error instanceof Error ? error.message : "Unknown error"}`);
+    }
   };
 
   const handleToggleTaskStatus = async (taskId: Id<"tasks">, currentStatus: string) => {

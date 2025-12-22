@@ -291,7 +291,7 @@ export const terminate = mutation({
   },
 });
 
-// Toggle training completion for a training area
+// Toggle training completion for a training area (with date tracking)
 export const toggleTraining = mutation({
   args: {
     personnelId: v.id("personnel"),
@@ -303,18 +303,28 @@ export const toggleTraining = mutation({
       throw new Error("Personnel not found");
     }
 
+    // Use the new trainingRecords field
+    const currentRecords = personnel.trainingRecords || [];
+    let newRecords: { area: string; completedAt: number }[];
+
+    // Also update legacy completedTraining field for backward compatibility
     const currentTraining = personnel.completedTraining || [];
     let newTraining: string[];
 
-    if (currentTraining.includes(args.trainingArea)) {
+    const existingRecord = currentRecords.find((r) => r.area === args.trainingArea);
+
+    if (existingRecord) {
       // Remove training
+      newRecords = currentRecords.filter((r) => r.area !== args.trainingArea);
       newTraining = currentTraining.filter((t) => t !== args.trainingArea);
     } else {
-      // Add training
+      // Add training with current timestamp
+      newRecords = [...currentRecords, { area: args.trainingArea, completedAt: Date.now() }];
       newTraining = [...currentTraining, args.trainingArea];
     }
 
     await ctx.db.patch(args.personnelId, {
+      trainingRecords: newRecords,
       completedTraining: newTraining,
       updatedAt: Date.now(),
     });

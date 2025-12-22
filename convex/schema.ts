@@ -305,7 +305,12 @@ export default defineSchema({
       relationship: v.string(),
     })),
     notes: v.optional(v.string()),
-    completedTraining: v.optional(v.array(v.string())), // Array of training area names
+    completedTraining: v.optional(v.array(v.string())), // Legacy: Array of training area names
+    trainingRecords: v.optional(v.array(v.object({
+      area: v.string(), // Training area name
+      completedAt: v.number(), // Timestamp when training was completed
+      certifiedBy: v.optional(v.id("users")), // Who certified the training
+    }))),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

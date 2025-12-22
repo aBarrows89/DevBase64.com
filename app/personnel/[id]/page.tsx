@@ -626,53 +626,112 @@ function PersonnelDetailContent() {
                 </div>
               </div>
 
-              {/* Training Section */}
+              {/* Training Badges Section - IE Tire Badges of Honor */}
               <div className={`rounded-xl p-6 ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
-                    Training Completed
-                  </h2>
-                  <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                    {personnel.completedTraining?.length || 0} of {TRAINING_AREAS.length} areas
-                  </p>
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isDark ? "bg-amber-500/20" : "bg-amber-100"}`}>
+                      <svg className="w-6 h-6 text-amber-500" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                        IE Tire Badges of Honor
+                      </h2>
+                      <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                        {personnel.trainingRecords?.length || personnel.completedTraining?.length || 0} of {TRAINING_AREAS.length} certifications earned
+                      </p>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                   {TRAINING_AREAS.map((area) => {
-                    const isCompleted = personnel.completedTraining?.includes(area);
+                    // Check both new trainingRecords and legacy completedTraining
+                    const trainingRecord = personnel.trainingRecords?.find((r) => r.area === area);
+                    const isCompleted = trainingRecord || personnel.completedTraining?.includes(area);
+                    const completedDate = trainingRecord?.completedAt
+                      ? new Date(trainingRecord.completedAt).toLocaleDateString()
+                      : null;
+
                     return (
                       <button
                         key={area}
                         onClick={async () => {
+                          if (!canManagePersonnel) return;
                           try {
                             await toggleTraining({ personnelId: personnel._id, trainingArea: area });
                           } catch (error) {
                             console.error("Failed to toggle training:", error);
                           }
                         }}
-                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+                        disabled={!canManagePersonnel}
+                        className={`relative p-4 rounded-xl text-center transition-all transform hover:scale-105 ${
+                          canManagePersonnel ? "cursor-pointer" : "cursor-default"
+                        } ${
                           isCompleted
                             ? isDark
-                              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30"
-                              : "bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100"
+                              ? "bg-gradient-to-br from-amber-500/20 to-orange-500/20 border-2 border-amber-500/50 shadow-lg shadow-amber-500/10"
+                              : "bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-amber-400 shadow-lg shadow-amber-200/50"
                             : isDark
-                              ? "bg-slate-700/50 text-slate-400 border border-slate-600 hover:bg-slate-700 hover:text-slate-300"
-                              : "bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200 hover:text-gray-700"
+                              ? "bg-slate-700/30 border border-slate-600/50 hover:border-slate-500 opacity-60"
+                              : "bg-gray-50 border border-gray-200 hover:border-gray-300 opacity-60"
                         }`}
                       >
-                        {isCompleted ? (
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        ) : (
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                          </svg>
+                        {/* Badge Icon */}
+                        <div className={`w-12 h-12 mx-auto mb-2 rounded-full flex items-center justify-center ${
+                          isCompleted
+                            ? "bg-gradient-to-br from-amber-400 to-orange-500 shadow-md"
+                            : isDark
+                              ? "bg-slate-600/50"
+                              : "bg-gray-200"
+                        }`}>
+                          {isCompleted ? (
+                            <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+                            </svg>
+                          ) : (
+                            <svg className={`w-6 h-6 ${isDark ? "text-slate-500" : "text-gray-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+                            </svg>
+                          )}
+                        </div>
+
+                        {/* Badge Title */}
+                        <p className={`text-xs font-semibold leading-tight ${
+                          isCompleted
+                            ? isDark ? "text-amber-300" : "text-amber-700"
+                            : isDark ? "text-slate-400" : "text-gray-500"
+                        }`}>
+                          {area}
+                        </p>
+
+                        {/* Completion Date */}
+                        {isCompleted && (
+                          <p className={`text-[10px] mt-1 ${isDark ? "text-amber-400/70" : "text-amber-600/70"}`}>
+                            {completedDate || "Earned"}
+                          </p>
                         )}
-                        {area}
+
+                        {/* Earned Ribbon */}
+                        {isCompleted && (
+                          <div className={`absolute -top-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center ${
+                            isDark ? "bg-emerald-500" : "bg-emerald-500"
+                          } shadow-md`}>
+                            <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
+                        )}
                       </button>
                     );
                   })}
                 </div>
+                {!canManagePersonnel && (
+                  <p className={`text-xs mt-4 text-center ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                    Only managers can award badges
+                  </p>
+                )}
               </div>
 
               {/* Linked Application Card */}
