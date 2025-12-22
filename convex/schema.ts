@@ -327,6 +327,13 @@ export default defineSchema({
     acknowledgedAt: v.optional(v.number()),
     // Write-ups expire/archive after 90 days from date - not counted for incentives
     isArchived: v.optional(v.boolean()), // Auto-set based on 90-day rule, but can be manually archived
+    // Document attachments
+    attachments: v.optional(v.array(v.object({
+      storageId: v.id("_storage"),
+      fileName: v.string(),
+      fileType: v.string(),
+      uploadedAt: v.number(),
+    }))),
     createdAt: v.number(),
   })
     .index("by_personnel", ["personnelId"])

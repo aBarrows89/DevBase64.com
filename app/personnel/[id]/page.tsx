@@ -54,6 +54,90 @@ const meritTypeColors: Record<string, string> = {
   bonus: "bg-amber-500/20 text-amber-400 border-amber-500/30",
 };
 
+// Attachment Item Component
+function AttachmentItem({
+  attachment,
+  writeUpId,
+  canDelete,
+  onDelete,
+  isDark,
+}: {
+  attachment: {
+    storageId: Id<"_storage">;
+    fileName: string;
+    fileType: string;
+    uploadedAt: number;
+  };
+  writeUpId: Id<"writeUps">;
+  canDelete: boolean;
+  onDelete: (writeUpId: Id<"writeUps">, storageId: Id<"_storage">) => void;
+  isDark: boolean;
+}) {
+  const attachmentUrl = useQuery(api.writeUps.getAttachmentUrl, {
+    storageId: attachment.storageId,
+  });
+
+  const getFileIcon = (fileType: string) => {
+    if (fileType.startsWith("image/")) {
+      return (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+      );
+    }
+    if (fileType === "application/pdf") {
+      return (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+        </svg>
+      );
+    }
+    return (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+    );
+  };
+
+  return (
+    <div
+      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
+        isDark
+          ? "bg-slate-700/50 border border-slate-600"
+          : "bg-gray-100 border border-gray-200"
+      }`}
+    >
+      <span className={isDark ? "text-slate-400" : "text-gray-500"}>
+        {getFileIcon(attachment.fileType)}
+      </span>
+      <a
+        href={attachmentUrl || "#"}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`hover:underline truncate max-w-[150px] ${
+          isDark ? "text-cyan-400" : "text-blue-600"
+        }`}
+        title={attachment.fileName}
+      >
+        {attachment.fileName}
+      </a>
+      {canDelete && (
+        <button
+          onClick={() => onDelete(writeUpId, attachment.storageId)}
+          className={`p-1 rounded hover:bg-red-500/20 transition-colors ${
+            isDark ? "text-slate-500 hover:text-red-400" : "text-gray-400 hover:text-red-600"
+          }`}
+          title="Delete attachment"
+        >
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      )}
+    </div>
+  );
+}
+
 function PersonnelDetailContent() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
@@ -74,6 +158,12 @@ function PersonnelDetailContent() {
   const attendance = useQuery(api.attendance.listByPersonnel, { personnelId });
   const merits = useQuery(api.merits.listByPersonnel, { personnelId });
 
+  // Get linked application if exists
+  const linkedApplication = useQuery(
+    api.applications.getById,
+    personnel?.applicationId ? { applicationId: personnel.applicationId } : "skip"
+  );
+
   // Mutations
   const createWriteUp = useMutation(api.writeUps.create);
   const createMerit = useMutation(api.merits.create);
@@ -81,6 +171,13 @@ function PersonnelDetailContent() {
   const updatePersonnel = useMutation(api.personnel.update);
   const deleteWriteUp = useMutation(api.writeUps.remove);
   const deleteAttendance = useMutation(api.attendance.remove);
+  const generateUploadUrl = useMutation(api.writeUps.generateUploadUrl);
+  const addAttachment = useMutation(api.writeUps.addAttachment);
+  const removeAttachment = useMutation(api.writeUps.removeAttachment);
+
+  // File upload state
+  const [uploadingWriteUpId, setUploadingWriteUpId] = useState<Id<"writeUps"> | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Form states
   const [writeUpForm, setWriteUpForm] = useState({
@@ -240,6 +337,58 @@ function PersonnelDetailContent() {
     }
   };
 
+  const handleFileUpload = async (writeUpId: Id<"writeUps">, files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    setIsUploading(true);
+    setUploadingWriteUpId(writeUpId);
+
+    try {
+      for (const file of Array.from(files)) {
+        // Get upload URL from Convex
+        const uploadUrl = await generateUploadUrl();
+
+        // Upload file to Convex storage
+        const response = await fetch(uploadUrl, {
+          method: "POST",
+          headers: { "Content-Type": file.type },
+          body: file,
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to upload file");
+        }
+
+        const { storageId } = await response.json();
+
+        // Add attachment to write-up
+        await addAttachment({
+          writeUpId,
+          storageId,
+          fileName: file.name,
+          fileType: file.type,
+        });
+      }
+    } catch (error) {
+      console.error("Error uploading file:", error);
+      alert("Failed to upload file. Please try again.");
+    } finally {
+      setIsUploading(false);
+      setUploadingWriteUpId(null);
+    }
+  };
+
+  const handleDeleteAttachment = async (writeUpId: Id<"writeUps">, storageId: Id<"_storage">) => {
+    if (confirm("Are you sure you want to delete this attachment?")) {
+      try {
+        await removeAttachment({ writeUpId, storageId });
+      } catch (error) {
+        console.error("Error deleting attachment:", error);
+        alert("Failed to delete attachment. Please try again.");
+      }
+    }
+  };
+
   return (
     <div className={`flex h-screen ${isDark ? "bg-slate-900" : "bg-[#f2f2f7]"}`}>
       <Sidebar />
@@ -389,6 +538,78 @@ function PersonnelDetailContent() {
                   )}
                 </div>
               </div>
+
+              {/* Linked Application Card */}
+              {personnel.applicationId && (
+                <div className={`rounded-xl p-6 ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                      Original Application
+                    </h2>
+                    <button
+                      onClick={() => router.push(`/applications/${personnel.applicationId}`)}
+                      className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+                        isDark
+                          ? "bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 border border-cyan-500/30"
+                          : "bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200"
+                      }`}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                      View Application
+                    </button>
+                  </div>
+                  {linkedApplication ? (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <p className={`text-xs font-medium ${isDark ? "text-slate-500" : "text-gray-500"}`}>Applied Position</p>
+                        <p className={`${isDark ? "text-white" : "text-gray-900"}`}>{linkedApplication.appliedJobTitle}</p>
+                      </div>
+                      <div>
+                        <p className={`text-xs font-medium ${isDark ? "text-slate-500" : "text-gray-500"}`}>Applied On</p>
+                        <p className={`${isDark ? "text-white" : "text-gray-900"}`}>
+                          {new Date(linkedApplication.createdAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div>
+                        <p className={`text-xs font-medium ${isDark ? "text-slate-500" : "text-gray-500"}`}>Application Status</p>
+                        <span className={`px-2 py-1 text-xs font-medium rounded border ${statusColors.active}`}>
+                          Hired
+                        </span>
+                      </div>
+                      {linkedApplication.aiAnalysis && (
+                        <div>
+                          <p className={`text-xs font-medium ${isDark ? "text-slate-500" : "text-gray-500"}`}>AI Match Score</p>
+                          <p className={`${isDark ? "text-white" : "text-gray-900"}`}>
+                            {linkedApplication.aiAnalysis.matchScore}%
+                          </p>
+                        </div>
+                      )}
+                      {linkedApplication.candidateAnalysis && (
+                        <>
+                          <div>
+                            <p className={`text-xs font-medium ${isDark ? "text-slate-500" : "text-gray-500"}`}>Overall Score</p>
+                            <p className={`${isDark ? "text-white" : "text-gray-900"}`}>
+                              {linkedApplication.candidateAnalysis.overallScore}/100
+                            </p>
+                          </div>
+                          <div>
+                            <p className={`text-xs font-medium ${isDark ? "text-slate-500" : "text-gray-500"}`}>Prior Experience</p>
+                            <p className={`${isDark ? "text-white" : "text-gray-900"}`}>
+                              {linkedApplication.candidateAnalysis.totalYearsExperience.toFixed(1)} years
+                            </p>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ) : (
+                    <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                      Loading application data...
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -477,6 +698,59 @@ function PersonnelDetailContent() {
                             </button>
                           )}
                         </div>
+                      </div>
+
+                      {/* Attachments Section */}
+                      <div className={`mt-4 pt-4 border-t ${isDark ? "border-slate-700" : "border-gray-200"}`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className={`text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                            Attachments
+                          </h4>
+                          {canManagePersonnel && (
+                            <label
+                              className={`px-3 py-1.5 text-xs font-medium rounded cursor-pointer transition-colors flex items-center gap-1 ${
+                                isUploading && uploadingWriteUpId === writeUp._id
+                                  ? isDark
+                                    ? "bg-slate-600 text-slate-400"
+                                    : "bg-gray-200 text-gray-400"
+                                  : isDark
+                                    ? "bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 border border-cyan-500/30"
+                                    : "bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200"
+                              }`}
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                              </svg>
+                              {isUploading && uploadingWriteUpId === writeUp._id ? "Uploading..." : "Add File"}
+                              <input
+                                type="file"
+                                className="hidden"
+                                multiple
+                                onChange={(e) => handleFileUpload(writeUp._id, e.target.files)}
+                                disabled={isUploading && uploadingWriteUpId === writeUp._id}
+                                accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.txt"
+                              />
+                            </label>
+                          )}
+                        </div>
+                        {writeUp.attachments && writeUp.attachments.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {writeUp.attachments.map((attachment) => (
+                              <AttachmentItem
+                                key={attachment.storageId}
+                                attachment={attachment}
+                                writeUpId={writeUp._id}
+                                canDelete={canDeleteRecords}
+                                onDelete={handleDeleteAttachment}
+                                isDark={isDark}
+                              />
+                            ))}
+                          </div>
+                        ) : (
+                          <p className={`text-xs ${isDark ? "text-slate-600" : "text-gray-400"}`}>
+                            No attachments
+                          </p>
+                        )}
                       </div>
                     </div>
                   ))}

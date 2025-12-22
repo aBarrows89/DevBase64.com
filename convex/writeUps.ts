@@ -231,3 +231,67 @@ export const remove = mutation({
     return args.writeUpId;
   },
 });
+
+// Generate upload URL for write-up attachments
+export const generateUploadUrl = mutation({
+  handler: async (ctx) => {
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+// Add attachment to a write-up
+export const addAttachment = mutation({
+  args: {
+    writeUpId: v.id("writeUps"),
+    storageId: v.id("_storage"),
+    fileName: v.string(),
+    fileType: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const writeUp = await ctx.db.get(args.writeUpId);
+    if (!writeUp) throw new Error("Write-up not found");
+
+    const newAttachment = {
+      storageId: args.storageId,
+      fileName: args.fileName,
+      fileType: args.fileType,
+      uploadedAt: Date.now(),
+    };
+
+    const attachments = writeUp.attachments || [];
+    attachments.push(newAttachment);
+
+    await ctx.db.patch(args.writeUpId, { attachments });
+    return args.writeUpId;
+  },
+});
+
+// Remove attachment from a write-up
+export const removeAttachment = mutation({
+  args: {
+    writeUpId: v.id("writeUps"),
+    storageId: v.id("_storage"),
+  },
+  handler: async (ctx, args) => {
+    const writeUp = await ctx.db.get(args.writeUpId);
+    if (!writeUp) throw new Error("Write-up not found");
+
+    const attachments = (writeUp.attachments || []).filter(
+      (a) => a.storageId !== args.storageId
+    );
+
+    // Delete the file from storage
+    await ctx.storage.delete(args.storageId);
+
+    await ctx.db.patch(args.writeUpId, { attachments });
+    return args.writeUpId;
+  },
+});
+
+// Get attachment URL
+export const getAttachmentUrl = query({
+  args: { storageId: v.id("_storage") },
+  handler: async (ctx, args) => {
+    return await ctx.storage.getUrl(args.storageId);
+  },
+});
