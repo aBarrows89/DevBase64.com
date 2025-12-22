@@ -333,6 +333,76 @@ export const toggleTraining = mutation({
   },
 });
 
+// Record a tenure milestone check-in
+export const recordTenureCheckIn = mutation({
+  args: {
+    personnelId: v.id("personnel"),
+    milestone: v.string(), // "1_day" | "3_day" | "7_day" | "30_day" | "60_day"
+    completedBy: v.id("users"),
+    completedByName: v.string(),
+    notes: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const personnel = await ctx.db.get(args.personnelId);
+    if (!personnel) {
+      throw new Error("Personnel not found");
+    }
+
+    const validMilestones = ["1_day", "3_day", "7_day", "30_day", "60_day"];
+    if (!validMilestones.includes(args.milestone)) {
+      throw new Error("Invalid milestone. Must be one of: 1_day, 3_day, 7_day, 30_day, 60_day");
+    }
+
+    const currentCheckIns = personnel.tenureCheckIns || [];
+
+    // Check if this milestone is already recorded
+    const existingCheckIn = currentCheckIns.find((c) => c.milestone === args.milestone);
+    if (existingCheckIn) {
+      throw new Error(`${args.milestone} check-in has already been recorded`);
+    }
+
+    // Add the new check-in
+    const newCheckIn = {
+      milestone: args.milestone,
+      completedAt: Date.now(),
+      completedBy: args.completedBy,
+      completedByName: args.completedByName,
+      notes: args.notes,
+    };
+
+    await ctx.db.patch(args.personnelId, {
+      tenureCheckIns: [...currentCheckIns, newCheckIn],
+      updatedAt: Date.now(),
+    });
+
+    return args.personnelId;
+  },
+});
+
+// Remove a tenure milestone check-in (in case of error)
+export const removeTenureCheckIn = mutation({
+  args: {
+    personnelId: v.id("personnel"),
+    milestone: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const personnel = await ctx.db.get(args.personnelId);
+    if (!personnel) {
+      throw new Error("Personnel not found");
+    }
+
+    const currentCheckIns = personnel.tenureCheckIns || [];
+    const newCheckIns = currentCheckIns.filter((c) => c.milestone !== args.milestone);
+
+    await ctx.db.patch(args.personnelId, {
+      tenureCheckIns: newCheckIns,
+      updatedAt: Date.now(),
+    });
+
+    return args.personnelId;
+  },
+});
+
 // Delete personnel (hard delete - use with caution)
 export const remove = mutation({
   args: { personnelId: v.id("personnel") },
