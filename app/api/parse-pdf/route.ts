@@ -1,56 +1,39 @@
-import { NextRequest, NextResponse } from "next/server";
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdf = require("pdf-parse");
-
-export const runtime = "nodejs";
+import { NextRequest, NextResponse } from 'next/server';
+import { extractText } from 'unpdf';
 
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
-    const file = formData.get("file") as File | null;
+    const file = formData.get('file') as File;
 
     if (!file) {
-      return NextResponse.json(
-        { error: "No file provided" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
-    // Validate file type
-    if (!file.type.includes("pdf") && !file.name.toLowerCase().endsWith(".pdf")) {
-      return NextResponse.json(
-        { error: "File must be a PDF" },
-        { status: 400 }
-      );
+    const arrayBuffer = await file.arrayBuffer();
+    const result = await extractText(arrayBuffer);
+
+    // Handle different return formats from unpdf
+    let text: string;
+    if (typeof result === 'string') {
+      text = result;
+    } else if (result && typeof result.text === 'string') {
+      text = result.text;
+    } else if (result && Array.isArray(result.text)) {
+      text = result.text.join('\n');
+    } else if (result && result.totalPages) {
+      // If it returns page data, extract text from each page
+      text = JSON.stringify(result);
+    } else {
+      text = String(result || '');
     }
 
-    // Convert file to buffer
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-
-    // Parse PDF
-    const data = await pdf(buffer);
-
-    // Clean up the text
-    const cleanedText = data.text
-      .replace(/\r\n/g, "\n")
-      .replace(/\n{3,}/g, "\n\n")
-      .trim();
-
-    return NextResponse.json({
-      success: true,
-      text: cleanedText,
-      pages: data.numpages,
-      info: {
-        title: data.info?.Title || null,
-        author: data.info?.Author || null,
-        creator: data.info?.Creator || null,
-      },
-    });
-  } catch (error) {
-    console.error("PDF parsing error:", error);
+    console.log('PDF parsed, text length:', text.length);
+    return NextResponse.json({ text });
+  } catch (error: any) {
+    console.error('PDF parsing error:', error);
     return NextResponse.json(
-      { error: "Failed to parse PDF" },
+      { error: error.message || 'Failed to parse PDF' },
       { status: 500 }
     );
   }

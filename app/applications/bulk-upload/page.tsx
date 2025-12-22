@@ -2,20 +2,15 @@
 
 import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { useMutation, useAction } from "convex/react";
+import { useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import ProtectedRoute from "@/app/protected";
-import * as pdfjsLib from "pdfjs-dist";
-
-// Set up PDF.js worker
-if (typeof window !== "undefined") {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-}
 
 interface FileStatus {
   file: File;
-  status: "pending" | "extracting" | "processing" | "success" | "error";
+  status: "pending" | "extracting" | "processing" | "success" | "error" | "needs_text";
   error?: string;
+  manualText?: string;
   result?: {
     candidateName?: string;
     matchedJob?: string;
@@ -32,22 +27,30 @@ export default function BulkUploadPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Extract text from PDF
+  // Extract text from PDF using server-side API (more reliable than client-side pdfjs)
   const extractTextFromPdf = async (file: File): Promise<string> => {
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const formData = new FormData();
+    formData.append('file', file);
 
-    let fullText = "";
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const textContent = await page.getTextContent();
-      const pageText = textContent.items
-        .map((item: any) => item.str)
-        .join(" ");
-      fullText += pageText + "\n";
+    const response = await fetch('/api/parse-pdf', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to parse PDF');
     }
 
-    return fullText;
+    const data = await response.json();
+    const rawText = data.text || '';
+    const result = typeof rawText === 'string' ? rawText.trim() : String(rawText);
+
+    if (result.length < 50) {
+      throw new Error("Could not extract text from PDF. The PDF may be image-based or protected.");
+    }
+
+    return result;
   };
 
   // Handle file drop
@@ -112,11 +115,11 @@ export default function BulkUploadPage() {
     });
 
     try {
-      // Extract text from PDF with 30 second timeout
+      // Extract text from PDF with 60 second timeout (Indeed PDFs can be large)
       const resumeText = await withTimeout(
         extractTextFromPdf(file),
-        30000,
-        "PDF extraction timed out - file may be too large or corrupted"
+        60000,
+        "PDF extraction timed out - file may be too large or password-protected"
       );
 
       if (!resumeText || resumeText.trim().length < 50) {
