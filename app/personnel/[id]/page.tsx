@@ -205,6 +205,9 @@ function PersonnelDetailContent() {
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
   const [showEditPersonnelModal, setShowEditPersonnelModal] = useState(false);
   const [showTerminateModal, setShowTerminateModal] = useState(false);
+  const [showCheckInModal, setShowCheckInModal] = useState(false);
+  const [selectedMilestone, setSelectedMilestone] = useState<string | null>(null);
+  const [checkInNotes, setCheckInNotes] = useState("");
 
   // Queries
   const personnel = useQuery(api.personnel.getWithStats, { personnelId });
@@ -230,6 +233,8 @@ function PersonnelDetailContent() {
   const removeAttachment = useMutation(api.writeUps.removeAttachment);
   const terminatePersonnel = useMutation(api.personnel.terminate);
   const toggleTraining = useMutation(api.personnel.toggleTraining);
+  const recordTenureCheckIn = useMutation(api.personnel.recordTenureCheckIn);
+  const dismissTenureNotifications = useMutation(api.notifications.dismissTenureCheckInNotifications);
 
   // File upload state
   const [uploadingWriteUpId, setUploadingWriteUpId] = useState<Id<"writeUps"> | null>(null);
@@ -469,6 +474,30 @@ function PersonnelDetailContent() {
     } catch (error) {
       console.error("Error terminating personnel:", error);
       alert("Failed to terminate personnel. Please try again.");
+    }
+  };
+
+  const handleRecordCheckIn = async () => {
+    if (!user || !selectedMilestone) return;
+    try {
+      await recordTenureCheckIn({
+        personnelId,
+        milestone: selectedMilestone,
+        completedBy: user._id as Id<"users">,
+        completedByName: user.name || user.email,
+        notes: checkInNotes || undefined,
+      });
+      // Dismiss any notifications for this check-in
+      await dismissTenureNotifications({
+        personnelId,
+        milestone: selectedMilestone,
+      });
+      setShowCheckInModal(false);
+      setSelectedMilestone(null);
+      setCheckInNotes("");
+    } catch (error) {
+      console.error("Error recording check-in:", error);
+      alert("Failed to record check-in. Please try again.");
     }
   };
 
@@ -955,6 +984,144 @@ function PersonnelDetailContent() {
                   </div>
                 )}
               </div>
+
+              {/* Tenure Check-Ins Section (only for active employees) */}
+              {personnel.status !== "terminated" && tenure && (
+                <div className={`rounded-xl p-6 ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isDark ? "bg-blue-500/20" : "bg-blue-100"}`}>
+                        <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                          Tenure Check-Ins
+                        </h2>
+                        <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                          {personnel.tenureCheckIns?.length || 0} of 5 milestones completed
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Check-in Milestones */}
+                  <div className="space-y-3">
+                    {[
+                      { key: "1_day", label: "1 Day", dayThreshold: 1 },
+                      { key: "3_day", label: "3 Day", dayThreshold: 3 },
+                      { key: "7_day", label: "7 Day (1 Week)", dayThreshold: 7 },
+                      { key: "30_day", label: "30 Day (1 Month)", dayThreshold: 30 },
+                      { key: "60_day", label: "60 Day (2 Months)", dayThreshold: 60 },
+                    ].map((milestone) => {
+                      const checkIn = personnel.tenureCheckIns?.find((c) => c.milestone === milestone.key);
+                      const isEligible = tenure.totalDays >= milestone.dayThreshold;
+                      const isPastDue = isEligible && !checkIn;
+
+                      return (
+                        <div
+                          key={milestone.key}
+                          className={`flex items-center justify-between p-4 rounded-lg transition-all ${
+                            checkIn
+                              ? isDark
+                                ? "bg-green-500/10 border border-green-500/30"
+                                : "bg-green-50 border border-green-200"
+                              : isPastDue
+                                ? isDark
+                                  ? "bg-amber-500/10 border border-amber-500/30"
+                                  : "bg-amber-50 border border-amber-200"
+                                : isDark
+                                  ? "bg-slate-700/30 border border-slate-600/50"
+                                  : "bg-gray-50 border border-gray-200"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            {/* Checkbox / Status Icon */}
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                              checkIn
+                                ? "bg-green-500"
+                                : isPastDue
+                                  ? isDark ? "bg-amber-500/20" : "bg-amber-100"
+                                  : isDark ? "bg-slate-600/50" : "bg-gray-200"
+                            }`}>
+                              {checkIn ? (
+                                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                </svg>
+                              ) : isPastDue ? (
+                                <svg className={`w-5 h-5 ${isDark ? "text-amber-400" : "text-amber-600"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                              ) : (
+                                <span className={`text-xs font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                                  {milestone.dayThreshold - tenure.totalDays}d
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Milestone Info */}
+                            <div>
+                              <p className={`font-medium ${
+                                checkIn
+                                  ? isDark ? "text-green-400" : "text-green-700"
+                                  : isPastDue
+                                    ? isDark ? "text-amber-400" : "text-amber-700"
+                                    : isDark ? "text-slate-300" : "text-gray-700"
+                              }`}>
+                                {milestone.label} Check-In
+                              </p>
+                              {checkIn ? (
+                                <div className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                                  Completed by {checkIn.completedByName} on {new Date(checkIn.completedAt).toLocaleDateString()}
+                                  {checkIn.notes && (
+                                    <span className="block mt-1 italic">&quot;{checkIn.notes}&quot;</span>
+                                  )}
+                                </div>
+                              ) : isPastDue ? (
+                                <p className={`text-xs ${isDark ? "text-amber-400/70" : "text-amber-600"}`}>
+                                  Overdue - was due on day {milestone.dayThreshold}
+                                </p>
+                              ) : (
+                                <p className={`text-xs ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                                  Due in {milestone.dayThreshold - tenure.totalDays} days
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Action Button */}
+                          {!checkIn && canManagePersonnel && (
+                            <button
+                              onClick={() => {
+                                setSelectedMilestone(milestone.key);
+                                setShowCheckInModal(true);
+                              }}
+                              className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${
+                                isPastDue
+                                  ? isDark
+                                    ? "bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border border-amber-500/30"
+                                    : "bg-amber-100 hover:bg-amber-200 text-amber-700 border border-amber-300"
+                                  : isDark
+                                    ? "bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-500/30"
+                                    : "bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200"
+                              }`}
+                            >
+                              {isPastDue ? "Complete Now" : "Mark Complete"}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {!canManagePersonnel && (
+                    <p className={`text-xs mt-4 text-center ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                      Only managers can record check-ins
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -1645,6 +1812,68 @@ function PersonnelDetailContent() {
                   className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-red-500 hover:bg-red-400 text-white" : "bg-red-600 hover:bg-red-700 text-white"}`}
                 >
                   Confirm Termination
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tenure Check-In Modal */}
+        {showCheckInModal && selectedMilestone && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className={`w-full max-w-md rounded-xl p-6 ${isDark ? "bg-slate-800" : "bg-white"}`}>
+              <div className="flex items-center gap-3 mb-4">
+                <div className={`p-2 rounded-full ${isDark ? "bg-blue-500/20" : "bg-blue-100"}`}>
+                  <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                  </svg>
+                </div>
+                <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  Record Check-In
+                </h2>
+              </div>
+              <p className={`text-sm mb-4 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                Recording {selectedMilestone.replace("_", " ")} tenure check-in for {personnel?.firstName} {personnel?.lastName}.
+                This will be logged with your name and the current date/time.
+              </p>
+              <div className="space-y-4">
+                <div className={`p-3 rounded-lg ${isDark ? "bg-slate-700/50" : "bg-gray-50"}`}>
+                  <p className={`text-xs font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    Completed By
+                  </p>
+                  <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                    {user?.name || user?.email}
+                  </p>
+                </div>
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    Notes (Optional)
+                  </label>
+                  <textarea
+                    value={checkInNotes}
+                    onChange={(e) => setCheckInNotes(e.target.value)}
+                    placeholder="Any observations from the check-in conversation..."
+                    rows={3}
+                    className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white placeholder-slate-500" : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400"} border focus:outline-none`}
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => {
+                    setShowCheckInModal(false);
+                    setSelectedMilestone(null);
+                    setCheckInNotes("");
+                  }}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-slate-700 hover:bg-slate-600 text-white" : "bg-gray-100 hover:bg-gray-200 text-gray-900"}`}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleRecordCheckIn}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-blue-500 hover:bg-blue-400 text-white" : "bg-blue-600 hover:bg-blue-700 text-white"}`}
+                >
+                  Record Check-In
                 </button>
               </div>
             </div>

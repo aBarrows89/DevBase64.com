@@ -434,6 +434,23 @@ export default defineSchema({
     .index("by_personnel", ["personnelId"])
     .index("by_date", ["reviewDate"]),
 
+  // ============ NOTIFICATIONS ============
+  notifications: defineTable({
+    userId: v.id("users"), // Who should receive the notification
+    type: v.string(), // "tenure_check_in" | "write_up_follow_up" | "review_due" | etc.
+    title: v.string(),
+    message: v.string(),
+    link: v.optional(v.string()), // URL to navigate to when clicked
+    relatedPersonnelId: v.optional(v.id("personnel")),
+    relatedId: v.optional(v.string()), // Generic related ID (write-up, review, etc.)
+    isRead: v.boolean(),
+    isDismissed: v.boolean(),
+    createdAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_unread", ["userId", "isRead"])
+    .index("by_type", ["type"]),
+
   // ============ PROJECT SUGGESTIONS ============
   projectSuggestions: defineTable({
     suggestedBy: v.id("users"),

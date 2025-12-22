@@ -20,6 +20,7 @@ import type * as dealerInquiries from "../dealerInquiries.js";
 import type * as jobs from "../jobs.js";
 import type * as merits from "../merits.js";
 import type * as messages from "../messages.js";
+import type * as notifications from "../notifications.js";
 import type * as personnel from "../personnel.js";
 import type * as projectSuggestions from "../projectSuggestions.js";
 import type * as projects from "../projects.js";
@@ -47,6 +48,7 @@ declare const fullApi: ApiFromModules<{
   jobs: typeof jobs;
   merits: typeof merits;
   messages: typeof messages;
+  notifications: typeof notifications;
   personnel: typeof personnel;
   projectSuggestions: typeof projectSuggestions;
   projects: typeof projects;
