@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import Protected from "../protected";
-import Sidebar from "@/components/Sidebar";
+import Sidebar, { MobileHeader } from "@/components/Sidebar";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
@@ -338,21 +338,22 @@ function ShiftsContent() {
       <Sidebar />
 
       <main className="flex-1 overflow-hidden flex flex-col">
+        <MobileHeader />
         {/* Header */}
-        <header className={`flex-shrink-0 border-b px-8 py-4 ${isDark ? "bg-slate-900 border-slate-700" : "bg-white border-gray-200"}`}>
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className={`text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
+        <header className={`flex-shrink-0 border-b px-4 sm:px-8 py-3 sm:py-4 ${isDark ? "bg-slate-900 border-slate-700" : "bg-white border-gray-200"}`}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h1 className={`text-xl sm:text-2xl font-bold truncate ${isDark ? "text-white" : "text-gray-900"}`}>
                 Shift Planning
               </h1>
-              <p className={`text-sm mt-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+              <p className={`text-xs sm:text-sm mt-1 hidden sm:block ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                 Drag staff between departments
               </p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
               <button
                 onClick={handlePrint}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+                className={`p-2 sm:px-4 sm:py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
                   isDark
                     ? "bg-slate-700 hover:bg-slate-600 text-white"
                     : "bg-gray-100 hover:bg-gray-200 text-gray-900"
@@ -361,13 +362,13 @@ function ShiftsContent() {
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                 </svg>
-                Print
+                <span className="hidden sm:inline">Print</span>
               </button>
               {canEditShifts && (
                 <>
                   <button
                     onClick={handleCopyFromYesterday}
-                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                    className={`hidden sm:block px-4 py-2 rounded-lg font-medium transition-colors ${
                       isDark
                         ? "bg-slate-700 hover:bg-slate-600 text-white"
                         : "bg-gray-100 hover:bg-gray-200 text-gray-900"
@@ -377,13 +378,14 @@ function ShiftsContent() {
                   </button>
                   <button
                     onClick={() => setShowCreateModal(true)}
-                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                    className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors text-sm sm:text-base ${
                       isDark
                         ? "bg-cyan-500 hover:bg-cyan-400 text-white"
                         : "bg-blue-600 hover:bg-blue-700 text-white"
                     }`}
                   >
-                    + Add Department
+                    <span className="hidden sm:inline">+ Add Department</span>
+                    <span className="sm:hidden">+ Add</span>
                   </button>
                 </>
               )}
@@ -391,70 +393,86 @@ function ShiftsContent() {
           </div>
 
           {/* Date Navigation */}
-          <div className="flex items-center gap-4 mt-4">
-            <button
-              onClick={goToPreviousDay}
-              className={`p-2 rounded-lg transition-colors ${
-                isDark ? "hover:bg-slate-700 text-slate-400" : "hover:bg-gray-100 text-gray-500"
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-            <button
-              onClick={goToToday}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                isToday
-                  ? isDark
-                    ? "bg-cyan-500 text-white"
-                    : "bg-blue-600 text-white"
-                  : isDark
-                    ? "bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30"
-                    : "bg-blue-50 text-blue-600 hover:bg-blue-100"
-              }`}
-            >
-              Today
-            </button>
-            <button
-              onClick={goToNextDay}
-              className={`p-2 rounded-lg transition-colors ${
-                isDark ? "hover:bg-slate-700 text-slate-400" : "hover:bg-gray-100 text-gray-500"
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-4 mt-3 sm:mt-4">
+            <div className="flex items-center gap-1 sm:gap-2">
+              <button
+                onClick={goToPreviousDay}
+                className={`p-2 rounded-lg transition-colors ${
+                  isDark ? "hover:bg-slate-700 text-slate-400" : "hover:bg-gray-100 text-gray-500"
+                }`}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <button
+                onClick={goToToday}
+                className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg font-medium transition-colors text-sm sm:text-base ${
+                  isToday
+                    ? isDark
+                      ? "bg-cyan-500 text-white"
+                      : "bg-blue-600 text-white"
+                    : isDark
+                      ? "bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30"
+                      : "bg-blue-50 text-blue-600 hover:bg-blue-100"
+                }`}
+              >
+                Today
+              </button>
+              <button
+                onClick={goToNextDay}
+                className={`p-2 rounded-lg transition-colors ${
+                  isDark ? "hover:bg-slate-700 text-slate-400" : "hover:bg-gray-100 text-gray-500"
+                }`}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
 
             <input
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className={`px-4 py-2 rounded-lg focus:outline-none ${
+              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg focus:outline-none text-sm sm:text-base ${
                 isDark
                   ? "bg-slate-800 border border-slate-700 text-white"
                   : "bg-white border border-gray-200 text-gray-900"
               }`}
             />
 
-            <span className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+            <span className={`text-sm sm:text-lg font-semibold hidden sm:inline ${isDark ? "text-white" : "text-gray-900"}`}>
               {formatDisplayDate(currentDate)}
             </span>
 
             {isToday && (
-              <span className={`px-2 py-1 text-xs rounded-full ${isDark ? "bg-cyan-500/20 text-cyan-400" : "bg-blue-100 text-blue-600"}`}>
+              <span className={`hidden sm:inline px-2 py-1 text-xs rounded-full ${isDark ? "bg-cyan-500/20 text-cyan-400" : "bg-blue-100 text-blue-600"}`}>
                 Today
               </span>
             )}
           </div>
+
+          {/* Mobile: Copy Yesterday button */}
+          {canEditShifts && (
+            <button
+              onClick={handleCopyFromYesterday}
+              className={`sm:hidden mt-3 w-full px-4 py-2 rounded-lg font-medium transition-colors text-sm ${
+                isDark
+                  ? "bg-slate-700 hover:bg-slate-600 text-white"
+                  : "bg-gray-100 hover:bg-gray-200 text-gray-900"
+              }`}
+            >
+              Copy Yesterday
+            </button>
+          )}
         </header>
 
         {/* Main Content */}
-        <div className="flex-1 overflow-auto p-6">
-          <div className="flex gap-6 h-full">
+        <div className="flex-1 overflow-auto p-3 sm:p-6">
+          <div className="flex flex-col lg:flex-row gap-4 sm:gap-6 h-full">
             {/* Department Columns */}
-            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 auto-rows-min">
+            <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3 sm:gap-4 auto-rows-min">
               {shifts.map((shift) => (
                 <div
                   key={shift._id}
@@ -649,42 +667,45 @@ function ShiftsContent() {
               )}
             </div>
 
-            {/* Unassigned Personnel Panel */}
-            <div className={`w-64 flex-shrink-0 rounded-xl border ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
-              <div className={`p-4 border-b ${isDark ? "border-slate-700" : "border-gray-200"}`}>
-                <h3 className={`font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+            {/* Unassigned Personnel Panel - Horizontal scroll on mobile, sidebar on desktop */}
+            <div className={`lg:w-64 flex-shrink-0 rounded-xl border order-first lg:order-last ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
+              <div className={`p-3 sm:p-4 border-b ${isDark ? "border-slate-700" : "border-gray-200"}`}>
+                <h3 className={`font-semibold text-sm sm:text-base ${isDark ? "text-white" : "text-gray-900"}`}>
                   Unassigned Staff
                 </h3>
                 <p className={`text-xs mt-1 ${isDark ? "text-slate-500" : "text-gray-500"}`}>
                   {unassignedPersonnel.length} available
                 </p>
               </div>
-              <div className="p-3 space-y-2 max-h-[calc(100vh-300px)] overflow-y-auto">
-                {unassignedPersonnel.map((person) => (
-                  <div
-                    key={person._id}
-                    draggable={canEditShifts}
-                    onDragStart={(e) => handleDragStart(e, person._id, `${person.firstName} ${person.lastName}`, "unassigned")}
-                    onDragEnd={handleDragEnd}
-                    className={`p-3 rounded-lg cursor-move transition-colors ${
-                      isDark
-                        ? "bg-slate-700/50 hover:bg-slate-700"
-                        : "bg-gray-50 hover:bg-gray-100"
-                    }`}
-                  >
-                    <div className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
-                      {person.firstName} {person.lastName}
+              {/* Horizontal scroll on mobile, vertical on desktop */}
+              <div className="p-2 sm:p-3 lg:space-y-2 lg:max-h-[calc(100vh-300px)] overflow-x-auto lg:overflow-x-visible lg:overflow-y-auto">
+                <div className="flex lg:flex-col gap-2 lg:gap-2">
+                  {unassignedPersonnel.map((person) => (
+                    <div
+                      key={person._id}
+                      draggable={canEditShifts}
+                      onDragStart={(e) => handleDragStart(e, person._id, `${person.firstName} ${person.lastName}`, "unassigned")}
+                      onDragEnd={handleDragEnd}
+                      className={`p-2 sm:p-3 rounded-lg cursor-move transition-colors flex-shrink-0 min-w-[120px] lg:min-w-0 ${
+                        isDark
+                          ? "bg-slate-700/50 hover:bg-slate-700"
+                          : "bg-gray-50 hover:bg-gray-100"
+                      }`}
+                    >
+                      <div className={`font-medium text-sm sm:text-base whitespace-nowrap lg:whitespace-normal ${isDark ? "text-white" : "text-gray-900"}`}>
+                        {person.firstName} {person.lastName}
+                      </div>
+                      <div className={`text-xs ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                        {person.department}
+                      </div>
                     </div>
-                    <div className={`text-xs ${isDark ? "text-slate-500" : "text-gray-500"}`}>
-                      {person.department}
+                  ))}
+                  {unassignedPersonnel.length === 0 && (
+                    <div className={`text-center py-4 lg:py-8 w-full ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                      <p className="text-sm">All staff assigned</p>
                     </div>
-                  </div>
-                ))}
-                {unassignedPersonnel.length === 0 && (
-                  <div className={`text-center py-8 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
-                    <p className="text-sm">All staff assigned</p>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -692,13 +713,16 @@ function ShiftsContent() {
 
         {/* Create Department Modal */}
         {showCreateModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-            <div className={`w-full max-w-md rounded-xl p-6 ${isDark ? "bg-slate-800 border border-slate-700" : "bg-white border border-gray-200 shadow-xl"}`}>
-              <h2 className={`text-lg font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
-                Add Department for {formatDisplayDate(currentDate)}
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className={`w-full max-w-md rounded-xl p-4 sm:p-6 ${isDark ? "bg-slate-800 border border-slate-700" : "bg-white border border-gray-200 shadow-xl"}`}>
+              <h2 className={`text-base sm:text-lg font-semibold mb-3 sm:mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
+                Add Department
               </h2>
+              <p className={`text-xs sm:text-sm mb-3 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                For {formatDisplayDate(currentDate)}
+              </p>
               <div>
-                <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                <label className={`block text-xs sm:text-sm font-medium mb-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                   Department Name
                 </label>
                 <input
@@ -708,25 +732,25 @@ function ShiftsContent() {
                   placeholder="e.g., Warehouse, Shipping, Office"
                   autoFocus
                   onKeyDown={(e) => e.key === "Enter" && handleCreateDepartment()}
-                  className={`w-full px-4 py-3 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white placeholder-slate-500" : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400"} border focus:outline-none focus:ring-2 focus:ring-cyan-500`}
+                  className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg text-sm sm:text-base ${isDark ? "bg-slate-700 border-slate-600 text-white placeholder-slate-500" : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400"} border focus:outline-none focus:ring-2 focus:ring-cyan-500`}
                 />
               </div>
-              <div className="flex gap-3 mt-6">
+              <div className="flex gap-2 sm:gap-3 mt-4 sm:mt-6">
                 <button
                   onClick={() => {
                     setShowCreateModal(false);
                     setNewDepartmentName("");
                   }}
-                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-slate-700 hover:bg-slate-600 text-white" : "bg-gray-100 hover:bg-gray-200 text-gray-900"}`}
+                  className={`flex-1 px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors text-sm sm:text-base ${isDark ? "bg-slate-700 hover:bg-slate-600 text-white" : "bg-gray-100 hover:bg-gray-200 text-gray-900"}`}
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleCreateDepartment}
                   disabled={!newDepartmentName.trim()}
-                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${isDark ? "bg-cyan-500 hover:bg-cyan-400 text-white" : "bg-blue-600 hover:bg-blue-700 text-white"}`}
+                  className={`flex-1 px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 text-sm sm:text-base ${isDark ? "bg-cyan-500 hover:bg-cyan-400 text-white" : "bg-blue-600 hover:bg-blue-700 text-white"}`}
                 >
-                  Add Department
+                  Add
                 </button>
               </div>
             </div>

@@ -5,7 +5,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import Protected from "../protected";
-import Sidebar from "@/components/Sidebar";
+import Sidebar, { MobileHeader } from "@/components/Sidebar";
 import { useTheme } from "../theme-context";
 
 const STATUS_OPTIONS = [
@@ -247,206 +247,296 @@ export default function JobsPage() {
     <Protected>
       <div className={`min-h-screen flex ${isDark ? "bg-slate-900 text-white" : "bg-[#f2f2f7] text-gray-900"}`}>
         <Sidebar />
-        <main className="flex-1 p-8 overflow-auto">
+        <main className="flex-1 overflow-auto">
+          <MobileHeader />
           {/* Header */}
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h1 className="text-2xl font-bold">Job Listings</h1>
-              <p className={`mt-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>Manage positions for IE Tire careers page</p>
-            </div>
-            <button
-              onClick={openAddModal}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${isDark ? "bg-cyan-500 hover:bg-cyan-600" : "bg-blue-600 hover:bg-blue-700 text-white"}`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Add Job
-            </button>
-          </div>
-
-          {/* Filters */}
-          <div className="flex gap-4 mb-6">
-            <select
-              value={filterDepartment}
-              onChange={(e) => setFilterDepartment(e.target.value)}
-              className={`px-4 py-2 rounded-lg focus:outline-none ${isDark ? "bg-slate-800 border border-slate-700 text-white focus:border-cyan-500" : "bg-white border border-gray-200 text-gray-900 focus:border-blue-600"}`}
-            >
-              <option value="all">All Departments</option>
-              {departments.map((dept) => (
-                <option key={dept} value={dept}>
-                  {dept}
-                </option>
-              ))}
-            </select>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className={`px-4 py-2 rounded-lg focus:outline-none ${isDark ? "bg-slate-800 border border-slate-700 text-white focus:border-cyan-500" : "bg-white border border-gray-200 text-gray-900 focus:border-blue-600"}`}
-            >
-              <option value="all">All Statuses</option>
-              {STATUS_OPTIONS.map((status) => (
-                <option key={status.value} value={status.value}>
-                  {status.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Stats */}
-          <div className="grid grid-cols-4 gap-4 mb-8">
-            <div className={`p-4 rounded-lg ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
-              <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>Total Jobs</p>
-              <p className="text-2xl font-bold">{jobs?.length || 0}</p>
-            </div>
-            <div className={`p-4 rounded-lg ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
-              <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>Active</p>
-              <p className="text-2xl font-bold text-green-400">
-                {jobs?.filter((j) => j.isActive).length || 0}
-              </p>
-            </div>
-            <div className={`p-4 rounded-lg ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
-              <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>Urgently Hiring</p>
-              <p className="text-2xl font-bold text-red-400">
-                {jobs?.filter((j) => getEffectiveBadgeType(j) === "urgently_hiring").length || 0}
-              </p>
-            </div>
-            <div className={`p-4 rounded-lg ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
-              <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>Inactive</p>
-              <p className={`text-2xl font-bold ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                {jobs?.filter((j) => !j.isActive).length || 0}
-              </p>
-            </div>
-          </div>
-
-          {/* Jobs Table */}
-          <div className={`rounded-lg overflow-hidden ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
-            <table className="w-full">
-              <thead className={isDark ? "bg-slate-800" : "bg-gray-50"}>
-                <tr>
-                  <th className={`px-6 py-4 text-left text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Title</th>
-                  <th className={`px-6 py-4 text-left text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Department</th>
-                  <th className={`px-6 py-4 text-left text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Position Type</th>
-                  <th className={`px-6 py-4 text-center text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Badge Type</th>
-                  <th className={`px-6 py-4 text-center text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Active</th>
-                  <th className={`px-6 py-4 text-right text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Actions</th>
-                </tr>
-              </thead>
-              <tbody className={`divide-y ${isDark ? "divide-slate-700" : "divide-gray-200"}`}>
-                {filteredJobs?.map((job) => (
-                  <tr key={job._id} className={`transition-colors ${isDark ? "hover:bg-slate-800/50" : "hover:bg-gray-50"}`}>
-                    <td className="px-6 py-4">
-                      <div>
-                        <p className="font-medium">{job.title}</p>
-                        <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>{job.location}</p>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="px-2 py-1 text-xs rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">
-                        {job.department}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2 py-1 text-xs rounded-full border ${
-                        job.positionType === "management"
-                          ? "bg-purple-500/20 text-purple-400 border-purple-500/30"
-                          : job.positionType === "salaried"
-                          ? "bg-cyan-500/20 text-cyan-400 border-cyan-500/30"
-                          : "bg-slate-500/20 text-slate-400 border-slate-500/30"
-                      }`}>
-                        {job.positionType || "hourly"}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <select
-                        value={getEffectiveBadgeType(job)}
-                        onChange={(e) => handleBadgeTypeChange(job, e.target.value)}
-                        className={`px-3 py-1.5 text-xs rounded-lg border cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-1 ${
-                          getEffectiveBadgeType(job) === "urgently_hiring"
-                            ? isDark
-                              ? "bg-red-500/20 text-red-400 border-red-500/30 focus:ring-red-500/50"
-                              : "bg-red-100 text-red-700 border-red-300 focus:ring-red-500"
-                            : getEffectiveBadgeType(job) === "accepting_applications"
-                            ? isDark
-                              ? "bg-blue-500/20 text-blue-400 border-blue-500/30 focus:ring-blue-500/50"
-                              : "bg-blue-100 text-blue-700 border-blue-300 focus:ring-blue-500"
-                            : isDark
-                              ? "bg-green-500/20 text-green-400 border-green-500/30 focus:ring-green-500/50"
-                              : "bg-green-100 text-green-700 border-green-300 focus:ring-green-500"
-                        }`}
-                      >
-                        {BADGE_TYPE_OPTIONS.map((badge) => (
-                          <option key={badge.value} value={badge.value} className={isDark ? "bg-slate-800 text-white" : "bg-white text-gray-900"}>
-                            {badge.label}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      {job.isActive ? (
-                        <span className="inline-flex items-center gap-1 text-green-400">
-                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                          </svg>
-                          Active
-                        </span>
-                      ) : (
-                        <span className="text-slate-500">Inactive</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => openEditModal(job)}
-                          className={`p-2 transition-colors ${isDark ? "text-slate-400 hover:text-cyan-400" : "text-gray-500 hover:text-blue-600"}`}
-                          title="Edit job"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                            />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={() => setShowDeleteConfirm(job)}
-                          className={`p-2 transition-colors ${isDark ? "text-slate-400" : "text-gray-500"} hover:text-red-400`}
-                          title="Delete job"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                            />
-                          </svg>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {filteredJobs?.length === 0 && (
-              <div className={`text-center py-12 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                No jobs found matching your filters
+          <div className={`sticky top-0 z-10 backdrop-blur-sm border-b px-4 sm:px-8 py-3 sm:py-4 ${isDark ? "bg-slate-900/80 border-slate-700" : "bg-[#f2f2f7]/80 border-gray-200"}`}>
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h1 className={`text-xl sm:text-2xl font-bold truncate ${isDark ? "text-white" : "text-gray-900"}`}>Job Listings</h1>
+                <p className={`text-xs sm:text-sm mt-1 hidden sm:block ${isDark ? "text-slate-400" : "text-gray-500"}`}>Manage positions for IE Tire careers page</p>
               </div>
-            )}
+              <button
+                onClick={openAddModal}
+                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg transition-colors flex-shrink-0 ${isDark ? "bg-cyan-500 hover:bg-cyan-600" : "bg-blue-600 hover:bg-blue-700 text-white"}`}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                <span className="hidden sm:inline">Add Job</span>
+                <span className="sm:hidden">Add</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="p-4 sm:p-8 space-y-4 sm:space-y-6">
+            {/* Filters */}
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+              <select
+                value={filterDepartment}
+                onChange={(e) => setFilterDepartment(e.target.value)}
+                className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 text-sm sm:text-base rounded-lg focus:outline-none ${isDark ? "bg-slate-800 border border-slate-700 text-white focus:border-cyan-500" : "bg-white border border-gray-200 text-gray-900 focus:border-blue-600"}`}
+              >
+                <option value="all">All Departments</option>
+                {departments.map((dept) => (
+                  <option key={dept} value={dept}>
+                    {dept}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 text-sm sm:text-base rounded-lg focus:outline-none ${isDark ? "bg-slate-800 border border-slate-700 text-white focus:border-cyan-500" : "bg-white border border-gray-200 text-gray-900 focus:border-blue-600"}`}
+              >
+                <option value="all">All Statuses</option>
+                {STATUS_OPTIONS.map((status) => (
+                  <option key={status.value} value={status.value}>
+                    {status.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Stats */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
+              <div className={`p-2 sm:p-4 rounded-lg text-center ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
+                <p className={`text-lg sm:text-2xl font-bold`}>{jobs?.length || 0}</p>
+                <p className={`text-[10px] sm:text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>Total Jobs</p>
+              </div>
+              <div className={`p-2 sm:p-4 rounded-lg text-center ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
+                <p className="text-lg sm:text-2xl font-bold text-green-400">
+                  {jobs?.filter((j) => j.isActive).length || 0}
+                </p>
+                <p className={`text-[10px] sm:text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>Active</p>
+              </div>
+              <div className={`p-2 sm:p-4 rounded-lg text-center ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
+                <p className="text-lg sm:text-2xl font-bold text-red-400">
+                  {jobs?.filter((j) => getEffectiveBadgeType(j) === "urgently_hiring").length || 0}
+                </p>
+                <p className={`text-[10px] sm:text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>Urgent</p>
+              </div>
+              <div className={`p-2 sm:p-4 rounded-lg text-center ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
+                <p className={`text-lg sm:text-2xl font-bold ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                  {jobs?.filter((j) => !j.isActive).length || 0}
+                </p>
+                <p className={`text-[10px] sm:text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>Inactive</p>
+              </div>
+            </div>
+
+            {/* Jobs Table - Desktop */}
+            <div className={`hidden sm:block rounded-lg overflow-hidden ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
+              <table className="w-full">
+                <thead className={isDark ? "bg-slate-800" : "bg-gray-50"}>
+                  <tr>
+                    <th className={`px-6 py-4 text-left text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Title</th>
+                    <th className={`px-6 py-4 text-left text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Department</th>
+                    <th className={`px-6 py-4 text-left text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Position Type</th>
+                    <th className={`px-6 py-4 text-center text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Badge Type</th>
+                    <th className={`px-6 py-4 text-center text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Active</th>
+                    <th className={`px-6 py-4 text-right text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody className={`divide-y ${isDark ? "divide-slate-700" : "divide-gray-200"}`}>
+                  {filteredJobs?.map((job) => (
+                    <tr key={job._id} className={`transition-colors ${isDark ? "hover:bg-slate-800/50" : "hover:bg-gray-50"}`}>
+                      <td className="px-6 py-4">
+                        <div>
+                          <p className="font-medium">{job.title}</p>
+                          <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>{job.location}</p>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="px-2 py-1 text-xs rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                          {job.department}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-1 text-xs rounded-full border ${
+                          job.positionType === "management"
+                            ? "bg-purple-500/20 text-purple-400 border-purple-500/30"
+                            : job.positionType === "salaried"
+                            ? "bg-cyan-500/20 text-cyan-400 border-cyan-500/30"
+                            : "bg-slate-500/20 text-slate-400 border-slate-500/30"
+                        }`}>
+                          {job.positionType || "hourly"}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <select
+                          value={getEffectiveBadgeType(job)}
+                          onChange={(e) => handleBadgeTypeChange(job, e.target.value)}
+                          className={`px-3 py-1.5 text-xs rounded-lg border cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-1 ${
+                            getEffectiveBadgeType(job) === "urgently_hiring"
+                              ? isDark
+                                ? "bg-red-500/20 text-red-400 border-red-500/30 focus:ring-red-500/50"
+                                : "bg-red-100 text-red-700 border-red-300 focus:ring-red-500"
+                              : getEffectiveBadgeType(job) === "accepting_applications"
+                              ? isDark
+                                ? "bg-blue-500/20 text-blue-400 border-blue-500/30 focus:ring-blue-500/50"
+                                : "bg-blue-100 text-blue-700 border-blue-300 focus:ring-blue-500"
+                              : isDark
+                                ? "bg-green-500/20 text-green-400 border-green-500/30 focus:ring-green-500/50"
+                                : "bg-green-100 text-green-700 border-green-300 focus:ring-green-500"
+                          }`}
+                        >
+                          {BADGE_TYPE_OPTIONS.map((badge) => (
+                            <option key={badge.value} value={badge.value} className={isDark ? "bg-slate-800 text-white" : "bg-white text-gray-900"}>
+                              {badge.label}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        {job.isActive ? (
+                          <span className="inline-flex items-center gap-1 text-green-400">
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            </svg>
+                            Active
+                          </span>
+                        ) : (
+                          <span className="text-slate-500">Inactive</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => openEditModal(job)}
+                            className={`p-2 transition-colors ${isDark ? "text-slate-400 hover:text-cyan-400" : "text-gray-500 hover:text-blue-600"}`}
+                            title="Edit job"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                              />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => setShowDeleteConfirm(job)}
+                            className={`p-2 transition-colors ${isDark ? "text-slate-400" : "text-gray-500"} hover:text-red-400`}
+                            title="Delete job"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                              />
+                            </svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {filteredJobs?.length === 0 && (
+                <div className={`text-center py-12 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                  No jobs found matching your filters
+                </div>
+              )}
+            </div>
+
+            {/* Jobs Cards - Mobile */}
+            <div className="sm:hidden space-y-3">
+              {filteredJobs?.map((job) => (
+                <div key={job._id} className={`rounded-lg p-4 ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium truncate">{job.title}</p>
+                      <p className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>{job.location}</p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => openEditModal(job)}
+                        className={`p-1.5 transition-colors ${isDark ? "text-slate-400 hover:text-cyan-400" : "text-gray-500 hover:text-blue-600"}`}
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => setShowDeleteConfirm(job)}
+                        className={`p-1.5 transition-colors ${isDark ? "text-slate-400" : "text-gray-500"} hover:text-red-400`}
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 mb-3">
+                    <span className="px-2 py-0.5 text-[10px] rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                      {job.department}
+                    </span>
+                    <span className={`px-2 py-0.5 text-[10px] rounded-full border ${
+                      job.positionType === "management"
+                        ? "bg-purple-500/20 text-purple-400 border-purple-500/30"
+                        : job.positionType === "salaried"
+                        ? "bg-cyan-500/20 text-cyan-400 border-cyan-500/30"
+                        : "bg-slate-500/20 text-slate-400 border-slate-500/30"
+                    }`}>
+                      {job.positionType || "hourly"}
+                    </span>
+                    {job.isActive ? (
+                      <span className="inline-flex items-center gap-1 text-green-400 text-[10px]">
+                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                        Active
+                      </span>
+                    ) : (
+                      <span className="text-slate-500 text-[10px]">Inactive</span>
+                    )}
+                  </div>
+                  <select
+                    value={getEffectiveBadgeType(job)}
+                    onChange={(e) => handleBadgeTypeChange(job, e.target.value)}
+                    className={`w-full px-3 py-2 text-xs rounded-lg border cursor-pointer focus:outline-none ${
+                      getEffectiveBadgeType(job) === "urgently_hiring"
+                        ? isDark
+                          ? "bg-red-500/20 text-red-400 border-red-500/30"
+                          : "bg-red-100 text-red-700 border-red-300"
+                        : getEffectiveBadgeType(job) === "accepting_applications"
+                        ? isDark
+                          ? "bg-blue-500/20 text-blue-400 border-blue-500/30"
+                          : "bg-blue-100 text-blue-700 border-blue-300"
+                        : isDark
+                          ? "bg-green-500/20 text-green-400 border-green-500/30"
+                          : "bg-green-100 text-green-700 border-green-300"
+                    }`}
+                  >
+                    {BADGE_TYPE_OPTIONS.map((badge) => (
+                      <option key={badge.value} value={badge.value} className={isDark ? "bg-slate-800 text-white" : "bg-white text-gray-900"}>
+                        {badge.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+              {filteredJobs?.length === 0 && (
+                <div className={`text-center py-12 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                  No jobs found matching your filters
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Add/Edit Modal */}
           {showModal && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-              <div className={`rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto ${isDark ? "bg-slate-800 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
-                <h2 className="text-xl font-bold mb-6">
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <div className={`rounded-lg p-4 sm:p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto ${isDark ? "bg-slate-800 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
+                <h2 className="text-lg sm:text-xl font-bold mb-4 sm:mb-6">
                   {editingJob ? "Edit Job" : "Add New Job"}
                 </h2>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
+                <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <div>
                       <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-700"}`}>
                         Job Title *
@@ -473,9 +563,9 @@ export default function JobsPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                     <div>
-                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-700"}`}>
+                      <label className={`block text-xs sm:text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-700"}`}>
                         Department *
                       </label>
                       <select
@@ -524,9 +614,9 @@ export default function JobsPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <div>
-                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-700"}`}>
+                      <label className={`block text-xs sm:text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-700"}`}>
                         Badge Type
                       </label>
                       <select
@@ -629,10 +719,10 @@ export default function JobsPage() {
 
           {/* Delete Confirmation Modal */}
           {showDeleteConfirm && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-              <div className={`rounded-lg p-6 w-full max-w-md ${isDark ? "bg-slate-800 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
-                <h2 className="text-xl font-bold mb-4">Delete Job</h2>
-                <p className={`mb-6 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <div className={`rounded-lg p-4 sm:p-6 w-full max-w-md ${isDark ? "bg-slate-800 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
+                <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">Delete Job</h2>
+                <p className={`text-sm sm:text-base mb-4 sm:mb-6 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
                   Are you sure you want to delete <strong>{showDeleteConfirm.title}</strong>? This
                   action cannot be undone.
                 </p>

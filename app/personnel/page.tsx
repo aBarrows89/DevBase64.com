@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Protected from "../protected";
-import Sidebar from "@/components/Sidebar";
+import Sidebar, { MobileHeader } from "@/components/Sidebar";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
@@ -31,8 +31,9 @@ function PersonnelContent() {
   const departments = useQuery(api.personnel.getDepartments) || [];
 
   const [filterDepartment, setFilterDepartment] = useState<string>("all");
-  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterStatus, setFilterStatus] = useState<string>("active"); // Default to active only
   const [searchTerm, setSearchTerm] = useState("");
+  const [showTerminated, setShowTerminated] = useState(false);
 
   // Redirect if user doesn't have permission
   if (!canViewPersonnel) {
@@ -53,7 +54,11 @@ function PersonnelContent() {
     );
   }
 
-  const filteredPersonnel = personnel.filter((person) => {
+  // Separate active/on_leave personnel from terminated
+  const activePersonnel = personnel.filter((p) => p.status !== "terminated");
+  const terminatedPersonnel = personnel.filter((p) => p.status === "terminated");
+
+  const filteredPersonnel = activePersonnel.filter((person) => {
     const matchesDepartment =
       filterDepartment === "all" || person.department === filterDepartment;
     const matchesStatus =
@@ -66,6 +71,18 @@ function PersonnelContent() {
       person.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       person.position.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesDepartment && matchesStatus && matchesSearch;
+  });
+
+  // Filter terminated personnel by search term
+  const filteredTerminated = terminatedPersonnel.filter((person) => {
+    const matchesSearch =
+      searchTerm === "" ||
+      `${person.firstName} ${person.lastName}`
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase()) ||
+      person.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      person.position.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesSearch;
   });
 
   // Calculate stats
@@ -81,86 +98,89 @@ function PersonnelContent() {
       <Sidebar />
 
       <main className="flex-1 overflow-y-auto">
+        {/* Mobile Header */}
+        <MobileHeader />
+
         {/* Header */}
-        <header className={`sticky top-0 z-10 backdrop-blur-sm border-b px-8 py-4 ${isDark ? "bg-slate-900/80 border-slate-700" : "bg-white/80 border-gray-200"}`}>
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className={`text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>Personnel</h1>
-              <p className={`text-sm mt-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+        <header className={`sticky top-0 z-10 backdrop-blur-sm border-b px-4 sm:px-8 py-3 sm:py-4 ${isDark ? "bg-slate-900/80 border-slate-700" : "bg-white/80 border-gray-200"}`}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h1 className={`text-xl sm:text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>Personnel</h1>
+              <p className={`text-xs sm:text-sm mt-1 hidden sm:block ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                 Manage employees and their records
               </p>
             </div>
             {canManagePersonnel && (
               <button
                 onClick={() => router.push("/personnel/new")}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors flex-shrink-0 ${
                   isDark
                     ? "bg-cyan-500 hover:bg-cyan-400 text-white"
                     : "bg-blue-600 hover:bg-blue-700 text-white"
                 }`}
               >
-                Add Employee
+                <span className="hidden sm:inline">Add Employee</span>
+                <span className="sm:hidden">Add</span>
               </button>
             )}
           </div>
         </header>
 
-        <div className="p-8 space-y-6">
+        <div className="p-4 sm:p-8 space-y-4 sm:space-y-6">
           {/* Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className={`rounded-lg p-4 text-center ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
-              <p className={`text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{stats.total}</p>
-              <p className={`text-xs ${isDark ? "text-slate-500" : "text-gray-500"}`}>Total</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
+            <div className={`rounded-lg p-2 sm:p-4 text-center ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
+              <p className={`text-lg sm:text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{stats.total}</p>
+              <p className={`text-[10px] sm:text-xs ${isDark ? "text-slate-500" : "text-gray-500"}`}>Total</p>
             </div>
-            <div className={`rounded-lg p-4 text-center ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
-              <p className={`text-2xl font-bold text-green-400`}>{stats.active}</p>
-              <p className={`text-xs ${isDark ? "text-slate-500" : "text-gray-500"}`}>Active</p>
+            <div className={`rounded-lg p-2 sm:p-4 text-center ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
+              <p className={`text-lg sm:text-2xl font-bold text-green-400`}>{stats.active}</p>
+              <p className={`text-[10px] sm:text-xs ${isDark ? "text-slate-500" : "text-gray-500"}`}>Active</p>
             </div>
-            <div className={`rounded-lg p-4 text-center ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
-              <p className={`text-2xl font-bold text-amber-400`}>{stats.onLeave}</p>
-              <p className={`text-xs ${isDark ? "text-slate-500" : "text-gray-500"}`}>On Leave</p>
+            <div className={`rounded-lg p-2 sm:p-4 text-center ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
+              <p className={`text-lg sm:text-2xl font-bold text-amber-400`}>{stats.onLeave}</p>
+              <p className={`text-[10px] sm:text-xs ${isDark ? "text-slate-500" : "text-gray-500"}`}>On Leave</p>
             </div>
-            <div className={`rounded-lg p-4 text-center ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
-              <p className={`text-2xl font-bold text-red-400`}>{stats.terminated}</p>
-              <p className={`text-xs ${isDark ? "text-slate-500" : "text-gray-500"}`}>Terminated</p>
+            <div className={`rounded-lg p-2 sm:p-4 text-center ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
+              <p className={`text-lg sm:text-2xl font-bold text-red-400`}>{stats.terminated}</p>
+              <p className={`text-[10px] sm:text-xs ${isDark ? "text-slate-500" : "text-gray-500"}`}>Terminated</p>
             </div>
           </div>
 
           {/* Filters */}
-          <div className="flex flex-wrap gap-4">
-            <div className="flex-1 min-w-[200px]">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+            <div className="flex-1">
               <input
                 type="text"
-                placeholder="Search by name, email, or position..."
+                placeholder="Search name, email, or position..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className={`w-full px-4 py-2 rounded-lg focus:outline-none ${isDark ? "bg-slate-800/50 border border-slate-700 text-white placeholder-slate-500 focus:border-cyan-500" : "bg-white border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-blue-600"}`}
+                className={`w-full px-3 sm:px-4 py-2 text-sm sm:text-base rounded-lg focus:outline-none ${isDark ? "bg-slate-800/50 border border-slate-700 text-white placeholder-slate-500 focus:border-cyan-500" : "bg-white border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-blue-600"}`}
               />
             </div>
-            <select
-              value={filterDepartment}
-              onChange={(e) => setFilterDepartment(e.target.value)}
-              className={`px-4 py-2 rounded-lg focus:outline-none ${isDark ? "bg-slate-800/50 border border-slate-700 text-white focus:border-cyan-500" : "bg-white border border-gray-200 text-gray-900 focus:border-blue-600"}`}
-            >
-              <option value="all">All Departments</option>
-              {departments.map((dept) => (
-                <option key={dept} value={dept}>
-                  {dept}
-                </option>
-              ))}
-            </select>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className={`px-4 py-2 rounded-lg focus:outline-none ${isDark ? "bg-slate-800/50 border border-slate-700 text-white focus:border-cyan-500" : "bg-white border border-gray-200 text-gray-900 focus:border-blue-600"}`}
-            >
-              <option value="all">All Statuses</option>
-              {STATUS_OPTIONS.map((status) => (
-                <option key={status.value} value={status.value}>
-                  {status.label}
-                </option>
-              ))}
-            </select>
+            <div className="flex gap-2 sm:gap-4">
+              <select
+                value={filterDepartment}
+                onChange={(e) => setFilterDepartment(e.target.value)}
+                className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 text-sm sm:text-base rounded-lg focus:outline-none ${isDark ? "bg-slate-800/50 border border-slate-700 text-white focus:border-cyan-500" : "bg-white border border-gray-200 text-gray-900 focus:border-blue-600"}`}
+              >
+                <option value="all">All Depts</option>
+                {departments.map((dept) => (
+                  <option key={dept} value={dept}>
+                    {dept}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 text-sm sm:text-base rounded-lg focus:outline-none ${isDark ? "bg-slate-800/50 border border-slate-700 text-white focus:border-cyan-500" : "bg-white border border-gray-200 text-gray-900 focus:border-blue-600"}`}
+              >
+                <option value="all">All Active</option>
+                <option value="active">Active</option>
+                <option value="on_leave">On Leave</option>
+              </select>
+            </div>
           </div>
 
           {/* Personnel Table */}
@@ -244,14 +264,120 @@ function PersonnelContent() {
               {filteredPersonnel.length === 0 && (
                 <div className="text-center py-12">
                   <p className={isDark ? "text-slate-500" : "text-gray-500"}>
-                    {personnel.length === 0
-                      ? "No personnel records yet. Hire applicants from the Applications page."
+                    {activePersonnel.length === 0
+                      ? "No active personnel records yet. Hire applicants from the Applications page."
                       : "No personnel found matching your filters."}
                   </p>
                 </div>
               )}
             </div>
           </div>
+
+          {/* Terminated Employees Section (Collapsible) */}
+          {terminatedPersonnel.length > 0 && (
+            <div className={`rounded-xl overflow-hidden ${isDark ? "bg-slate-800/30 border border-slate-700/50" : "bg-gray-50 border border-gray-200"}`}>
+              <button
+                onClick={() => setShowTerminated(!showTerminated)}
+                className={`w-full px-6 py-4 flex items-center justify-between ${isDark ? "hover:bg-slate-700/20" : "hover:bg-gray-100"}`}
+              >
+                <div className="flex items-center gap-3">
+                  <span className={`text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                    Terminated Employees ({filteredTerminated.length})
+                  </span>
+                  <span className={`px-2 py-0.5 text-xs rounded ${isDark ? "bg-red-500/20 text-red-400" : "bg-red-100 text-red-600"}`}>
+                    Archived
+                  </span>
+                </div>
+                <svg
+                  className={`w-5 h-5 transition-transform ${showTerminated ? "rotate-180" : ""} ${isDark ? "text-slate-400" : "text-gray-500"}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {showTerminated && (
+                <div className={`border-t ${isDark ? "border-slate-700/50" : "border-gray-200"}`}>
+                  <table className="w-full">
+                    <thead>
+                      <tr className={`border-b ${isDark ? "border-slate-700/50" : "border-gray-200"}`}>
+                        <th className={`text-left px-6 py-3 text-xs font-medium ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                          Employee
+                        </th>
+                        <th className={`text-left px-6 py-3 text-xs font-medium ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                          Position
+                        </th>
+                        <th className={`text-left px-6 py-3 text-xs font-medium ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                          Department
+                        </th>
+                        <th className={`text-left px-6 py-3 text-xs font-medium ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                          Termination Date
+                        </th>
+                        <th className={`text-right px-6 py-3 text-xs font-medium ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredTerminated.map((person) => (
+                        <tr
+                          key={person._id}
+                          className={`border-b cursor-pointer ${isDark ? "border-slate-700/30 hover:bg-slate-700/10" : "border-gray-100 hover:bg-gray-50"}`}
+                          onClick={() => router.push(`/personnel/${person._id}`)}
+                        >
+                          <td className="px-6 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-semibold opacity-60 ${isDark ? "bg-slate-600" : "bg-gray-400"}`}>
+                                {person.firstName.charAt(0)}{person.lastName.charAt(0)}
+                              </div>
+                              <div>
+                                <p className={`text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                                  {person.firstName} {person.lastName}
+                                </p>
+                                <p className={`text-xs ${isDark ? "text-slate-600" : "text-gray-400"}`}>{person.email}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className={`px-6 py-3 text-sm ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                            {person.position}
+                          </td>
+                          <td className={`px-6 py-3 text-sm ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                            {person.department}
+                          </td>
+                          <td className={`px-6 py-3 text-sm ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                            {person.terminationDate
+                              ? new Date(person.terminationDate).toLocaleDateString()
+                              : "N/A"}
+                          </td>
+                          <td className="px-6 py-3 text-right">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                router.push(`/personnel/${person._id}`);
+                              }}
+                              className={`text-xs ${isDark ? "text-slate-500 hover:text-slate-400" : "text-gray-500 hover:text-gray-600"}`}
+                            >
+                              View Record
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  {filteredTerminated.length === 0 && (
+                    <div className="text-center py-8">
+                      <p className={`text-sm ${isDark ? "text-slate-600" : "text-gray-400"}`}>
+                        No terminated employees match your search.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </main>
     </div>

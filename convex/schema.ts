@@ -305,6 +305,7 @@ export default defineSchema({
       relationship: v.string(),
     })),
     notes: v.optional(v.string()),
+    completedTraining: v.optional(v.array(v.string())), // Array of training area names
     createdAt: v.number(),
     updatedAt: v.number(),
   })

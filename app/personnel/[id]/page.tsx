@@ -29,6 +29,47 @@ const TABS = [
   { id: "merits", label: "Merits" },
 ];
 
+// Helper function to calculate tenure
+function calculateTenure(hireDate: string, endDate?: string): {
+  years: number;
+  months: number;
+  days: number;
+  totalDays: number;
+  display: string;
+} {
+  const start = new Date(hireDate);
+  const end = endDate ? new Date(endDate) : new Date();
+
+  const diffTime = end.getTime() - start.getTime();
+  const totalDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+  const years = Math.floor(totalDays / 365);
+  const months = Math.floor((totalDays % 365) / 30);
+  const days = totalDays % 30;
+
+  let display = "";
+  if (years > 0) display += `${years} year${years > 1 ? "s" : ""} `;
+  if (months > 0) display += `${months} month${months > 1 ? "s" : ""} `;
+  if (days > 0 || (!years && !months)) display += `${days} day${days !== 1 ? "s" : ""}`;
+
+  return { years, months, days, totalDays, display: display.trim() };
+}
+
+// Helper to get tenure milestones
+function getTenureMilestones(totalDays: number): {
+  insuranceEligible: boolean;
+  vacationEligible: boolean;
+  daysToInsurance: number;
+  daysToVacation: number;
+} {
+  return {
+    insuranceEligible: totalDays >= 90,
+    vacationEligible: totalDays >= 365,
+    daysToInsurance: Math.max(0, 90 - totalDays),
+    daysToVacation: Math.max(0, 365 - totalDays),
+  };
+}
+
 // Write-up severity colors
 const severityColors: Record<string, string> = {
   verbal: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
@@ -53,6 +94,18 @@ const meritTypeColors: Record<string, string> = {
   recognition: "bg-purple-500/20 text-purple-400 border-purple-500/30",
   bonus: "bg-amber-500/20 text-amber-400 border-amber-500/30",
 };
+
+// Training areas
+const TRAINING_AREAS = [
+  "Picker Training Video",
+  "Picking",
+  "Shipping Floor",
+  "Receiving",
+  "Inventory",
+  "Shift Management",
+  "Leadership Training",
+  "Safety Training",
+];
 
 // Attachment Item Component
 function AttachmentItem({
@@ -151,6 +204,7 @@ function PersonnelDetailContent() {
   const [showMeritModal, setShowMeritModal] = useState(false);
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
   const [showEditPersonnelModal, setShowEditPersonnelModal] = useState(false);
+  const [showTerminateModal, setShowTerminateModal] = useState(false);
 
   // Queries
   const personnel = useQuery(api.personnel.getWithStats, { personnelId });
@@ -174,6 +228,8 @@ function PersonnelDetailContent() {
   const generateUploadUrl = useMutation(api.writeUps.generateUploadUrl);
   const addAttachment = useMutation(api.writeUps.addAttachment);
   const removeAttachment = useMutation(api.writeUps.removeAttachment);
+  const terminatePersonnel = useMutation(api.personnel.terminate);
+  const toggleTraining = useMutation(api.personnel.toggleTraining);
 
   // File upload state
   const [uploadingWriteUpId, setUploadingWriteUpId] = useState<Id<"writeUps"> | null>(null);
@@ -208,6 +264,11 @@ function PersonnelDetailContent() {
     department: "",
     hourlyRate: 0,
     notes: "",
+  });
+
+  const [terminateForm, setTerminateForm] = useState({
+    terminationDate: new Date().toISOString().split("T")[0],
+    terminationReason: "",
   });
 
   // Initialize edit form when personnel data loads
@@ -389,6 +450,32 @@ function PersonnelDetailContent() {
     }
   };
 
+  const handleTerminate = async () => {
+    if (!terminateForm.terminationReason) {
+      alert("Please provide a reason for termination.");
+      return;
+    }
+    try {
+      await terminatePersonnel({
+        personnelId,
+        terminationDate: terminateForm.terminationDate,
+        terminationReason: terminateForm.terminationReason,
+      });
+      setShowTerminateModal(false);
+      setTerminateForm({
+        terminationDate: new Date().toISOString().split("T")[0],
+        terminationReason: "",
+      });
+    } catch (error) {
+      console.error("Error terminating personnel:", error);
+      alert("Failed to terminate personnel. Please try again.");
+    }
+  };
+
+  // Calculate tenure for display
+  const tenure = personnel ? calculateTenure(personnel.hireDate, personnel.terminationDate) : null;
+  const milestones = tenure ? getTenureMilestones(tenure.totalDays) : null;
+
   return (
     <div className={`flex h-screen ${isDark ? "bg-slate-900" : "bg-[#f2f2f7]"}`}>
       <Sidebar />
@@ -539,6 +626,55 @@ function PersonnelDetailContent() {
                 </div>
               </div>
 
+              {/* Training Section */}
+              <div className={`rounded-xl p-6 ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                    Training Completed
+                  </h2>
+                  <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    {personnel.completedTraining?.length || 0} of {TRAINING_AREAS.length} areas
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {TRAINING_AREAS.map((area) => {
+                    const isCompleted = personnel.completedTraining?.includes(area);
+                    return (
+                      <button
+                        key={area}
+                        onClick={async () => {
+                          try {
+                            await toggleTraining({ personnelId: personnel._id, trainingArea: area });
+                          } catch (error) {
+                            console.error("Failed to toggle training:", error);
+                          }
+                        }}
+                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+                          isCompleted
+                            ? isDark
+                              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30"
+                              : "bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100"
+                            : isDark
+                              ? "bg-slate-700/50 text-slate-400 border border-slate-600 hover:bg-slate-700 hover:text-slate-300"
+                              : "bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200 hover:text-gray-700"
+                        }`}
+                      >
+                        {isCompleted ? (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                          </svg>
+                        )}
+                        {area}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Linked Application Card */}
               {personnel.applicationId && (
                 <div className={`rounded-xl p-6 ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
@@ -610,6 +746,156 @@ function PersonnelDetailContent() {
                   )}
                 </div>
               )}
+
+              {/* Tenure & Employment Card */}
+              <div className={`rounded-xl p-6 ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                    Tenure & Employment
+                  </h2>
+                  {personnel.status === "terminated" && (
+                    <span className={`px-3 py-1 text-sm font-medium rounded-full ${
+                      isDark
+                        ? "bg-red-500/20 text-red-400 border border-red-500/30"
+                        : "bg-red-50 text-red-600 border border-red-200"
+                    }`}>
+                      Terminated
+                    </span>
+                  )}
+                </div>
+
+                {/* Tenure Display */}
+                {tenure && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <p className={`text-xs font-medium ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                          {personnel.status === "terminated" ? "Total Employment" : "Current Tenure"}
+                        </p>
+                        <p className={`text-xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
+                          {tenure.display}
+                        </p>
+                      </div>
+                      <div>
+                        <p className={`text-xs font-medium ${isDark ? "text-slate-500" : "text-gray-500"}`}>Hire Date</p>
+                        <p className={`${isDark ? "text-white" : "text-gray-900"}`}>
+                          {new Date(personnel.hireDate).toLocaleDateString()}
+                        </p>
+                      </div>
+                      {personnel.status === "terminated" && personnel.terminationDate && (
+                        <div>
+                          <p className={`text-xs font-medium ${isDark ? "text-slate-500" : "text-gray-500"}`}>Termination Date</p>
+                          <p className={`${isDark ? "text-white" : "text-gray-900"}`}>
+                            {new Date(personnel.terminationDate).toLocaleDateString()}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Termination Reason (if terminated) */}
+                    {personnel.status === "terminated" && personnel.terminationReason && (
+                      <div className={`p-4 rounded-lg ${isDark ? "bg-red-500/10 border border-red-500/20" : "bg-red-50 border border-red-200"}`}>
+                        <p className={`text-xs font-medium mb-1 ${isDark ? "text-red-400" : "text-red-600"}`}>Termination Reason</p>
+                        <p className={`text-sm ${isDark ? "text-slate-300" : "text-gray-700"}`}>{personnel.terminationReason}</p>
+                      </div>
+                    )}
+
+                    {/* Milestones (only for active employees) */}
+                    {personnel.status !== "terminated" && milestones && (
+                      <div className={`p-4 rounded-lg ${isDark ? "bg-slate-700/50" : "bg-gray-50"}`}>
+                        <p className={`text-xs font-medium mb-3 ${isDark ? "text-slate-400" : "text-gray-600"}`}>Tenure Milestones</p>
+                        <div className="flex flex-wrap gap-3">
+                          {/* Insurance Eligibility (90 days) */}
+                          <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
+                            milestones.insuranceEligible
+                              ? isDark
+                                ? "bg-green-500/20 border border-green-500/30"
+                                : "bg-green-50 border border-green-200"
+                              : isDark
+                                ? "bg-slate-600/50 border border-slate-500/30"
+                                : "bg-gray-100 border border-gray-200"
+                          }`}>
+                            {milestones.insuranceEligible ? (
+                              <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            ) : (
+                              <svg className={`w-5 h-5 ${isDark ? "text-slate-500" : "text-gray-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            )}
+                            <div>
+                              <p className={`text-sm font-medium ${
+                                milestones.insuranceEligible
+                                  ? isDark ? "text-green-400" : "text-green-600"
+                                  : isDark ? "text-slate-400" : "text-gray-600"
+                              }`}>
+                                Insurance Eligible
+                              </p>
+                              <p className={`text-xs ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                                {milestones.insuranceEligible
+                                  ? "Reached at 90 days"
+                                  : `${milestones.daysToInsurance} days remaining`}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Vacation Eligibility (1 year) */}
+                          <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
+                            milestones.vacationEligible
+                              ? isDark
+                                ? "bg-green-500/20 border border-green-500/30"
+                                : "bg-green-50 border border-green-200"
+                              : isDark
+                                ? "bg-slate-600/50 border border-slate-500/30"
+                                : "bg-gray-100 border border-gray-200"
+                          }`}>
+                            {milestones.vacationEligible ? (
+                              <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            ) : (
+                              <svg className={`w-5 h-5 ${isDark ? "text-slate-500" : "text-gray-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            )}
+                            <div>
+                              <p className={`text-sm font-medium ${
+                                milestones.vacationEligible
+                                  ? isDark ? "text-green-400" : "text-green-600"
+                                  : isDark ? "text-slate-400" : "text-gray-600"
+                              }`}>
+                                Vacation Time
+                              </p>
+                              <p className={`text-xs ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                                {milestones.vacationEligible
+                                  ? "Eligible after 1 year"
+                                  : `${milestones.daysToVacation} days remaining`}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Terminate Button (admin+ only, non-terminated) */}
+                    {canManagePersonnel && personnel.status !== "terminated" && (
+                      <div className="pt-4 border-t border-dashed border-slate-600/50">
+                        <button
+                          onClick={() => setShowTerminateModal(true)}
+                          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                            isDark
+                              ? "bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30"
+                              : "bg-red-50 hover:bg-red-100 text-red-600 border border-red-200"
+                          }`}
+                        >
+                          Terminate Employee
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -1233,6 +1519,73 @@ function PersonnelDetailContent() {
                   className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-cyan-500 hover:bg-cyan-400 text-white" : "bg-blue-600 hover:bg-blue-700 text-white"}`}
                 >
                   Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Termination Modal */}
+        {showTerminateModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className={`w-full max-w-md rounded-xl p-6 ${isDark ? "bg-slate-800" : "bg-white"}`}>
+              <div className="flex items-center gap-3 mb-4">
+                <div className={`p-2 rounded-full ${isDark ? "bg-red-500/20" : "bg-red-100"}`}>
+                  <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  Terminate Employee
+                </h2>
+              </div>
+              <p className={`text-sm mb-4 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                This action will mark {personnel?.firstName} {personnel?.lastName} as terminated.
+                They will no longer appear in shift planning and will be moved to the terminated section.
+              </p>
+              <div className="space-y-4">
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    Termination Date *
+                  </label>
+                  <input
+                    type="date"
+                    value={terminateForm.terminationDate}
+                    onChange={(e) => setTerminateForm({ ...terminateForm, terminationDate: e.target.value })}
+                    className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"} border focus:outline-none`}
+                  />
+                </div>
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    Reason for Termination *
+                  </label>
+                  <textarea
+                    value={terminateForm.terminationReason}
+                    onChange={(e) => setTerminateForm({ ...terminateForm, terminationReason: e.target.value })}
+                    placeholder="Enter the reason for termination..."
+                    rows={3}
+                    className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white placeholder-slate-500" : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400"} border focus:outline-none`}
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => {
+                    setShowTerminateModal(false);
+                    setTerminateForm({
+                      terminationDate: new Date().toISOString().split("T")[0],
+                      terminationReason: "",
+                    });
+                  }}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-slate-700 hover:bg-slate-600 text-white" : "bg-gray-100 hover:bg-gray-200 text-gray-900"}`}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleTerminate}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-red-500 hover:bg-red-400 text-white" : "bg-red-600 hover:bg-red-700 text-white"}`}
+                >
+                  Confirm Termination
                 </button>
               </div>
             </div>

@@ -291,6 +291,38 @@ export const terminate = mutation({
   },
 });
 
+// Toggle training completion for a training area
+export const toggleTraining = mutation({
+  args: {
+    personnelId: v.id("personnel"),
+    trainingArea: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const personnel = await ctx.db.get(args.personnelId);
+    if (!personnel) {
+      throw new Error("Personnel not found");
+    }
+
+    const currentTraining = personnel.completedTraining || [];
+    let newTraining: string[];
+
+    if (currentTraining.includes(args.trainingArea)) {
+      // Remove training
+      newTraining = currentTraining.filter((t) => t !== args.trainingArea);
+    } else {
+      // Add training
+      newTraining = [...currentTraining, args.trainingArea];
+    }
+
+    await ctx.db.patch(args.personnelId, {
+      completedTraining: newTraining,
+      updatedAt: Date.now(),
+    });
+
+    return args.personnelId;
+  },
+});
+
 // Delete personnel (hard delete - use with caution)
 export const remove = mutation({
   args: { personnelId: v.id("personnel") },

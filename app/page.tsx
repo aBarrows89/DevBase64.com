@@ -2,11 +2,23 @@
 
 import Link from "next/link";
 import Protected from "./protected";
-import Sidebar from "@/components/Sidebar";
+import Sidebar, { MobileHeader } from "@/components/Sidebar";
 import { useAuth } from "./auth-context";
 import { useTheme } from "./theme-context";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+
+// Combined type for website messages
+interface WebsiteMessage {
+  _id: string;
+  type: "contact" | "dealer";
+  name: string;
+  email: string;
+  subject?: string;
+  businessName?: string;
+  status: string;
+  createdAt: number;
+}
 
 function DashboardContent() {
   const { user } = useAuth();
@@ -17,6 +29,33 @@ function DashboardContent() {
   const repositories = useQuery(api.repositories.getAll);
   const upcomingInterviews = useQuery(api.applications.getUpcomingInterviews);
   const hiringAnalytics = useQuery(api.applications.getHiringAnalytics);
+  const contactMessages = useQuery(api.contactMessages.getRecent);
+  const dealerInquiries = useQuery(api.dealerInquiries.getRecent);
+
+  // Combine and sort website messages
+  const websiteMessages: WebsiteMessage[] = [
+    ...(contactMessages?.map((m) => ({
+      _id: m._id,
+      type: "contact" as const,
+      name: m.name,
+      email: m.email,
+      subject: m.subject,
+      status: m.status,
+      createdAt: m.createdAt,
+    })) || []),
+    ...(dealerInquiries?.map((i) => ({
+      _id: i._id,
+      type: "dealer" as const,
+      name: i.contactName,
+      email: i.email,
+      businessName: i.businessName,
+      status: i.status,
+      createdAt: i.createdAt,
+    })) || []),
+  ].sort((a, b) => b.createdAt - a.createdAt).slice(0, 5);
+
+  const newMessageCount = (contactMessages?.filter((m) => m.status === "new").length || 0) +
+    (dealerInquiries?.filter((i) => i.status === "new").length || 0);
 
   // Calculate stats
   const projectStats = {
@@ -42,16 +81,19 @@ function DashboardContent() {
       <Sidebar />
 
       <main className="flex-1 overflow-y-auto">
+        {/* Mobile Header */}
+        <MobileHeader />
+
         {/* Header */}
-        <header className={`sticky top-0 z-10 backdrop-blur-sm border-b px-8 py-4 ${isDark ? "bg-slate-900/80 border-slate-700" : "bg-white/80 border-gray-200"}`}>
+        <header className={`sticky top-0 z-10 backdrop-blur-sm border-b px-4 sm:px-8 py-3 sm:py-4 ${isDark ? "bg-slate-900/80 border-slate-700" : "bg-white/80 border-gray-200"}`}>
           <div className="flex items-center justify-between">
             <div>
-              <h1 className={`text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>Dashboard</h1>
-              <p className={`text-sm mt-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+              <h1 className={`text-xl sm:text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>Dashboard</h1>
+              <p className={`text-xs sm:text-sm mt-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                 Welcome back, {user?.name || "User"}
               </p>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="hidden sm:flex items-center gap-4">
               <span className={`text-sm ${isDark ? "text-slate-500" : "text-gray-400"}`}>
                 {new Date().toLocaleDateString("en-US", {
                   weekday: "long",
@@ -63,18 +105,18 @@ function DashboardContent() {
           </div>
         </header>
 
-        <div className="p-8 space-y-8">
+        <div className="p-4 sm:p-8 space-y-6 sm:space-y-8">
           {/* Stats Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
             {/* Projects */}
-            <div className={`border rounded-xl p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className={`text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+            <div className={`border rounded-xl p-4 sm:p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
+              <div className="flex items-center justify-between mb-2 sm:mb-4">
+                <h3 className={`text-xs sm:text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                   Active Projects
                 </h3>
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? "bg-cyan-500/20" : "bg-blue-100"}`}>
+                <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center ${isDark ? "bg-cyan-500/20" : "bg-blue-100"}`}>
                   <svg
-                    className={`w-5 h-5 ${isDark ? "text-cyan-400" : "text-blue-600"}`}
+                    className={`w-4 h-4 sm:w-5 sm:h-5 ${isDark ? "text-cyan-400" : "text-blue-600"}`}
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -88,23 +130,23 @@ function DashboardContent() {
                   </svg>
                 </div>
               </div>
-              <p className={`text-3xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
+              <p className={`text-2xl sm:text-3xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
                 {projectStats.inProgress}
               </p>
-              <p className={`text-sm mt-1 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+              <p className={`text-xs sm:text-sm mt-1 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
                 {projectStats.total} total projects
               </p>
             </div>
 
             {/* Completed */}
-            <div className={`border rounded-xl p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className={`text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+            <div className={`border rounded-xl p-4 sm:p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
+              <div className="flex items-center justify-between mb-2 sm:mb-4">
+                <h3 className={`text-xs sm:text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                   Completed
                 </h3>
-                <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
                   <svg
-                    className="w-5 h-5 text-green-400"
+                    className="w-4 h-4 sm:w-5 sm:h-5 text-green-400"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -118,21 +160,21 @@ function DashboardContent() {
                   </svg>
                 </div>
               </div>
-              <p className={`text-3xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
+              <p className={`text-2xl sm:text-3xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
                 {projectStats.completed}
               </p>
-              <p className={`text-sm mt-1 ${isDark ? "text-slate-500" : "text-gray-400"}`}>projects done</p>
+              <p className={`text-xs sm:text-sm mt-1 ${isDark ? "text-slate-500" : "text-gray-400"}`}>projects done</p>
             </div>
 
             {/* Behind Schedule */}
-            <div className={`border rounded-xl p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className={`text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+            <div className={`border rounded-xl p-4 sm:p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
+              <div className="flex items-center justify-between mb-2 sm:mb-4">
+                <h3 className={`text-xs sm:text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                   Behind Schedule
                 </h3>
-                <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
                   <svg
-                    className="w-5 h-5 text-amber-400"
+                    className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -146,21 +188,21 @@ function DashboardContent() {
                   </svg>
                 </div>
               </div>
-              <p className={`text-3xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
+              <p className={`text-2xl sm:text-3xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
                 {projectStats.behindSchedule}
               </p>
-              <p className={`text-sm mt-1 ${isDark ? "text-slate-500" : "text-gray-400"}`}>need attention</p>
+              <p className={`text-xs sm:text-sm mt-1 ${isDark ? "text-slate-500" : "text-gray-400"}`}>need attention</p>
             </div>
 
             {/* Applications */}
-            <div className={`border rounded-xl p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className={`text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+            <div className={`border rounded-xl p-4 sm:p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
+              <div className="flex items-center justify-between mb-2 sm:mb-4">
+                <h3 className={`text-xs sm:text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                   New Applications
                 </h3>
-                <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
                   <svg
-                    className="w-5 h-5 text-purple-400"
+                    className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -174,21 +216,21 @@ function DashboardContent() {
                   </svg>
                 </div>
               </div>
-              <p className={`text-3xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
+              <p className={`text-2xl sm:text-3xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
                 {applicationStats.new}
               </p>
-              <p className={`text-sm mt-1 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+              <p className={`text-xs sm:text-sm mt-1 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
                 {applicationStats.total} total
               </p>
             </div>
           </div>
 
           {/* Content Sections */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
             {/* Recent Projects */}
-            <div className={`border rounded-xl p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+            <div className={`border rounded-xl p-4 sm:p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
+              <div className="flex items-center justify-between mb-4 sm:mb-6">
+                <h2 className={`text-base sm:text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
                   Recent Projects
                 </h2>
                 <a
@@ -198,23 +240,23 @@ function DashboardContent() {
                   View all
                 </a>
               </div>
-              <div className="space-y-4">
+              <div className="space-y-3 sm:space-y-4">
                 {projects?.slice(0, 5).map((project) => (
                   <div
                     key={project._id}
-                    className={`flex items-center justify-between p-4 rounded-lg border ${isDark ? "bg-slate-900/50 border-slate-700/50" : "bg-gray-50 border-gray-100"}`}
+                    className={`flex items-center justify-between p-3 sm:p-4 rounded-lg border ${isDark ? "bg-slate-900/50 border-slate-700/50" : "bg-gray-50 border-gray-100"}`}
                   >
                     <div className="flex-1 min-w-0">
-                      <h3 className={`font-medium truncate ${isDark ? "text-white" : "text-gray-900"}`}>
+                      <h3 className={`text-sm sm:text-base font-medium truncate ${isDark ? "text-white" : "text-gray-900"}`}>
                         {project.name}
                       </h3>
-                      <p className={`text-sm truncate ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                      <p className={`text-xs sm:text-sm truncate ${isDark ? "text-slate-500" : "text-gray-500"}`}>
                         {project.description}
                       </p>
                     </div>
-                    <div className="ml-4">
+                    <div className="ml-2 sm:ml-4">
                       <span
-                        className={`px-2 py-1 text-xs font-medium rounded-full ${
+                        className={`px-2 py-1 text-xs font-medium rounded-full whitespace-nowrap ${
                           project.status === "done"
                             ? "bg-green-500/20 text-green-400"
                             : project.status === "in_progress"
@@ -237,9 +279,9 @@ function DashboardContent() {
             </div>
 
             {/* Recent Applications */}
-            <div className={`border rounded-xl p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+            <div className={`border rounded-xl p-4 sm:p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
+              <div className="flex items-center justify-between mb-4 sm:mb-6">
+                <h2 className={`text-base sm:text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
                   Recent Applications
                 </h2>
                 <a
@@ -249,21 +291,21 @@ function DashboardContent() {
                   View all
                 </a>
               </div>
-              <div className="space-y-4">
+              <div className="space-y-3 sm:space-y-4">
                 {applications?.slice(0, 5).map((app) => (
                   <div
                     key={app._id}
-                    className={`flex items-center justify-between p-4 rounded-lg border ${isDark ? "bg-slate-900/50 border-slate-700/50" : "bg-gray-50 border-gray-100"}`}
+                    className={`flex items-center justify-between p-3 sm:p-4 rounded-lg border ${isDark ? "bg-slate-900/50 border-slate-700/50" : "bg-gray-50 border-gray-100"}`}
                   >
                     <div className="flex-1 min-w-0">
-                      <h3 className={`font-medium truncate ${isDark ? "text-white" : "text-gray-900"}`}>
+                      <h3 className={`text-sm sm:text-base font-medium truncate ${isDark ? "text-white" : "text-gray-900"}`}>
                         {app.firstName} {app.lastName}
                       </h3>
-                      <p className={`text-sm truncate ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                      <p className={`text-xs sm:text-sm truncate ${isDark ? "text-slate-500" : "text-gray-500"}`}>
                         {app.appliedJobTitle}
                       </p>
                     </div>
-                    <div className="ml-4 flex items-center gap-2">
+                    <div className="ml-2 sm:ml-4 flex items-center gap-1 sm:gap-2">
                       {app.candidateAnalysis && (
                         <span
                           className={`px-2 py-1 text-xs font-medium rounded-full ${
@@ -299,82 +341,98 @@ function DashboardContent() {
             </div>
           </div>
 
-          {/* Upcoming Interviews & Hiring Analytics */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Upcoming Interviews */}
-            <div className={`border rounded-xl p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
-                  Upcoming Interviews
+          {/* Website Messages & Hiring Analytics */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+            {/* Website Messages */}
+            <div className={`border rounded-xl p-4 sm:p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
+              <div className="flex items-center justify-between mb-4 sm:mb-6">
+                <h2 className={`text-base sm:text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  Website Messages
                 </h2>
-                <span className={`px-2 py-1 text-xs font-medium rounded-full ${isDark ? "bg-orange-500/20 text-orange-400" : "bg-orange-100 text-orange-600"}`}>
-                  {upcomingInterviews?.length || 0} scheduled
-                </span>
+                <div className="flex items-center gap-2">
+                  {newMessageCount > 0 && (
+                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${isDark ? "bg-cyan-500/20 text-cyan-400" : "bg-blue-100 text-blue-600"}`}>
+                      {newMessageCount} new
+                    </span>
+                  )}
+                  <Link
+                    href="/website-messages"
+                    className={`text-sm transition-colors ${isDark ? "text-cyan-400 hover:text-cyan-300" : "text-blue-600 hover:text-blue-700"}`}
+                  >
+                    View all
+                  </Link>
+                </div>
               </div>
               <div className="space-y-3">
-                {upcomingInterviews && upcomingInterviews.length > 0 ? (
-                  upcomingInterviews.slice(0, 5).map((interview) => (
+                {websiteMessages.length > 0 ? (
+                  websiteMessages.map((msg) => (
                     <Link
-                      key={interview._id}
-                      href={`/applications/${interview._id}`}
+                      key={`${msg.type}-${msg._id}`}
+                      href={`/website-messages?type=${msg.type}&id=${msg._id}`}
                       className={`block p-4 rounded-lg border transition-colors ${isDark ? "bg-slate-900/50 border-slate-700/50 hover:border-slate-600" : "bg-gray-50 border-gray-100 hover:border-gray-300"}`}
                     >
                       <div className="flex items-center justify-between">
-                        <div>
-                          <h3 className={`font-medium hover:underline ${isDark ? "text-white" : "text-gray-900"}`}>
-                            {interview.firstName} {interview.lastName}
-                          </h3>
-                          <p className={`text-sm ${isDark ? "text-slate-500" : "text-gray-500"}`}>
-                            {interview.appliedJobTitle}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className={`font-medium truncate ${isDark ? "text-white" : "text-gray-900"}`}>
+                              {msg.type === "dealer" ? msg.businessName : msg.name}
+                            </h3>
+                            <span className={`px-2 py-0.5 text-xs rounded-full flex-shrink-0 ${
+                              msg.type === "dealer"
+                                ? isDark ? "bg-purple-500/20 text-purple-400" : "bg-purple-100 text-purple-600"
+                                : isDark ? "bg-slate-600/50 text-slate-300" : "bg-gray-200 text-gray-600"
+                            }`}>
+                              {msg.type === "dealer" ? "Dealer" : "Contact"}
+                            </span>
+                            {msg.status === "new" && (
+                              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isDark ? "bg-cyan-400" : "bg-blue-500"}`}></span>
+                            )}
+                          </div>
+                          <p className={`text-sm truncate ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                            {msg.type === "dealer" ? msg.name : msg.subject}
                           </p>
                         </div>
-                        <div className="text-right">
-                          <p className={`font-medium ${isDark ? "text-orange-400" : "text-orange-600"}`}>
-                            {interview.scheduledInterviewDate && new Date(interview.scheduledInterviewDate + "T00:00:00").toLocaleDateString("en-US", {
-                              month: "short",
-                              day: "numeric",
-                            })}
-                          </p>
-                          <p className={`text-sm ${isDark ? "text-slate-500" : "text-gray-500"}`}>
-                            {interview.scheduledInterviewTime}
-                          </p>
-                        </div>
-                      </div>
-                      {interview.scheduledInterviewLocation && (
-                        <p className={`text-xs mt-2 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
-                          {interview.scheduledInterviewLocation}
+                        <p className={`text-xs ml-4 flex-shrink-0 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                          {new Date(msg.createdAt).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                          })}
                         </p>
-                      )}
+                      </div>
                     </Link>
                   ))
                 ) : (
                   <div className={`text-center py-8 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
                     <svg className={`w-12 h-12 mx-auto mb-3 ${isDark ? "text-slate-600" : "text-gray-300"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                     </svg>
-                    <p>No upcoming interviews</p>
+                    <p>No website messages</p>
                   </div>
                 )}
               </div>
             </div>
 
             {/* Hiring Analytics */}
-            <div className={`border rounded-xl p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+            <div className={`border rounded-xl p-4 sm:p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
+              <div className="flex items-center justify-between mb-4 sm:mb-6">
+                <h2 className={`text-base sm:text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
                   Hiring Analytics
                 </h2>
-                <span className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>
-                  Based on candidate scores
-                </span>
+                <div className="flex items-center gap-3">
+                  {upcomingInterviews && upcomingInterviews.length > 0 && (
+                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${isDark ? "bg-orange-500/20 text-orange-400" : "bg-orange-100 text-orange-600"}`}>
+                      {upcomingInterviews.length} interviews
+                    </span>
+                  )}
+                </div>
               </div>
               {hiringAnalytics ? (
-                <div className="space-y-6">
-                  {/* Score Comparisons */}
-                  <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-4">
+                  {/* Score Comparisons - More compact */}
+                  <div className="grid grid-cols-3 gap-3">
                     <div className="text-center">
                       <p className={`text-xs mb-1 ${isDark ? "text-slate-500" : "text-gray-400"}`}>Hired Avg</p>
-                      <p className={`text-2xl font-bold ${hiringAnalytics.hiredStats.avgOverallScore !== null ? (hiringAnalytics.hiredStats.avgOverallScore >= 70 ? "text-green-400" : hiringAnalytics.hiredStats.avgOverallScore >= 50 ? "text-amber-400" : "text-red-400") : isDark ? "text-slate-500" : "text-gray-400"}`}>
+                      <p className={`text-xl font-bold ${hiringAnalytics.hiredStats.avgOverallScore !== null ? (hiringAnalytics.hiredStats.avgOverallScore >= 70 ? "text-green-400" : hiringAnalytics.hiredStats.avgOverallScore >= 50 ? "text-amber-400" : "text-red-400") : isDark ? "text-slate-500" : "text-gray-400"}`}>
                         {hiringAnalytics.hiredStats.avgOverallScore !== null ? `${hiringAnalytics.hiredStats.avgOverallScore}%` : "—"}
                       </p>
                       <p className={`text-xs ${isDark ? "text-slate-600" : "text-gray-400"}`}>
@@ -382,61 +440,81 @@ function DashboardContent() {
                       </p>
                     </div>
                     <div className="text-center">
-                      <p className={`text-xs mb-1 ${isDark ? "text-slate-500" : "text-gray-400"}`}>Interviewed Avg</p>
-                      <p className={`text-2xl font-bold ${hiringAnalytics.interviewedStats.avgOverallScore !== null ? (hiringAnalytics.interviewedStats.avgOverallScore >= 70 ? "text-green-400" : hiringAnalytics.interviewedStats.avgOverallScore >= 50 ? "text-amber-400" : "text-red-400") : isDark ? "text-slate-500" : "text-gray-400"}`}>
+                      <p className={`text-xs mb-1 ${isDark ? "text-slate-500" : "text-gray-400"}`}>Interviewed</p>
+                      <p className={`text-xl font-bold ${hiringAnalytics.interviewedStats.avgOverallScore !== null ? (hiringAnalytics.interviewedStats.avgOverallScore >= 70 ? "text-green-400" : hiringAnalytics.interviewedStats.avgOverallScore >= 50 ? "text-amber-400" : "text-red-400") : isDark ? "text-slate-500" : "text-gray-400"}`}>
                         {hiringAnalytics.interviewedStats.avgOverallScore !== null ? `${hiringAnalytics.interviewedStats.avgOverallScore}%` : "—"}
                       </p>
                       <p className={`text-xs ${isDark ? "text-slate-600" : "text-gray-400"}`}>
-                        {hiringAnalytics.interviewedStats.count} interviewed
+                        {hiringAnalytics.interviewedStats.count} total
                       </p>
                     </div>
                     <div className="text-center">
-                      <p className={`text-xs mb-1 ${isDark ? "text-slate-500" : "text-gray-400"}`}>Rejected Avg</p>
-                      <p className={`text-2xl font-bold ${hiringAnalytics.rejectedStats.avgOverallScore !== null ? (hiringAnalytics.rejectedStats.avgOverallScore >= 70 ? "text-green-400" : hiringAnalytics.rejectedStats.avgOverallScore >= 50 ? "text-amber-400" : "text-red-400") : isDark ? "text-slate-500" : "text-gray-400"}`}>
+                      <p className={`text-xs mb-1 ${isDark ? "text-slate-500" : "text-gray-400"}`}>Rejected</p>
+                      <p className={`text-xl font-bold ${hiringAnalytics.rejectedStats.avgOverallScore !== null ? (hiringAnalytics.rejectedStats.avgOverallScore >= 70 ? "text-green-400" : hiringAnalytics.rejectedStats.avgOverallScore >= 50 ? "text-amber-400" : "text-red-400") : isDark ? "text-slate-500" : "text-gray-400"}`}>
                         {hiringAnalytics.rejectedStats.avgOverallScore !== null ? `${hiringAnalytics.rejectedStats.avgOverallScore}%` : "—"}
                       </p>
                       <p className={`text-xs ${isDark ? "text-slate-600" : "text-gray-400"}`}>
-                        {hiringAnalytics.rejectedStats.count} rejected
+                        {hiringAnalytics.rejectedStats.count} total
                       </p>
                     </div>
                   </div>
 
-                  {/* Conversion Rates */}
-                  <div className={`p-4 rounded-lg border ${isDark ? "bg-slate-900/50 border-slate-700" : "bg-gray-50 border-gray-100"}`}>
-                    <p className={`text-xs font-medium mb-3 ${isDark ? "text-slate-400" : "text-gray-500"}`}>Conversion Funnel</p>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className={`text-sm ${isDark ? "text-slate-300" : "text-gray-600"}`}>Applications → Interviewed</span>
-                        <span className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>{hiringAnalytics.conversionRates.interviewRate}%</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className={`text-sm ${isDark ? "text-slate-300" : "text-gray-600"}`}>Interviewed → Hired</span>
-                        <span className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>{hiringAnalytics.conversionRates.hireRate}%</span>
-                      </div>
-                      <div className={`flex items-center justify-between pt-2 border-t ${isDark ? "border-slate-700" : "border-gray-200"}`}>
-                        <span className={`text-sm font-medium ${isDark ? "text-slate-300" : "text-gray-600"}`}>Overall Hire Rate</span>
-                        <span className={`font-bold ${isDark ? "text-cyan-400" : "text-blue-600"}`}>{hiringAnalytics.conversionRates.overallHireRate}%</span>
-                      </div>
+                  {/* Conversion Rates - Compact */}
+                  <div className={`p-3 rounded-lg border ${isDark ? "bg-slate-900/50 border-slate-700" : "bg-gray-50 border-gray-100"}`}>
+                    <div className="flex items-center justify-between">
+                      <span className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>App → Interview</span>
+                      <span className={`text-sm font-medium ${isDark ? "text-white" : "text-gray-900"}`}>{hiringAnalytics.conversionRates.interviewRate}%</span>
+                    </div>
+                    <div className="flex items-center justify-between mt-1">
+                      <span className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>Interview → Hired</span>
+                      <span className={`text-sm font-medium ${isDark ? "text-white" : "text-gray-900"}`}>{hiringAnalytics.conversionRates.hireRate}%</span>
+                    </div>
+                    <div className={`flex items-center justify-between mt-2 pt-2 border-t ${isDark ? "border-slate-700" : "border-gray-200"}`}>
+                      <span className={`text-xs font-medium ${isDark ? "text-slate-300" : "text-gray-600"}`}>Overall Rate</span>
+                      <span className={`text-sm font-bold ${isDark ? "text-cyan-400" : "text-blue-600"}`}>{hiringAnalytics.conversionRates.overallHireRate}%</span>
                     </div>
                   </div>
 
-                  {/* Breakdown by score type */}
-                  {hiringAnalytics.hiredStats.count > 0 && (
-                    <div>
-                      <p className={`text-xs font-medium mb-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>Hired Candidate Profile</p>
-                      <div className="flex gap-4">
-                        <div className={`flex-1 p-3 rounded-lg text-center ${isDark ? "bg-green-500/10 border border-green-500/20" : "bg-green-50"}`}>
-                          <p className={`text-xs ${isDark ? "text-green-400/70" : "text-green-600"}`}>Stability</p>
-                          <p className={`text-lg font-bold ${isDark ? "text-green-400" : "text-green-600"}`}>
-                            {hiringAnalytics.hiredStats.avgStabilityScore ?? "—"}%
-                          </p>
-                        </div>
-                        <div className={`flex-1 p-3 rounded-lg text-center ${isDark ? "bg-blue-500/10 border border-blue-500/20" : "bg-blue-50"}`}>
-                          <p className={`text-xs ${isDark ? "text-blue-400/70" : "text-blue-600"}`}>Experience</p>
-                          <p className={`text-lg font-bold ${isDark ? "text-blue-400" : "text-blue-600"}`}>
-                            {hiringAnalytics.hiredStats.avgExperienceScore ?? "—"}%
-                          </p>
-                        </div>
+                  {/* Upcoming Interviews Section */}
+                  {upcomingInterviews && upcomingInterviews.length > 0 && (
+                    <div className={`pt-3 border-t ${isDark ? "border-slate-700" : "border-gray-200"}`}>
+                      <p className={`text-xs font-medium mb-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>Upcoming Interviews</p>
+                      <div className="space-y-2">
+                        {upcomingInterviews.slice(0, 3).map((interview) => (
+                          <Link
+                            key={interview._id}
+                            href={`/applications/${interview._id}`}
+                            className={`flex items-center justify-between p-2 rounded-lg transition-colors ${isDark ? "hover:bg-slate-700/50" : "hover:bg-gray-100"}`}
+                          >
+                            <div className="min-w-0">
+                              <p className={`text-sm font-medium truncate ${isDark ? "text-white" : "text-gray-900"}`}>
+                                {interview.firstName} {interview.lastName}
+                              </p>
+                              <p className={`text-xs truncate ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                                {interview.appliedJobTitle}
+                              </p>
+                            </div>
+                            <div className="text-right ml-2 flex-shrink-0">
+                              <p className={`text-xs font-medium ${isDark ? "text-orange-400" : "text-orange-600"}`}>
+                                {interview.scheduledInterviewDate && new Date(interview.scheduledInterviewDate + "T00:00:00").toLocaleDateString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                })}
+                              </p>
+                              <p className={`text-xs ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                                {interview.scheduledInterviewTime}
+                              </p>
+                            </div>
+                          </Link>
+                        ))}
+                        {upcomingInterviews.length > 3 && (
+                          <Link
+                            href="/applications?status=interview_scheduled"
+                            className={`block text-center text-xs py-1 ${isDark ? "text-cyan-400 hover:text-cyan-300" : "text-blue-600 hover:text-blue-700"}`}
+                          >
+                            View all {upcomingInterviews.length} interviews
+                          </Link>
+                        )}
                       </div>
                     </div>
                   )}
@@ -453,9 +531,9 @@ function DashboardContent() {
           </div>
 
           {/* Repositories */}
-          <div className={`border rounded-xl p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
-            <div className="flex items-center justify-between mb-6">
-              <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>Repositories</h2>
+          <div className={`border rounded-xl p-4 sm:p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
+            <div className="flex items-center justify-between mb-4 sm:mb-6">
+              <h2 className={`text-base sm:text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>Repositories</h2>
               <a
                 href="/repositories"
                 className={`text-sm transition-colors ${isDark ? "text-cyan-400 hover:text-cyan-300" : "text-blue-600 hover:text-blue-700"}`}
