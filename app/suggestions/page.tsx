@@ -36,7 +36,7 @@ function SuggestionsContent() {
   const [denialReason, setDenialReason] = useState("");
 
   // Queries
-  const allUsers = useQuery(api.queries.getAllUsers) || [];
+  const allUsers = useQuery(api.auth.getAllUsers) || [];
   const inboxSuggestions = useQuery(
     api.projectSuggestions.getInbox,
     user?._id ? { userId: user._id as Id<"users"> } : "skip"
