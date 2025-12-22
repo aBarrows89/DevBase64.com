@@ -89,46 +89,65 @@ export default function BulkUploadPage() {
     e.target.value = ""; // Reset input
   };
 
-  // Process all pending files
-  const processAllFiles = async () => {
-    setIsProcessing(true);
+  // Helper function to add timeout to promises
+  const withTimeout = <T,>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> => {
+    return Promise.race([
+      promise,
+      new Promise<T>((_, reject) =>
+        setTimeout(() => reject(new Error(errorMessage)), timeoutMs)
+      ),
+    ]);
+  };
 
-    for (let i = 0; i < files.length; i++) {
-      if (files[i].status !== "pending") continue;
+  // Process a single file with timeout protection
+  // Takes the file directly to avoid closure issues with stale state
+  const processSingleFile = async (file: File, index: number): Promise<void> => {
+    // Update status to extracting
+    setFiles((prev) => {
+      const updated = [...prev];
+      if (updated[index]) {
+        updated[index] = { ...updated[index], status: "extracting" };
+      }
+      return updated;
+    });
 
-      // Update status to extracting
+    try {
+      // Extract text from PDF with 30 second timeout
+      const resumeText = await withTimeout(
+        extractTextFromPdf(file),
+        30000,
+        "PDF extraction timed out - file may be too large or corrupted"
+      );
+
+      if (!resumeText || resumeText.trim().length < 50) {
+        throw new Error("Could not extract text from PDF - file may be scanned or image-based");
+      }
+
+      // Update status to processing
       setFiles((prev) => {
         const updated = [...prev];
-        updated[i] = { ...updated[i], status: "extracting" };
+        if (updated[index]) {
+          updated[index] = { ...updated[index], status: "processing" };
+        }
         return updated;
       });
 
-      try {
-        // Extract text from PDF
-        const resumeText = await extractTextFromPdf(files[i].file);
+      // Process through AI with 2 minute timeout (AI can take a while)
+      const result = await withTimeout(
+        processResume({
+          resumeText,
+          fileName: file.name,
+        }),
+        120000,
+        "AI processing timed out - please try again"
+      );
 
-        if (!resumeText || resumeText.trim().length < 50) {
-          throw new Error("Could not extract text from PDF - file may be scanned or image-based");
-        }
-
-        // Update status to processing
+      if (result.success) {
         setFiles((prev) => {
           const updated = [...prev];
-          updated[i] = { ...updated[i], status: "processing" };
-          return updated;
-        });
-
-        // Process through AI
-        const result = await processResume({
-          resumeText,
-          fileName: files[i].file.name,
-        });
-
-        if (result.success) {
-          setFiles((prev) => {
-            const updated = [...prev];
-            updated[i] = {
-              ...updated[i],
+          if (updated[index]) {
+            updated[index] = {
+              ...updated[index],
               status: "success",
               result: {
                 candidateName: result.candidateName,
@@ -137,21 +156,46 @@ export default function BulkUploadPage() {
                 applicationId: result.applicationId,
               },
             };
-            return updated;
-          });
-        } else {
-          throw new Error(result.error || "Processing failed");
-        }
-      } catch (error: any) {
-        setFiles((prev) => {
-          const updated = [...prev];
-          updated[i] = {
-            ...updated[i],
+          }
+          return updated;
+        });
+      } else {
+        throw new Error(result.error || "Processing failed");
+      }
+    } catch (error: any) {
+      console.error(`Error processing file ${file.name}:`, error);
+      setFiles((prev) => {
+        const updated = [...prev];
+        if (updated[index]) {
+          updated[index] = {
+            ...updated[index],
             status: "error",
             error: error?.message || "Unknown error",
           };
-          return updated;
-        });
+        }
+        return updated;
+      });
+    }
+  };
+
+  // Process all pending files
+  const processAllFiles = async () => {
+    setIsProcessing(true);
+
+    // Capture current files state at the start of processing
+    // This prevents closure issues where we'd read stale state
+    const filesToProcess = files
+      .map((f, i) => ({ file: f.file, index: i, status: f.status }))
+      .filter((f) => f.status === "pending");
+
+    // Process files sequentially but with timeout protection
+    for (const { file, index } of filesToProcess) {
+      try {
+        await processSingleFile(file, index);
+      } catch (error) {
+        // This shouldn't happen as processSingleFile handles its own errors
+        // but just in case, we continue to the next file
+        console.error("Unexpected error in processAllFiles:", error);
       }
     }
 
@@ -168,9 +212,19 @@ export default function BulkUploadPage() {
     setFiles([]);
   };
 
+  // Reset failed files to pending so they can be retried
+  const retryFailed = () => {
+    setFiles((prev) =>
+      prev.map((f) =>
+        f.status === "error" ? { ...f, status: "pending" as const, error: undefined } : f
+      )
+    );
+  };
+
   const pendingCount = files.filter((f) => f.status === "pending").length;
   const successCount = files.filter((f) => f.status === "success").length;
   const errorCount = files.filter((f) => f.status === "error").length;
+  const processingCount = files.filter((f) => f.status === "extracting" || f.status === "processing").length;
 
   return (
     <ProtectedRoute>
@@ -193,8 +247,14 @@ export default function BulkUploadPage() {
                   <span className="text-slate-400">
                     {files.length} file{files.length !== 1 ? "s" : ""}
                   </span>
+                  {processingCount > 0 && (
+                    <span className="text-cyan-400 flex items-center gap-1">
+                      <div className="w-3 h-3 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                      Processing {processingCount}
+                    </span>
+                  )}
                   {successCount > 0 && (
-                    <span className="text-green-400">{successCount} processed</span>
+                    <span className="text-green-400">{successCount} done</span>
                   )}
                   {errorCount > 0 && (
                     <span className="text-red-400">{errorCount} failed</span>
@@ -289,11 +349,22 @@ export default function BulkUploadPage() {
                   >
                     Clear All
                   </button>
+                  {errorCount > 0 && !isProcessing && (
+                    <button
+                      onClick={retryFailed}
+                      className="px-4 py-2 text-sm bg-red-600/20 text-red-400 hover:bg-red-600/30 border border-red-600/30 rounded-lg transition-colors"
+                    >
+                      Retry Failed ({errorCount})
+                    </button>
+                  )}
                   <button
                     onClick={processAllFiles}
                     disabled={isProcessing || pendingCount === 0}
-                    className="px-6 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:bg-slate-700 disabled:text-slate-500 rounded-lg font-medium transition-colors"
+                    className="px-6 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:bg-slate-700 disabled:text-slate-500 rounded-lg font-medium transition-colors flex items-center gap-2"
                   >
+                    {isProcessing && (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    )}
                     {isProcessing ? "Processing..." : `Process All (${pendingCount})`}
                   </button>
                 </div>
