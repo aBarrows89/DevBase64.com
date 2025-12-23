@@ -17,6 +17,7 @@ import type * as auth from "../auth.js";
 import type * as bulkUpload from "../bulkUpload.js";
 import type * as contactMessages from "../contactMessages.js";
 import type * as dealerInquiries from "../dealerInquiries.js";
+import type * as documents from "../documents.js";
 import type * as equipment from "../equipment.js";
 import type * as jobs from "../jobs.js";
 import type * as locations from "../locations.js";
@@ -46,6 +47,7 @@ declare const fullApi: ApiFromModules<{
   bulkUpload: typeof bulkUpload;
   contactMessages: typeof contactMessages;
   dealerInquiries: typeof dealerInquiries;
+  documents: typeof documents;
   equipment: typeof equipment;
   jobs: typeof jobs;
   locations: typeof locations;

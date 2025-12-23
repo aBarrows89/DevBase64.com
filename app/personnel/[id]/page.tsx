@@ -277,6 +277,9 @@ function PersonnelDetailContent() {
     hourlyRate: 0,
     notes: "",
     hireDate: "",
+    emergencyContactName: "",
+    emergencyContactPhone: "",
+    emergencyContactRelationship: "",
   });
 
   const [terminateForm, setTerminateForm] = useState({
@@ -295,6 +298,9 @@ function PersonnelDetailContent() {
         hourlyRate: personnel.hourlyRate || 0,
         notes: personnel.notes || "",
         hireDate: personnel.hireDate,
+        emergencyContactName: personnel.emergencyContact?.name || "",
+        emergencyContactPhone: personnel.emergencyContact?.phone || "",
+        emergencyContactRelationship: personnel.emergencyContact?.relationship || "",
       });
     }
   };
@@ -435,6 +441,11 @@ function PersonnelDetailContent() {
         hourlyRate?: number;
         notes?: string;
         hireDate?: string;
+        emergencyContact?: {
+          name: string;
+          phone: string;
+          relationship: string;
+        };
       } = {
         personnelId,
         email: editPersonnelForm.email,
@@ -445,9 +456,18 @@ function PersonnelDetailContent() {
         notes: editPersonnelForm.notes || undefined,
       };
 
-      // Only super_admin can edit hire date
-      if (user?.role === "super_admin" && editPersonnelForm.hireDate) {
+      // Allow admins to edit hire date
+      if (editPersonnelForm.hireDate) {
         updateData.hireDate = editPersonnelForm.hireDate;
+      }
+
+      // Add emergency contact if provided
+      if (editPersonnelForm.emergencyContactName && editPersonnelForm.emergencyContactPhone) {
+        updateData.emergencyContact = {
+          name: editPersonnelForm.emergencyContactName,
+          phone: editPersonnelForm.emergencyContactPhone,
+          relationship: editPersonnelForm.emergencyContactRelationship || "Not specified",
+        };
       }
 
       await updatePersonnel(updateData);
@@ -1790,8 +1810,8 @@ function PersonnelDetailContent() {
 
         {/* Edit Personnel Modal */}
         {showEditPersonnelModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className={`w-full max-w-md rounded-xl p-6 ${isDark ? "bg-slate-800" : "bg-white"}`}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className={`w-full max-w-md max-h-[90vh] overflow-y-auto rounded-xl p-6 ${isDark ? "bg-slate-800" : "bg-white"}`}>
               <h2 className={`text-lg font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
                 Edit Personnel Information
               </h2>
@@ -1869,23 +1889,66 @@ function PersonnelDetailContent() {
                     className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white placeholder-slate-500" : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400"} border focus:outline-none`}
                   />
                 </div>
-                {/* Start Date - Only visible for super_admin */}
-                {user?.role === "super_admin" && (
-                  <div>
-                    <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                      Start Date (Super Admin Only)
-                    </label>
-                    <input
-                      type="date"
-                      value={editPersonnelForm.hireDate}
-                      onChange={(e) => setEditPersonnelForm({ ...editPersonnelForm, hireDate: e.target.value })}
-                      className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"} border focus:outline-none`}
-                    />
-                    <p className={`text-xs mt-1 ${isDark ? "text-amber-400/70" : "text-amber-600"}`}>
-                      Warning: Changing the start date will affect tenure calculations and milestone tracking.
-                    </p>
+                {/* Start Date */}
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    Start Date
+                  </label>
+                  <input
+                    type="date"
+                    value={editPersonnelForm.hireDate}
+                    onChange={(e) => setEditPersonnelForm({ ...editPersonnelForm, hireDate: e.target.value })}
+                    className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"} border focus:outline-none`}
+                  />
+                  <p className={`text-xs mt-1 ${isDark ? "text-amber-400/70" : "text-amber-600"}`}>
+                    Note: Changing the start date will affect tenure calculations and milestone tracking.
+                  </p>
+                </div>
+
+                {/* Emergency Contact Section */}
+                <div className={`pt-4 border-t ${isDark ? "border-slate-700" : "border-gray-200"}`}>
+                  <h3 className={`text-sm font-semibold mb-3 ${isDark ? "text-white" : "text-gray-900"}`}>
+                    Emergency Contact
+                  </h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                        Name
+                      </label>
+                      <input
+                        type="text"
+                        value={editPersonnelForm.emergencyContactName}
+                        onChange={(e) => setEditPersonnelForm({ ...editPersonnelForm, emergencyContactName: e.target.value })}
+                        placeholder="Emergency contact name"
+                        className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white placeholder-slate-500" : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400"} border focus:outline-none`}
+                      />
+                    </div>
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                        Phone
+                      </label>
+                      <input
+                        type="tel"
+                        value={editPersonnelForm.emergencyContactPhone}
+                        onChange={(e) => setEditPersonnelForm({ ...editPersonnelForm, emergencyContactPhone: e.target.value })}
+                        placeholder="Emergency contact phone"
+                        className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white placeholder-slate-500" : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400"} border focus:outline-none`}
+                      />
+                    </div>
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                        Relationship
+                      </label>
+                      <input
+                        type="text"
+                        value={editPersonnelForm.emergencyContactRelationship}
+                        onChange={(e) => setEditPersonnelForm({ ...editPersonnelForm, emergencyContactRelationship: e.target.value })}
+                        placeholder="e.g., Spouse, Parent, Sibling"
+                        className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white placeholder-slate-500" : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400"} border focus:outline-none`}
+                      />
+                    </div>
                   </div>
-                )}
+                </div>
               </div>
               <div className="flex gap-3 mt-6">
                 <button
