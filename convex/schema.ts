@@ -527,4 +527,25 @@ export default defineSchema({
   })
     .index("by_equipment", ["equipmentType", "equipmentId"])
     .index("by_created", ["createdAt"]),
+
+  // ============ DOCUMENT HUB ============
+  // Frequently used documents (forms, templates, etc.)
+  documents: defineTable({
+    name: v.string(), // Document name/title
+    description: v.optional(v.string()), // Brief description
+    category: v.string(), // "forms" | "policies" | "templates" | "training" | "other"
+    fileId: v.id("_storage"), // Convex storage ID for the file
+    fileName: v.string(), // Original filename
+    fileType: v.string(), // MIME type (application/pdf, etc.)
+    fileSize: v.number(), // File size in bytes
+    uploadedBy: v.id("users"),
+    uploadedByName: v.string(), // For display purposes
+    isActive: v.boolean(),
+    downloadCount: v.number(), // Track usage
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_category", ["category"])
+    .index("by_active", ["isActive"])
+    .index("by_created", ["createdAt"]),
 });
