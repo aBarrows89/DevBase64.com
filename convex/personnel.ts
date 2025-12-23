@@ -191,6 +191,7 @@ export const create = mutation({
     employeeType: v.string(),
     hireDate: v.string(),
     hourlyRate: v.optional(v.number()),
+    locationId: v.optional(v.id("locations")),
     emergencyContact: v.optional(
       v.object({
         name: v.string(),
@@ -213,6 +214,7 @@ export const create = mutation({
       employeeType: args.employeeType,
       hireDate: args.hireDate,
       hourlyRate: args.hourlyRate,
+      locationId: args.locationId,
       status: "active",
       emergencyContact: args.emergencyContact,
       notes: args.notes,
@@ -235,6 +237,7 @@ export const update = mutation({
     position: v.optional(v.string()),
     department: v.optional(v.string()),
     employeeType: v.optional(v.string()),
+    hireDate: v.optional(v.string()), // Only super_admin should be able to edit this
     hourlyRate: v.optional(v.number()),
     status: v.optional(v.string()),
     emergencyContact: v.optional(

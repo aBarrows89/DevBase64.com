@@ -6,7 +6,7 @@ import { ThemeProvider } from "./theme-context";
 import { SidebarProvider } from "./sidebar-context";
 
 const convex = new ConvexReactClient(
-  process.env.NEXT_PUBLIC_CONVEX_URL || "https://your-deployment.convex.cloud"
+  process.env.NEXT_PUBLIC_CONVEX_URL || "https://outstanding-dalmatian-787.convex.cloud"
 );
 
 export function Providers({ children }: { children: React.ReactNode }) {

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
@@ -43,6 +43,9 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userId, setUserId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  // Track if we've ever successfully loaded user data for this session
+  // This prevents clearing the session during transient null states (navigation, resubscription)
+  const hasLoadedUserData = useRef(false);
 
   const loginMutation = useMutation(api.auth.login);
   const userData = useQuery(
@@ -66,16 +69,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Update loading state based on user data
-  // Also clear invalid sessions if the user query returns null (user not found)
+  // Track successful user loads to avoid clearing session during transient null states
   useEffect(() => {
     if (userId && userData === undefined) {
+      // Query is loading
       setIsLoading(true);
+    } else if (userId && userData) {
+      // Successfully loaded user data - mark as loaded
+      hasLoadedUserData.current = true;
+      setIsLoading(false);
     } else if (userId && userData === null) {
-      // User ID in localStorage doesn't match any user in database
-      // This can happen if the ID is from a different table/project
-      console.warn("Invalid user session detected, clearing...");
-      localStorage.removeItem("devbase64_user_id");
-      setUserId(null);
+      // Query returned null - only clear if we've never successfully loaded
+      // This prevents logout during navigation/resubscription when queries temporarily return null
+      if (!hasLoadedUserData.current) {
+        // User ID in localStorage doesn't match any user in database
+        // This can happen if the ID is from a different table/project
+        console.warn("Invalid user session detected, clearing...");
+        localStorage.removeItem("devbase64_user_id");
+        setUserId(null);
+      }
       setIsLoading(false);
     } else {
       setIsLoading(false);
@@ -102,6 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = () => {
     setUserId(null);
     localStorage.removeItem("devbase64_user_id");
+    hasLoadedUserData.current = false; // Reset for next login
   };
 
   const user: User | null = userData

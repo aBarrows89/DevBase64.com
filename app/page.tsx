@@ -26,7 +26,6 @@ function DashboardContent() {
   const isDark = theme === "dark";
   const projects = useQuery(api.projects.getAll);
   const applications = useQuery(api.applications.getRecent);
-  const repositories = useQuery(api.repositories.getAll);
   const upcomingInterviews = useQuery(api.applications.getUpcomingInterviews);
   const hiringAnalytics = useQuery(api.applications.getHiringAnalytics);
   const contactMessages = useQuery(api.contactMessages.getRecent);
@@ -530,61 +529,6 @@ function DashboardContent() {
             </div>
           </div>
 
-          {/* Repositories */}
-          <div className={`border rounded-xl p-4 sm:p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
-            <div className="flex items-center justify-between mb-4 sm:mb-6">
-              <h2 className={`text-base sm:text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>Repositories</h2>
-              <a
-                href="/repositories"
-                className={`text-sm transition-colors ${isDark ? "text-cyan-400 hover:text-cyan-300" : "text-blue-600 hover:text-blue-700"}`}
-              >
-                View all
-              </a>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {repositories?.slice(0, 6).map((repo) => (
-                <a
-                  key={repo._id}
-                  href={repo.htmlUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`p-4 rounded-lg border transition-colors ${isDark ? "bg-slate-900/50 border-slate-700/50 hover:border-slate-600" : "bg-gray-50 border-gray-100 hover:border-gray-300"}`}
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <h3 className={`font-medium truncate ${isDark ? "text-white" : "text-gray-900"}`}>
-                      {repo.name}
-                    </h3>
-                    {repo.isPrivate && (
-                      <span className={`px-2 py-0.5 text-xs rounded ${isDark ? "bg-slate-700 text-slate-300" : "bg-gray-200 text-gray-600"}`}>
-                        Private
-                      </span>
-                    )}
-                  </div>
-                  <p className={`text-sm line-clamp-2 mb-3 ${isDark ? "text-slate-500" : "text-gray-500"}`}>
-                    {repo.description || "No description"}
-                  </p>
-                  <div className={`flex items-center gap-4 text-xs ${isDark ? "text-slate-400" : "text-gray-400"}`}>
-                    {repo.language && (
-                      <span className="flex items-center gap-1">
-                        <span className={`w-2 h-2 rounded-full ${isDark ? "bg-cyan-400" : "bg-blue-500"}`}></span>
-                        {repo.language}
-                      </span>
-                    )}
-                    <span className="flex items-center gap-1">
-                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 16 16">
-                        <path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z" />
-                      </svg>
-                      {repo.starCount}
-                    </span>
-                  </div>
-                </a>
-              )) || (
-                <p className={`text-center py-8 col-span-full ${isDark ? "text-slate-500" : "text-gray-400"}`}>
-                  No repositories synced yet
-                </p>
-              )}
-            </div>
-          </div>
         </div>
       </main>
     </div>

@@ -184,26 +184,6 @@ export default defineSchema({
     .index("by_job", ["appliedJobId"])
     .index("by_created", ["createdAt"]),
 
-  // ============ GITHUB REPOSITORIES ============
-  repositories: defineTable({
-    githubId: v.number(),
-    name: v.string(),
-    fullName: v.string(),
-    description: v.optional(v.string()),
-    htmlUrl: v.string(),
-    cloneUrl: v.string(),
-    defaultBranch: v.string(),
-    isPrivate: v.boolean(),
-    language: v.optional(v.string()),
-    starCount: v.number(),
-    forkCount: v.number(),
-    openIssuesCount: v.number(),
-    lastPushedAt: v.string(),
-    lastSyncedAt: v.number(),
-  })
-    .index("by_github_id", ["githubId"])
-    .index("by_name", ["name"]),
-
   // ============ MESSAGING ============
   conversations: defineTable({
     type: v.string(), // "direct" | "project"
@@ -293,6 +273,7 @@ export default defineSchema({
     applicationId: v.optional(v.id("applications")), // Link to original application
     position: v.string(), // Job title
     department: v.string(), // "Warehouse", "Sales", "Management", etc.
+    locationId: v.optional(v.id("locations")), // Assigned work location
     employeeType: v.string(), // "full_time" | "part_time" | "seasonal"
     hireDate: v.string(), // YYYY-MM-DD
     hourlyRate: v.optional(v.number()),
@@ -472,4 +453,78 @@ export default defineSchema({
     .index("by_suggested_to", ["suggestedTo"])
     .index("by_suggested_by", ["suggestedBy"])
     .index("by_status", ["status"]),
+
+  // ============ LOCATIONS ============
+  locations: defineTable({
+    name: v.string(), // e.g., "Main Warehouse", "Distribution Center 2"
+    address: v.optional(v.string()),
+    city: v.optional(v.string()),
+    state: v.optional(v.string()),
+    zipCode: v.optional(v.string()),
+    isActive: v.boolean(),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_name", ["name"])
+    .index("by_active", ["isActive"]),
+
+  // ============ EQUIPMENT INVENTORY ============
+  // Scanners (RF scanners, barcode scanners, etc.)
+  scanners: defineTable({
+    number: v.number(), // Scanner number (e.g., 1, 2, 3...)
+    pin: v.optional(v.string()), // PIN code for the scanner
+    serialNumber: v.optional(v.string()),
+    model: v.optional(v.string()), // e.g., "Zebra MC3300", "Honeywell CT60"
+    locationId: v.id("locations"),
+    status: v.string(), // "available" | "assigned" | "maintenance" | "lost" | "retired"
+    assignedTo: v.optional(v.id("personnel")),
+    assignedAt: v.optional(v.number()),
+    lastMaintenanceDate: v.optional(v.string()),
+    purchaseDate: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_location", ["locationId"])
+    .index("by_number", ["number"])
+    .index("by_status", ["status"])
+    .index("by_assigned", ["assignedTo"]),
+
+  // Pickers (order picking devices/equipment)
+  pickers: defineTable({
+    number: v.number(), // Picker number (e.g., 1, 2, 3...)
+    pin: v.optional(v.string()), // PIN code for the picker
+    serialNumber: v.optional(v.string()),
+    model: v.optional(v.string()),
+    locationId: v.id("locations"),
+    status: v.string(), // "available" | "assigned" | "maintenance" | "lost" | "retired"
+    assignedTo: v.optional(v.id("personnel")),
+    assignedAt: v.optional(v.number()),
+    lastMaintenanceDate: v.optional(v.string()),
+    purchaseDate: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_location", ["locationId"])
+    .index("by_number", ["number"])
+    .index("by_status", ["status"])
+    .index("by_assigned", ["assignedTo"]),
+
+  // Equipment assignment history (for audit trail)
+  equipmentHistory: defineTable({
+    equipmentType: v.string(), // "scanner" | "picker"
+    equipmentId: v.union(v.id("scanners"), v.id("pickers")),
+    action: v.string(), // "assigned" | "unassigned" | "maintenance" | "status_change"
+    previousStatus: v.optional(v.string()),
+    newStatus: v.optional(v.string()),
+    previousAssignee: v.optional(v.id("personnel")),
+    newAssignee: v.optional(v.id("personnel")),
+    performedBy: v.id("users"),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_equipment", ["equipmentType", "equipmentId"])
+    .index("by_created", ["createdAt"]),
 });

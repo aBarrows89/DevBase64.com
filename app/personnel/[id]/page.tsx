@@ -240,6 +240,13 @@ function PersonnelDetailContent() {
   const [uploadingWriteUpId, setUploadingWriteUpId] = useState<Id<"writeUps"> | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
+  // Write-up file upload state
+  const [writeUpFiles, setWriteUpFiles] = useState<File[]>([]);
+  const [isCreatingWriteUp, setIsCreatingWriteUp] = useState(false);
+
+  // Edit personnel loading state
+  const [isSavingPersonnel, setIsSavingPersonnel] = useState(false);
+
   // Form states
   const [writeUpForm, setWriteUpForm] = useState({
     date: new Date().toISOString().split("T")[0],
@@ -269,6 +276,7 @@ function PersonnelDetailContent() {
     department: "",
     hourlyRate: 0,
     notes: "",
+    hireDate: "",
   });
 
   const [terminateForm, setTerminateForm] = useState({
@@ -286,6 +294,7 @@ function PersonnelDetailContent() {
         department: personnel.department,
         hourlyRate: personnel.hourlyRate || 0,
         notes: personnel.notes || "",
+        hireDate: personnel.hireDate,
       });
     }
   };
@@ -324,24 +333,60 @@ function PersonnelDetailContent() {
 
   const handleCreateWriteUp = async () => {
     if (!user || !writeUpForm.category || !writeUpForm.description) return;
-    await createWriteUp({
-      personnelId,
-      date: writeUpForm.date,
-      severity: writeUpForm.severity,
-      category: writeUpForm.category,
-      description: writeUpForm.description,
-      followUpRequired: false,
-      followUpDate: writeUpForm.followUpDate || undefined,
-      issuedBy: user._id as Id<"users">,
-    });
-    setShowWriteUpModal(false);
-    setWriteUpForm({
-      date: new Date().toISOString().split("T")[0],
-      severity: "verbal",
-      category: "",
-      description: "",
-      followUpDate: "",
-    });
+
+    setIsCreatingWriteUp(true);
+    try {
+      // Create the write-up first
+      const writeUpId = await createWriteUp({
+        personnelId,
+        date: writeUpForm.date,
+        severity: writeUpForm.severity,
+        category: writeUpForm.category,
+        description: writeUpForm.description,
+        followUpRequired: false,
+        followUpDate: writeUpForm.followUpDate || undefined,
+        issuedBy: user._id as Id<"users">,
+      });
+
+      // Upload files if any
+      if (writeUpFiles.length > 0) {
+        for (const file of writeUpFiles) {
+          // Get upload URL from Convex
+          const uploadUrl = await generateUploadUrl();
+
+          // Upload the file
+          const result = await fetch(uploadUrl, {
+            method: "POST",
+            headers: { "Content-Type": file.type },
+            body: file,
+          });
+
+          const { storageId } = await result.json();
+
+          // Add attachment to write-up
+          await addAttachment({
+            writeUpId,
+            storageId,
+            fileName: file.name,
+            fileType: file.type,
+          });
+        }
+      }
+
+      setShowWriteUpModal(false);
+      setWriteUpForm({
+        date: new Date().toISOString().split("T")[0],
+        severity: "verbal",
+        category: "",
+        description: "",
+        followUpDate: "",
+      });
+      setWriteUpFiles([]);
+    } catch (error) {
+      console.error("Failed to create write-up:", error);
+    } finally {
+      setIsCreatingWriteUp(false);
+    }
   };
 
   const handleCreateMerit = async () => {
@@ -379,16 +424,40 @@ function PersonnelDetailContent() {
   };
 
   const handleUpdatePersonnel = async () => {
-    await updatePersonnel({
-      personnelId,
-      email: editPersonnelForm.email,
-      phone: editPersonnelForm.phone,
-      position: editPersonnelForm.position,
-      department: editPersonnelForm.department,
-      hourlyRate: editPersonnelForm.hourlyRate || undefined,
-      notes: editPersonnelForm.notes || undefined,
-    });
-    setShowEditPersonnelModal(false);
+    setIsSavingPersonnel(true);
+    try {
+      const updateData: {
+        personnelId: typeof personnelId;
+        email: string;
+        phone: string;
+        position: string;
+        department: string;
+        hourlyRate?: number;
+        notes?: string;
+        hireDate?: string;
+      } = {
+        personnelId,
+        email: editPersonnelForm.email,
+        phone: editPersonnelForm.phone,
+        position: editPersonnelForm.position,
+        department: editPersonnelForm.department,
+        hourlyRate: editPersonnelForm.hourlyRate || undefined,
+        notes: editPersonnelForm.notes || undefined,
+      };
+
+      // Only super_admin can edit hire date
+      if (user?.role === "super_admin" && editPersonnelForm.hireDate) {
+        updateData.hireDate = editPersonnelForm.hireDate;
+      }
+
+      await updatePersonnel(updateData);
+      setShowEditPersonnelModal(false);
+    } catch (error) {
+      console.error("Error updating personnel:", error);
+      alert("Failed to update personnel. Please try again.");
+    } finally {
+      setIsSavingPersonnel(false);
+    }
   };
 
   const handleDeleteWriteUp = async (writeUpId: Id<"writeUps">) => {
@@ -685,8 +754,11 @@ function PersonnelDetailContent() {
 
                     return (
                       <button
+                        type="button"
                         key={area}
-                        onClick={async () => {
+                        onClick={async (e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
                           if (!canManagePersonnel) return;
                           try {
                             await toggleTraining({ personnelId: personnel._id, trainingArea: area });
@@ -695,8 +767,8 @@ function PersonnelDetailContent() {
                           }
                         }}
                         disabled={!canManagePersonnel}
-                        className={`relative p-4 rounded-xl text-center transition-all transform hover:scale-105 ${
-                          canManagePersonnel ? "cursor-pointer" : "cursor-default"
+                        className={`relative p-4 rounded-xl text-center transition-all transform ${
+                          canManagePersonnel ? "cursor-pointer hover:scale-105 active:scale-95" : "cursor-not-allowed"
                         } ${
                           isCompleted
                             ? isDark
@@ -1487,19 +1559,84 @@ function PersonnelDetailContent() {
                     className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"} border focus:outline-none`}
                   />
                 </div>
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    Attachments (Optional)
+                  </label>
+                  <div className={`relative border-2 border-dashed rounded-lg p-4 text-center transition-colors ${isDark ? "border-slate-600 hover:border-slate-500" : "border-gray-300 hover:border-gray-400"}`}>
+                    <input
+                      type="file"
+                      multiple
+                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif"
+                      onChange={(e) => {
+                        if (e.target.files) {
+                          setWriteUpFiles(Array.from(e.target.files));
+                        }
+                      }}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    />
+                    <svg
+                      className={`mx-auto h-8 w-8 ${isDark ? "text-slate-500" : "text-gray-400"}`}
+                      stroke="currentColor"
+                      fill="none"
+                      viewBox="0 0 48 48"
+                    >
+                      <path
+                        d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
+                        strokeWidth={2}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                    <p className={`mt-1 text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                      Click or drag files to upload
+                    </p>
+                    <p className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                      PDF, Word, or images
+                    </p>
+                  </div>
+                  {writeUpFiles.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      {writeUpFiles.map((file, index) => (
+                        <div
+                          key={index}
+                          className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm ${isDark ? "bg-slate-700/50" : "bg-gray-100"}`}
+                        >
+                          <span className={`truncate ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                            {file.name}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setWriteUpFiles(writeUpFiles.filter((_, i) => i !== index))}
+                            className={`ml-2 p-1 rounded hover:bg-red-500/20 ${isDark ? "text-slate-400 hover:text-red-400" : "text-gray-500 hover:text-red-600"}`}
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="flex gap-3 mt-6">
                 <button
-                  onClick={() => setShowWriteUpModal(false)}
-                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-slate-700 hover:bg-slate-600 text-white" : "bg-gray-100 hover:bg-gray-200 text-gray-900"}`}
+                  onClick={() => {
+                    setShowWriteUpModal(false);
+                    setWriteUpFiles([]);
+                  }}
+                  disabled={isCreatingWriteUp}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-slate-700 hover:bg-slate-600 text-white" : "bg-gray-100 hover:bg-gray-200 text-gray-900"} disabled:opacity-50`}
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleCreateWriteUp}
-                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-red-500 hover:bg-red-400 text-white" : "bg-red-600 hover:bg-red-700 text-white"}`}
+                  disabled={isCreatingWriteUp}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-red-500 hover:bg-red-400 text-white" : "bg-red-600 hover:bg-red-700 text-white"} disabled:opacity-50`}
                 >
-                  Add Write-Up
+                  {isCreatingWriteUp ? "Creating..." : "Add Write-Up"}
                 </button>
               </div>
             </div>
@@ -1732,6 +1869,23 @@ function PersonnelDetailContent() {
                     className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white placeholder-slate-500" : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400"} border focus:outline-none`}
                   />
                 </div>
+                {/* Start Date - Only visible for super_admin */}
+                {user?.role === "super_admin" && (
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                      Start Date (Super Admin Only)
+                    </label>
+                    <input
+                      type="date"
+                      value={editPersonnelForm.hireDate}
+                      onChange={(e) => setEditPersonnelForm({ ...editPersonnelForm, hireDate: e.target.value })}
+                      className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"} border focus:outline-none`}
+                    />
+                    <p className={`text-xs mt-1 ${isDark ? "text-amber-400/70" : "text-amber-600"}`}>
+                      Warning: Changing the start date will affect tenure calculations and milestone tracking.
+                    </p>
+                  </div>
+                )}
               </div>
               <div className="flex gap-3 mt-6">
                 <button
@@ -1742,9 +1896,10 @@ function PersonnelDetailContent() {
                 </button>
                 <button
                   onClick={handleUpdatePersonnel}
-                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-cyan-500 hover:bg-cyan-400 text-white" : "bg-blue-600 hover:bg-blue-700 text-white"}`}
+                  disabled={isSavingPersonnel}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-cyan-500 hover:bg-cyan-400 text-white" : "bg-blue-600 hover:bg-blue-700 text-white"} ${isSavingPersonnel ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
-                  Save Changes
+                  {isSavingPersonnel ? "Saving..." : "Save Changes"}
                 </button>
               </div>
             </div>
