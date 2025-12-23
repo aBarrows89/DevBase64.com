@@ -139,7 +139,14 @@ export const login = mutation({
 export const getUser = query({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.userId);
+    try {
+      const user = await ctx.db.get(args.userId);
+      return user;
+    } catch (error) {
+      // Return null if user not found or ID is invalid
+      console.error("Error fetching user:", error);
+      return null;
+    }
   },
 });
 
