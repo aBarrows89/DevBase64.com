@@ -291,23 +291,23 @@ function EquipmentContent() {
               {currentItems.map((item) => (
                 <div
                   key={item._id}
-                  className={`border rounded-xl p-4 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}
+                  className={`border rounded-xl p-5 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}
                 >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-12 h-12 rounded-lg flex items-center justify-center text-lg font-bold ${isDark ? "bg-slate-700 text-white" : "bg-gray-100 text-gray-900"}`}>
+                  <div className="flex items-start justify-between gap-3 mb-4">
+                    <div className="flex items-center gap-4 min-w-0">
+                      <div className={`min-w-14 h-14 px-3 rounded-lg flex items-center justify-center text-lg font-bold shrink-0 ${isDark ? "bg-slate-700 text-white" : "bg-gray-100 text-gray-900"}`}>
                         #{item.number}
                       </div>
-                      <div>
-                        <h3 className={`font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                      <div className="min-w-0">
+                        <h3 className={`font-semibold truncate ${isDark ? "text-white" : "text-gray-900"}`}>
                           {activeTab === "scanners" ? "Scanner" : "Picker"} #{item.number}
                         </h3>
-                        <p className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                        <p className={`text-sm mt-0.5 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                           {item.locationName}
                         </p>
                       </div>
                     </div>
-                    <span className={`px-2 py-1 text-xs font-medium rounded ${getStatusColor(item.status)}`}>
+                    <span className={`px-2.5 py-1 text-xs font-medium rounded shrink-0 ${getStatusColor(item.status)}`}>
                       {item.status}
                     </span>
                   </div>
