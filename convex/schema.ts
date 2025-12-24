@@ -346,6 +346,13 @@ export default defineSchema({
     actualEnd: v.optional(v.string()), // HH:MM
     hoursWorked: v.optional(v.number()),
     notes: v.optional(v.string()),
+    // Document attachments (doctor's notes, etc.)
+    attachments: v.optional(v.array(v.object({
+      storageId: v.id("_storage"),
+      fileName: v.string(),
+      fileType: v.string(),
+      uploadedAt: v.number(),
+    }))),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

@@ -236,3 +236,81 @@ export const remove = mutation({
     return args.attendanceId;
   },
 });
+
+// ============ ATTACHMENT FUNCTIONS ============
+
+// Generate upload URL for file storage
+export const generateUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+// Add attachment to attendance record
+export const addAttachment = mutation({
+  args: {
+    attendanceId: v.id("attendance"),
+    storageId: v.id("_storage"),
+    fileName: v.string(),
+    fileType: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const record = await ctx.db.get(args.attendanceId);
+    if (!record) {
+      throw new Error("Attendance record not found");
+    }
+
+    const newAttachment = {
+      storageId: args.storageId,
+      fileName: args.fileName,
+      fileType: args.fileType,
+      uploadedAt: Date.now(),
+    };
+
+    const existingAttachments = record.attachments || [];
+    await ctx.db.patch(args.attendanceId, {
+      attachments: [...existingAttachments, newAttachment],
+      updatedAt: Date.now(),
+    });
+
+    return args.attendanceId;
+  },
+});
+
+// Remove attachment from attendance record
+export const removeAttachment = mutation({
+  args: {
+    attendanceId: v.id("attendance"),
+    storageId: v.id("_storage"),
+  },
+  handler: async (ctx, args) => {
+    const record = await ctx.db.get(args.attendanceId);
+    if (!record) {
+      throw new Error("Attendance record not found");
+    }
+
+    // Remove from storage
+    await ctx.storage.delete(args.storageId);
+
+    // Remove from attachments array
+    const updatedAttachments = (record.attachments || []).filter(
+      (a) => a.storageId !== args.storageId
+    );
+
+    await ctx.db.patch(args.attendanceId, {
+      attachments: updatedAttachments,
+      updatedAt: Date.now(),
+    });
+
+    return args.attendanceId;
+  },
+});
+
+// Get attachment download URL
+export const getAttachmentUrl = query({
+  args: { storageId: v.id("_storage") },
+  handler: async (ctx, args) => {
+    return await ctx.storage.getUrl(args.storageId);
+  },
+});

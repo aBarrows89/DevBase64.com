@@ -107,7 +107,92 @@ const TRAINING_AREAS = [
   "Safety Training",
 ];
 
-// Attachment Item Component
+// File icon helper
+function getFileIcon(fileType: string) {
+  if (fileType.startsWith("image/")) {
+    return (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      </svg>
+    );
+  }
+  if (fileType === "application/pdf") {
+    return (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+      </svg>
+    );
+  }
+  return (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+    </svg>
+  );
+}
+
+// Attendance Attachment Item Component
+function AttendanceAttachmentItem({
+  attachment,
+  attendanceId,
+  canDelete,
+  onDelete,
+  isDark,
+}: {
+  attachment: {
+    storageId: Id<"_storage">;
+    fileName: string;
+    fileType: string;
+    uploadedAt: number;
+  };
+  attendanceId: Id<"attendance">;
+  canDelete: boolean;
+  onDelete: (attendanceId: Id<"attendance">, storageId: Id<"_storage">) => void;
+  isDark: boolean;
+}) {
+  const attachmentUrl = useQuery(api.attendance.getAttachmentUrl, {
+    storageId: attachment.storageId,
+  });
+
+  return (
+    <div
+      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
+        isDark
+          ? "bg-slate-700/50 border border-slate-600"
+          : "bg-gray-100 border border-gray-200"
+      }`}
+    >
+      <span className={isDark ? "text-slate-400" : "text-gray-500"}>
+        {getFileIcon(attachment.fileType)}
+      </span>
+      <a
+        href={attachmentUrl || "#"}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`hover:underline truncate max-w-[150px] ${
+          isDark ? "text-cyan-400" : "text-blue-600"
+        }`}
+        title={attachment.fileName}
+      >
+        {attachment.fileName}
+      </a>
+      {canDelete && (
+        <button
+          onClick={() => onDelete(attendanceId, attachment.storageId)}
+          className={`p-1 rounded hover:bg-red-500/20 transition-colors ${
+            isDark ? "text-slate-500 hover:text-red-400" : "text-gray-400 hover:text-red-600"
+          }`}
+          title="Delete attachment"
+        >
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Write-up Attachment Item Component
 function AttachmentItem({
   attachment,
   writeUpId,
@@ -231,6 +316,9 @@ function PersonnelDetailContent() {
   const generateUploadUrl = useMutation(api.writeUps.generateUploadUrl);
   const addAttachment = useMutation(api.writeUps.addAttachment);
   const removeAttachment = useMutation(api.writeUps.removeAttachment);
+  const generateAttendanceUploadUrl = useMutation(api.attendance.generateUploadUrl);
+  const addAttendanceAttachment = useMutation(api.attendance.addAttachment);
+  const removeAttendanceAttachment = useMutation(api.attendance.removeAttachment);
   const terminatePersonnel = useMutation(api.personnel.terminate);
   const toggleTraining = useMutation(api.personnel.toggleTraining);
   const recordTenureCheckIn = useMutation(api.personnel.recordTenureCheckIn);
@@ -243,6 +331,10 @@ function PersonnelDetailContent() {
   // Write-up file upload state
   const [writeUpFiles, setWriteUpFiles] = useState<File[]>([]);
   const [isCreatingWriteUp, setIsCreatingWriteUp] = useState(false);
+
+  // Attendance file upload state
+  const [uploadingAttendanceId, setUploadingAttendanceId] = useState<Id<"attendance"> | null>(null);
+  const [isUploadingAttendance, setIsUploadingAttendance] = useState(false);
 
   // Edit personnel loading state
   const [isSavingPersonnel, setIsSavingPersonnel] = useState(false);
@@ -537,6 +629,55 @@ function PersonnelDetailContent() {
     if (confirm("Are you sure you want to delete this attachment?")) {
       try {
         await removeAttachment({ writeUpId, storageId });
+      } catch (error) {
+        console.error("Error deleting attachment:", error);
+        alert("Failed to delete attachment. Please try again.");
+      }
+    }
+  };
+
+  const handleAttendanceFileUpload = async (attendanceId: Id<"attendance">, files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    setIsUploadingAttendance(true);
+    setUploadingAttendanceId(attendanceId);
+
+    try {
+      for (const file of Array.from(files)) {
+        const uploadUrl = await generateAttendanceUploadUrl();
+
+        const response = await fetch(uploadUrl, {
+          method: "POST",
+          headers: { "Content-Type": file.type },
+          body: file,
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to upload file");
+        }
+
+        const { storageId } = await response.json();
+
+        await addAttendanceAttachment({
+          attendanceId,
+          storageId,
+          fileName: file.name,
+          fileType: file.type,
+        });
+      }
+    } catch (error) {
+      console.error("Error uploading file:", error);
+      alert("Failed to upload file. Please try again.");
+    } finally {
+      setIsUploadingAttendance(false);
+      setUploadingAttendanceId(null);
+    }
+  };
+
+  const handleDeleteAttendanceAttachment = async (attendanceId: Id<"attendance">, storageId: Id<"_storage">) => {
+    if (confirm("Are you sure you want to delete this attachment?")) {
+      try {
+        await removeAttendanceAttachment({ attendanceId, storageId });
       } catch (error) {
         console.error("Error deleting attachment:", error);
         alert("Failed to delete attachment. Please try again.");
@@ -1386,58 +1527,110 @@ function PersonnelDetailContent() {
               )}
 
               {attendance && attendance.length > 0 ? (
-                <div className={`rounded-xl overflow-hidden ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
-                  <table className="w-full">
-                    <thead>
-                      <tr className={`border-b ${isDark ? "border-slate-700" : "border-gray-200"}`}>
-                        <th className={`text-left px-6 py-4 text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Date</th>
-                        <th className={`text-left px-6 py-4 text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Status</th>
-                        <th className={`text-left px-6 py-4 text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Time In</th>
-                        <th className={`text-left px-6 py-4 text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Time Out</th>
-                        <th className={`text-left px-6 py-4 text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Hours</th>
-                        {canDeleteRecords && (
-                          <th className={`text-right px-6 py-4 text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Actions</th>
-                        )}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {attendance.map((record) => (
-                        <tr key={record._id} className={`border-b ${isDark ? "border-slate-700/50" : "border-gray-200"}`}>
-                          <td className={`px-6 py-4 ${isDark ? "text-white" : "text-gray-900"}`}>
-                            {new Date(record.date).toLocaleDateString()}
-                          </td>
-                          <td className="px-6 py-4">
+                <div className="space-y-4">
+                  {attendance.map((record) => (
+                    <div
+                      key={record._id}
+                      className={`rounded-xl p-6 ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2 flex-wrap">
                             <span className={`px-2 py-1 text-xs font-medium rounded border ${attendanceStatusColors[record.status] || attendanceStatusColors.present}`}>
                               {record.status.replace("_", " ").charAt(0).toUpperCase() + record.status.replace("_", " ").slice(1)}
                             </span>
-                          </td>
-                          <td className={`px-6 py-4 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
-                            {record.actualStart || "-"}
-                          </td>
-                          <td className={`px-6 py-4 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
-                            {record.actualEnd || "-"}
-                          </td>
-                          <td className={`px-6 py-4 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
-                            {record.hoursWorked?.toFixed(1) || "-"}
-                          </td>
-                          {canDeleteRecords && (
-                            <td className="px-6 py-4 text-right">
-                              <button
-                                onClick={() => handleDeleteAttendance(record._id)}
-                                className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
-                                  isDark
-                                    ? "bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30"
-                                    : "bg-red-50 hover:bg-red-100 text-red-600 border border-red-200"
-                                }`}
-                              >
-                                Delete
-                              </button>
-                            </td>
+                            <span className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                              {new Date(record.date).toLocaleDateString()}
+                            </span>
+                          </div>
+                          <div className={`grid grid-cols-3 gap-4 mt-3 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                            <div>
+                              <span className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>Time In</span>
+                              <p className="font-medium">{record.actualStart || "-"}</p>
+                            </div>
+                            <div>
+                              <span className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>Time Out</span>
+                              <p className="font-medium">{record.actualEnd || "-"}</p>
+                            </div>
+                            <div>
+                              <span className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>Hours</span>
+                              <p className="font-medium">{record.hoursWorked?.toFixed(1) || "-"}</p>
+                            </div>
+                          </div>
+                          {record.notes && (
+                            <p className={`mt-3 text-sm ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                              {record.notes}
+                            </p>
                           )}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                        </div>
+                        {canDeleteRecords && (
+                          <button
+                            onClick={() => handleDeleteAttendance(record._id)}
+                            className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                              isDark
+                                ? "bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30"
+                                : "bg-red-50 hover:bg-red-100 text-red-600 border border-red-200"
+                            }`}
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Attachments Section */}
+                      <div className={`mt-4 pt-4 border-t ${isDark ? "border-slate-700" : "border-gray-200"}`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className={`text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                            Documents (Doctor&apos;s Notes, etc.)
+                          </h4>
+                          {canManagePersonnel && (
+                            <label
+                              className={`px-3 py-1.5 text-xs font-medium rounded cursor-pointer transition-colors flex items-center gap-1 ${
+                                isUploadingAttendance && uploadingAttendanceId === record._id
+                                  ? isDark
+                                    ? "bg-slate-600 text-slate-400"
+                                    : "bg-gray-200 text-gray-400"
+                                  : isDark
+                                    ? "bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 border border-cyan-500/30"
+                                    : "bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200"
+                              }`}
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                              </svg>
+                              {isUploadingAttendance && uploadingAttendanceId === record._id ? "Uploading..." : "Add File"}
+                              <input
+                                type="file"
+                                className="hidden"
+                                multiple
+                                onChange={(e) => handleAttendanceFileUpload(record._id, e.target.files)}
+                                disabled={isUploadingAttendance && uploadingAttendanceId === record._id}
+                                accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.txt"
+                              />
+                            </label>
+                          )}
+                        </div>
+                        {record.attachments && record.attachments.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {record.attachments.map((attachment) => (
+                              <AttendanceAttachmentItem
+                                key={attachment.storageId}
+                                attachment={attachment}
+                                attendanceId={record._id}
+                                canDelete={canDeleteRecords}
+                                onDelete={handleDeleteAttendanceAttachment}
+                                isDark={isDark}
+                              />
+                            ))}
+                          </div>
+                        ) : (
+                          <p className={`text-xs ${isDark ? "text-slate-600" : "text-gray-400"}`}>
+                            No attachments
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <div className={`text-center py-12 ${isDark ? "text-slate-500" : "text-gray-500"}`}>
