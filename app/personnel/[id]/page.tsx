@@ -294,6 +294,12 @@ function PersonnelDetailContent() {
   const [showCheckInModal, setShowCheckInModal] = useState(false);
   const [selectedMilestone, setSelectedMilestone] = useState<string | null>(null);
   const [checkInNotes, setCheckInNotes] = useState("");
+  const [viewingAgreement, setViewingAgreement] = useState<{
+    text: string;
+    signatureData: string;
+    signedAt: number;
+    witnessedByName: string;
+  } | null>(null);
 
   // Queries
   const personnel = useQuery(api.personnel.getWithStats, { personnelId });
@@ -1906,16 +1912,29 @@ function PersonnelDetailContent() {
                           )}
                         </div>
 
-                        {/* Signature Preview */}
-                        <div className={`mt-3 pt-3 border-t ${isDark ? "border-slate-700" : "border-gray-100"}`}>
-                          <p className={`text-xs mb-2 ${isDark ? "text-slate-500" : "text-gray-400"}`}>Signature:</p>
-                          <div className={`inline-block rounded border p-2 ${isDark ? "bg-white border-slate-600" : "bg-white border-gray-200"}`}>
-                            <img
-                              src={agreement.signatureData}
-                              alt="Employee signature"
-                              className="h-12 max-w-48 object-contain"
-                            />
+                        {/* Signature Preview and View Button */}
+                        <div className={`mt-3 pt-3 border-t flex items-end justify-between ${isDark ? "border-slate-700" : "border-gray-100"}`}>
+                          <div>
+                            <p className={`text-xs mb-2 ${isDark ? "text-slate-500" : "text-gray-400"}`}>Signature:</p>
+                            <div className={`inline-block rounded border p-2 ${isDark ? "bg-white border-slate-600" : "bg-white border-gray-200"}`}>
+                              <img
+                                src={agreement.signatureData}
+                                alt="Employee signature"
+                                className="h-12 max-w-48 object-contain"
+                              />
+                            </div>
                           </div>
+                          <button
+                            onClick={() => setViewingAgreement({
+                              text: agreement.agreementText,
+                              signatureData: agreement.signatureData,
+                              signedAt: agreement.signedAt,
+                              witnessedByName: agreement.witnessedByName,
+                            })}
+                            className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${isDark ? "bg-slate-700 text-slate-300 hover:bg-slate-600" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+                          >
+                            View Full Agreement
+                          </button>
                         </div>
                       </div>
                     ))}
@@ -2513,6 +2532,66 @@ function PersonnelDetailContent() {
                   className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-blue-500 hover:bg-blue-400 text-white" : "bg-blue-600 hover:bg-blue-700 text-white"}`}
                 >
                   Record Check-In
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* View Agreement Modal */}
+        {viewingAgreement && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className={`w-full max-w-2xl max-h-[90vh] rounded-xl overflow-hidden flex flex-col ${isDark ? "bg-slate-800" : "bg-white"}`}>
+              <div className={`flex items-center justify-between p-4 border-b ${isDark ? "border-slate-700" : "border-gray-200"}`}>
+                <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  Equipment Responsibility Agreement
+                </h2>
+                <button
+                  onClick={() => setViewingAgreement(null)}
+                  className={`p-1 rounded-lg transition-colors ${isDark ? "hover:bg-slate-700" : "hover:bg-gray-100"}`}
+                >
+                  <svg className={`w-5 h-5 ${isDark ? "text-slate-400" : "text-gray-500"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4">
+                <pre className={`whitespace-pre-wrap font-mono text-sm ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                  {viewingAgreement.text}
+                </pre>
+
+                <div className={`mt-6 pt-4 border-t ${isDark ? "border-slate-700" : "border-gray-200"}`}>
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <p className={`text-sm font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                        Signed: {new Date(viewingAgreement.signedAt).toLocaleDateString()} at {new Date(viewingAgreement.signedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                      <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                        Witnessed by: {viewingAgreement.witnessedByName}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className={`text-xs mb-2 ${isDark ? "text-slate-500" : "text-gray-400"}`}>Employee Signature:</p>
+                    <div className={`inline-block rounded border p-3 ${isDark ? "bg-white border-slate-600" : "bg-white border-gray-200"}`}>
+                      <img
+                        src={viewingAgreement.signatureData}
+                        alt="Employee signature"
+                        className="h-16 max-w-64 object-contain"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className={`p-4 border-t ${isDark ? "border-slate-700" : "border-gray-200"}`}>
+                <button
+                  onClick={() => setViewingAgreement(null)}
+                  className={`w-full px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-slate-700 hover:bg-slate-600 text-white" : "bg-gray-100 hover:bg-gray-200 text-gray-900"}`}
+                >
+                  Close
                 </button>
               </div>
             </div>
