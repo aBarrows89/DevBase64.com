@@ -555,4 +555,52 @@ export default defineSchema({
     .index("by_category", ["category"])
     .index("by_active", ["isActive"])
     .index("by_created", ["createdAt"]),
+
+  // ============ TIME CLOCK ============
+  // Raw time entries (clock in/out, breaks)
+  timeEntries: defineTable({
+    personnelId: v.id("personnel"),
+    date: v.string(), // YYYY-MM-DD
+    type: v.string(), // "clock_in" | "clock_out" | "break_start" | "break_end"
+    timestamp: v.number(), // Unix timestamp (ms)
+    source: v.string(), // "admin" | "mobile" | "kiosk"
+    locationId: v.optional(v.id("locations")),
+    gpsCoordinates: v.optional(v.object({
+      lat: v.number(),
+      lng: v.number(),
+    })),
+    notes: v.optional(v.string()),
+    // Edit tracking
+    editedBy: v.optional(v.id("users")), // If manually adjusted
+    editedAt: v.optional(v.number()),
+    originalTimestamp: v.optional(v.number()), // Value before edit
+    editReason: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_personnel", ["personnelId"])
+    .index("by_date", ["date"])
+    .index("by_personnel_date", ["personnelId", "date"]),
+
+  // Time correction requests (employee requests, manager approval)
+  timeCorrections: defineTable({
+    personnelId: v.id("personnel"),
+    timeEntryId: v.optional(v.id("timeEntries")), // If editing existing entry
+    date: v.string(), // YYYY-MM-DD
+    requestType: v.string(), // "edit" | "add_missed" | "delete"
+    // For edits
+    currentTimestamp: v.optional(v.number()), // Current value
+    requestedTimestamp: v.optional(v.number()), // Requested new value
+    // For adding missed entries
+    requestedType: v.optional(v.string()), // "clock_in" | "clock_out" | "break_start" | "break_end"
+    reason: v.string(),
+    status: v.string(), // "pending" | "approved" | "denied"
+    requestedAt: v.number(),
+    // Review fields
+    reviewedBy: v.optional(v.id("users")),
+    reviewedAt: v.optional(v.number()),
+    reviewNotes: v.optional(v.string()),
+  })
+    .index("by_status", ["status"])
+    .index("by_personnel", ["personnelId"])
+    .index("by_date", ["date"]),
 });

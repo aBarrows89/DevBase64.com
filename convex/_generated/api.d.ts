@@ -29,6 +29,7 @@ import type * as projectSuggestions from "../projectSuggestions.js";
 import type * as projects from "../projects.js";
 import type * as shifts from "../shifts.js";
 import type * as tasks from "../tasks.js";
+import type * as timeClock from "../timeClock.js";
 import type * as writeUps from "../writeUps.js";
 
 import type {
@@ -59,6 +60,7 @@ declare const fullApi: ApiFromModules<{
   projects: typeof projects;
   shifts: typeof shifts;
   tasks: typeof tasks;
+  timeClock: typeof timeClock;
   writeUps: typeof writeUps;
 }>;
 
