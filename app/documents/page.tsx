@@ -351,22 +351,23 @@ function DocumentsContent() {
               <form onSubmit={editingDocument ? handleUpdate : handleUpload} className="space-y-4">
                 {!editingDocument && (
                   <div>
-                    <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                    <span className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
                       File *
-                    </label>
-                    <div
-                      className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+                    </span>
+                    <label
+                      htmlFor="file-upload"
+                      className={`block border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
                         selectedFile
                           ? isDark ? "border-cyan-500 bg-cyan-500/10" : "border-blue-500 bg-blue-50"
                           : isDark ? "border-slate-600 hover:border-slate-500" : "border-gray-300 hover:border-gray-400"
                       }`}
-                      onClick={() => fileInputRef.current?.click()}
                     >
                       <input
+                        id="file-upload"
                         ref={fileInputRef}
                         type="file"
                         onChange={handleFileSelect}
-                        className="hidden"
+                        className="sr-only"
                         accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.png,.jpg,.jpeg"
                       />
                       {selectedFile ? (
@@ -382,7 +383,7 @@ function DocumentsContent() {
                           <p className={`text-xs mt-1 ${isDark ? "text-slate-500" : "text-gray-400"}`}>PDF, DOC, XLS, TXT, Images</p>
                         </div>
                       )}
-                    </div>
+                    </label>
                   </div>
                 )}
 
