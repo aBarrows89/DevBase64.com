@@ -301,6 +301,7 @@ function PersonnelDetailContent() {
   const attendance = useQuery(api.attendance.listByPersonnel, { personnelId });
   const merits = useQuery(api.merits.listByPersonnel, { personnelId });
   const equipment = useQuery(api.equipment.getPersonnelEquipment, { personnelId });
+  const equipmentAgreements = useQuery(api.equipment.getPersonnelAgreements, { personnelId });
   const locations = useQuery(api.locations.list);
 
   // Get linked application if exists
@@ -1828,6 +1829,97 @@ function PersonnelDetailContent() {
               ) : (
                 <div className={`text-center py-12 ${isDark ? "text-slate-500" : "text-gray-500"}`}>
                   No equipment assigned
+                </div>
+              )}
+
+              {/* Signed Agreements Section */}
+              {equipmentAgreements && equipmentAgreements.length > 0 && (
+                <div className="mt-8">
+                  <h3 className={`text-lg font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
+                    Signed Equipment Agreements
+                  </h3>
+                  <div className="space-y-4">
+                    {equipmentAgreements.map((agreement) => (
+                      <div
+                        key={agreement._id}
+                        className={`rounded-lg p-4 ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}
+                      >
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                              agreement.revokedAt
+                                ? isDark ? "bg-slate-600" : "bg-gray-200"
+                                : isDark ? "bg-green-500/20" : "bg-green-100"
+                            }`}>
+                              <svg className={`w-5 h-5 ${
+                                agreement.revokedAt
+                                  ? isDark ? "text-slate-400" : "text-gray-500"
+                                  : isDark ? "text-green-400" : "text-green-600"
+                              }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            </div>
+                            <div>
+                              <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                                {agreement.equipmentType === "scanner" ? "Scanner" : "Picker"} #{agreement.equipmentNumber}
+                              </p>
+                              <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                                {agreement.serialNumber ? `S/N: ${agreement.serialNumber}` : "No serial number"}
+                              </p>
+                            </div>
+                          </div>
+                          <span className={`px-2 py-1 rounded text-xs font-medium ${
+                            agreement.revokedAt
+                              ? isDark ? "bg-slate-600 text-slate-300" : "bg-gray-100 text-gray-600"
+                              : isDark ? "bg-green-500/20 text-green-400" : "bg-green-100 text-green-700"
+                          }`}>
+                            {agreement.revokedAt ? "Returned" : "Active"}
+                          </span>
+                        </div>
+
+                        <div className={`space-y-2 text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                          <div className="flex justify-between">
+                            <span>Equipment Value:</span>
+                            <span className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                              ${agreement.equipmentValue.toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Signed:</span>
+                            <span className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                              {new Date(agreement.signedAt).toLocaleDateString()} at {new Date(agreement.signedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Witnessed by:</span>
+                            <span className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                              {agreement.witnessedByName}
+                            </span>
+                          </div>
+                          {agreement.revokedAt && (
+                            <div className="flex justify-between">
+                              <span>Returned:</span>
+                              <span className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                                {new Date(agreement.revokedAt).toLocaleDateString()}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Signature Preview */}
+                        <div className={`mt-3 pt-3 border-t ${isDark ? "border-slate-700" : "border-gray-100"}`}>
+                          <p className={`text-xs mb-2 ${isDark ? "text-slate-500" : "text-gray-400"}`}>Signature:</p>
+                          <div className={`inline-block rounded border p-2 ${isDark ? "bg-white border-slate-600" : "bg-white border-gray-200"}`}>
+                            <img
+                              src={agreement.signatureData}
+                              alt="Employee signature"
+                              className="h-12 max-w-48 object-contain"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
