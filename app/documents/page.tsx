@@ -76,6 +76,10 @@ function DocumentsContent() {
       // Get upload URL
       const uploadUrl = await generateUploadUrl();
 
+      if (!uploadUrl) {
+        throw new Error("Failed to generate upload URL");
+      }
+
       // Upload file to Convex storage
       const response = await fetch(uploadUrl, {
         method: "POST",
@@ -83,9 +87,17 @@ function DocumentsContent() {
         body: selectedFile,
       });
 
-      if (!response.ok) throw new Error("Upload failed");
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Upload failed: ${response.status} ${errorText}`);
+      }
 
-      const { storageId } = await response.json();
+      const result = await response.json();
+      const storageId = result.storageId;
+
+      if (!storageId) {
+        throw new Error("No storage ID returned from upload");
+      }
 
       // Create document record
       await createDocument({
@@ -106,6 +118,7 @@ function DocumentsContent() {
       setFormData({ name: "", description: "", category: "forms" });
       if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (err) {
+      console.error("Upload error:", err);
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setUploading(false);
