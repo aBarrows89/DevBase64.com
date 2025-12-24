@@ -1,15 +1,36 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 
-// Get all projects
+// Get all projects with task counts
 export const getAll = query({
   args: {},
   handler: async (ctx) => {
-    return await ctx.db
+    const projects = await ctx.db
       .query("projects")
       .withIndex("by_created")
       .order("desc")
       .collect();
+
+    // Get task counts for each project
+    const projectsWithTaskCounts = await Promise.all(
+      projects.map(async (project) => {
+        const tasks = await ctx.db
+          .query("tasks")
+          .withIndex("by_project", (q) => q.eq("projectId", project._id))
+          .collect();
+
+        const taskCount = tasks.length;
+        const completedTaskCount = tasks.filter((t) => t.status === "done").length;
+
+        return {
+          ...project,
+          taskCount,
+          completedTaskCount,
+        };
+      })
+    );
+
+    return projectsWithTaskCounts;
   },
 });
 

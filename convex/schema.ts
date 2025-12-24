@@ -479,7 +479,7 @@ export default defineSchema({
   // ============ EQUIPMENT INVENTORY ============
   // Scanners (RF scanners, barcode scanners, etc.)
   scanners: defineTable({
-    number: v.number(), // Scanner number (e.g., 1, 2, 3...)
+    number: v.string(), // Scanner identifier (e.g., "1", "A-12", "SC-001")
     pin: v.optional(v.string()), // PIN code for the scanner
     serialNumber: v.optional(v.string()),
     model: v.optional(v.string()), // e.g., "Zebra MC3300", "Honeywell CT60"
@@ -490,6 +490,9 @@ export default defineSchema({
     lastMaintenanceDate: v.optional(v.string()),
     purchaseDate: v.optional(v.string()),
     notes: v.optional(v.string()),
+    conditionNotes: v.optional(v.string()), // Current condition of the equipment
+    retiredAt: v.optional(v.number()), // When the equipment was retired
+    retiredReason: v.optional(v.string()), // Why it was retired
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -500,7 +503,7 @@ export default defineSchema({
 
   // Pickers (order picking devices/equipment)
   pickers: defineTable({
-    number: v.number(), // Picker number (e.g., 1, 2, 3...)
+    number: v.string(), // Picker identifier (e.g., "1", "P-01", "PK-A")
     pin: v.optional(v.string()), // PIN code for the picker
     serialNumber: v.optional(v.string()),
     model: v.optional(v.string()),
@@ -511,6 +514,9 @@ export default defineSchema({
     lastMaintenanceDate: v.optional(v.string()),
     purchaseDate: v.optional(v.string()),
     notes: v.optional(v.string()),
+    conditionNotes: v.optional(v.string()), // Current condition of the equipment
+    retiredAt: v.optional(v.number()), // When the equipment was retired
+    retiredReason: v.optional(v.string()), // Why it was retired
     createdAt: v.number(),
     updatedAt: v.number(),
   })

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/app/auth-context";
@@ -13,20 +14,39 @@ interface NavItem {
   requiresPermission?: "viewPersonnel" | "viewShifts";
 }
 
+interface NavGroup {
+  id: string;
+  label: string;
+  icon: string;
+  items: NavItem[];
+  requiresPermission?: "viewPersonnel" | "viewShifts";
+}
+
+// Top-level nav items
 const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Dashboard", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
   { href: "/projects", label: "Projects", icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" },
-  { href: "/jobs", label: "Job Listings", icon: "M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" },
-  { href: "/applications", label: "Applications", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
-  { href: "/personnel", label: "Personnel", icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z", requiresPermission: "viewPersonnel" },
-  { href: "/time-clock", label: "Time Clock", icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z", requiresPermission: "viewPersonnel" },
-  { href: "/locations", label: "Locations", icon: "M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z M15 11a3 3 0 11-6 0 3 3 0 016 0z" },
-  { href: "/equipment", label: "Equipment", icon: "M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" },
   { href: "/documents", label: "Doc Hub", icon: "M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z M12 3v6h6" },
-  { href: "/shifts", label: "Shift Planning", icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z", requiresPermission: "viewShifts" },
-  { href: "/website-messages", label: "Website Messages", icon: "M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" },
   { href: "/users", label: "Users", icon: "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" },
   { href: "/messages", label: "Messages", icon: "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" },
+];
+
+// Collapsible nav groups
+const NAV_GROUPS: NavGroup[] = [
+  {
+    id: "people",
+    label: "People",
+    icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z",
+    requiresPermission: "viewPersonnel",
+    items: [
+      { href: "/jobs", label: "Job Listings", icon: "M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" },
+      { href: "/applications", label: "Applications", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
+      { href: "/personnel", label: "Personnel", icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" },
+      { href: "/time-clock", label: "Time Clock", icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" },
+      { href: "/shifts", label: "Shift Planning", icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z", requiresPermission: "viewShifts" },
+      { href: "/equipment", label: "Equipment", icon: "M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" },
+    ],
+  },
 ];
 
 const BOTTOM_NAV_ITEMS = [
@@ -38,8 +58,14 @@ export default function Sidebar() {
   const { user, logout, canViewPersonnel, canViewShifts } = useAuth();
   const { theme } = useTheme();
   const { isOpen, close } = useSidebar();
+  const [openGroups, setOpenGroups] = useState<string[]>(["people"]); // Default open
 
   const isDark = theme === "dark";
+
+  // Check if any item in a group is active
+  const isGroupActive = (group: NavGroup) => {
+    return group.items.some((item) => pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href)));
+  };
 
   // Filter nav items based on permissions
   const filteredNavItems = NAV_ITEMS.filter((item) => {
@@ -48,6 +74,20 @@ export default function Sidebar() {
     if (item.requiresPermission === "viewShifts") return canViewShifts;
     return true;
   });
+
+  // Filter nav groups based on permissions
+  const filteredNavGroups = NAV_GROUPS.filter((group) => {
+    if (!group.requiresPermission) return true;
+    if (group.requiresPermission === "viewPersonnel") return canViewPersonnel;
+    if (group.requiresPermission === "viewShifts") return canViewShifts;
+    return true;
+  });
+
+  const toggleGroup = (groupId: string) => {
+    setOpenGroups((prev) =>
+      prev.includes(groupId) ? prev.filter((id) => id !== groupId) : [...prev, groupId]
+    );
+  };
 
   const handleNavClick = () => {
     // Close sidebar on mobile when nav item is clicked
@@ -95,6 +135,7 @@ export default function Sidebar() {
 
         {/* Navigation */}
         <nav className="flex-1 p-3 sm:p-4 space-y-1 overflow-y-auto">
+          {/* Top-level nav items */}
           {filteredNavItems.map((item) => {
             const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
             return (
@@ -127,6 +168,97 @@ export default function Sidebar() {
                 </svg>
                 <span className="font-medium text-sm sm:text-base truncate">{item.label}</span>
               </Link>
+            );
+          })}
+
+          {/* Collapsible nav groups */}
+          {filteredNavGroups.map((group) => {
+            const isOpen = openGroups.includes(group.id);
+            const groupActive = isGroupActive(group);
+            const filteredItems = group.items.filter((item) => {
+              if (!item.requiresPermission) return true;
+              if (item.requiresPermission === "viewShifts") return canViewShifts;
+              return true;
+            });
+
+            return (
+              <div key={group.id}>
+                <button
+                  onClick={() => toggleGroup(group.id)}
+                  className={`w-full flex items-center gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg transition-all ${
+                    groupActive
+                      ? isDark
+                        ? "bg-cyan-500/10 text-cyan-400"
+                        : "bg-blue-50/50 text-blue-600"
+                      : isDark
+                        ? "text-slate-400 hover:bg-slate-700/50 hover:text-white"
+                        : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  }`}
+                >
+                  <svg
+                    className="w-5 h-5 flex-shrink-0"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d={group.icon}
+                    />
+                  </svg>
+                  <span className="font-medium text-sm sm:text-base flex-1 text-left">{group.label}</span>
+                  <svg
+                    className={`w-4 h-4 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+
+                {/* Nested items */}
+                {isOpen && (
+                  <div className="ml-4 mt-1 space-y-1">
+                    {filteredItems.map((item) => {
+                      const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          onClick={handleNavClick}
+                          className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all text-sm ${
+                            isActive
+                              ? isDark
+                                ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
+                                : "bg-blue-50 text-blue-600 border border-blue-200"
+                              : isDark
+                                ? "text-slate-400 hover:bg-slate-700/50 hover:text-white"
+                                : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                          }`}
+                        >
+                          <svg
+                            className="w-4 h-4 flex-shrink-0"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d={item.icon}
+                            />
+                          </svg>
+                          <span className="truncate">{item.label}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
         </nav>

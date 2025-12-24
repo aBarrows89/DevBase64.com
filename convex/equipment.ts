@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import { Id } from "./_generated/dataModel";
 
 // ============ SCANNER QUERIES ============
 
@@ -182,13 +183,14 @@ export const getPersonnelEquipment = query({
 // Create a new scanner
 export const createScanner = mutation({
   args: {
-    number: v.number(),
+    number: v.string(),
     pin: v.optional(v.string()),
     serialNumber: v.optional(v.string()),
     model: v.optional(v.string()),
     locationId: v.id("locations"),
     purchaseDate: v.optional(v.string()),
     notes: v.optional(v.string()),
+    conditionNotes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
@@ -214,6 +216,7 @@ export const createScanner = mutation({
       status: "available",
       purchaseDate: args.purchaseDate,
       notes: args.notes,
+      conditionNotes: args.conditionNotes,
       createdAt: now,
       updatedAt: now,
     });
@@ -224,7 +227,7 @@ export const createScanner = mutation({
 export const updateScanner = mutation({
   args: {
     id: v.id("scanners"),
-    number: v.optional(v.number()),
+    number: v.optional(v.string()),
     pin: v.optional(v.string()),
     serialNumber: v.optional(v.string()),
     model: v.optional(v.string()),
@@ -233,6 +236,7 @@ export const updateScanner = mutation({
     lastMaintenanceDate: v.optional(v.string()),
     purchaseDate: v.optional(v.string()),
     notes: v.optional(v.string()),
+    conditionNotes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { id, ...updates } = args;
@@ -350,13 +354,14 @@ export const unassignScanner = mutation({
 // Create a new picker
 export const createPicker = mutation({
   args: {
-    number: v.number(),
+    number: v.string(),
     pin: v.optional(v.string()),
     serialNumber: v.optional(v.string()),
     model: v.optional(v.string()),
     locationId: v.id("locations"),
     purchaseDate: v.optional(v.string()),
     notes: v.optional(v.string()),
+    conditionNotes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
@@ -380,6 +385,7 @@ export const createPicker = mutation({
       status: "available",
       purchaseDate: args.purchaseDate,
       notes: args.notes,
+      conditionNotes: args.conditionNotes,
       createdAt: now,
       updatedAt: now,
     });
@@ -390,7 +396,7 @@ export const createPicker = mutation({
 export const updatePicker = mutation({
   args: {
     id: v.id("pickers"),
-    number: v.optional(v.number()),
+    number: v.optional(v.string()),
     pin: v.optional(v.string()),
     serialNumber: v.optional(v.string()),
     model: v.optional(v.string()),
@@ -399,6 +405,7 @@ export const updatePicker = mutation({
     lastMaintenanceDate: v.optional(v.string()),
     purchaseDate: v.optional(v.string()),
     notes: v.optional(v.string()),
+    conditionNotes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { id, ...updates } = args;
@@ -603,6 +610,72 @@ export const changeEquipmentStatus = mutation({
       performedBy: args.userId,
       notes: args.notes,
       createdAt: now,
+    });
+
+    return { success: true };
+  },
+});
+
+// Retire equipment
+export const retireEquipment = mutation({
+  args: {
+    equipmentType: v.string(), // "scanner" | "picker"
+    equipmentId: v.union(v.id("scanners"), v.id("pickers")),
+    reason: v.string(),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+
+    const equipment =
+      args.equipmentType === "scanner"
+        ? await ctx.db.get(args.equipmentId as Id<"scanners">)
+        : await ctx.db.get(args.equipmentId as Id<"pickers">);
+
+    if (!equipment) {
+      throw new Error(`${args.equipmentType} not found`);
+    }
+
+    const previousStatus = equipment.status;
+
+    // Update equipment to retired
+    await ctx.db.patch(args.equipmentId, {
+      status: "retired",
+      assignedTo: undefined,
+      assignedAt: undefined,
+      retiredAt: now,
+      retiredReason: args.reason,
+      updatedAt: now,
+    });
+
+    // Create history record
+    await ctx.db.insert("equipmentHistory", {
+      equipmentType: args.equipmentType,
+      equipmentId: args.equipmentId,
+      action: "status_change",
+      previousStatus: previousStatus,
+      newStatus: "retired",
+      previousAssignee: equipment.assignedTo,
+      performedBy: args.userId,
+      notes: `Retired: ${args.reason}`,
+      createdAt: now,
+    });
+
+    return { success: true };
+  },
+});
+
+// Update condition notes
+export const updateConditionNotes = mutation({
+  args: {
+    equipmentType: v.string(), // "scanner" | "picker"
+    equipmentId: v.union(v.id("scanners"), v.id("pickers")),
+    conditionNotes: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.equipmentId, {
+      conditionNotes: args.conditionNotes,
+      updatedAt: Date.now(),
     });
 
     return { success: true };

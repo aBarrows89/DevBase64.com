@@ -27,6 +27,7 @@ const TABS = [
   { id: "writeups", label: "Write-Ups" },
   { id: "attendance", label: "Attendance" },
   { id: "merits", label: "Merits" },
+  { id: "equipment", label: "Equipment" },
 ];
 
 // Helper function to calculate tenure
@@ -299,6 +300,8 @@ function PersonnelDetailContent() {
   const writeUps = useQuery(api.writeUps.listByPersonnel, { personnelId });
   const attendance = useQuery(api.attendance.listByPersonnel, { personnelId });
   const merits = useQuery(api.merits.listByPersonnel, { personnelId });
+  const equipment = useQuery(api.equipment.getPersonnelEquipment, { personnelId });
+  const locations = useQuery(api.locations.list);
 
   // Get linked application if exists
   const linkedApplication = useQuery(
@@ -1692,6 +1695,139 @@ function PersonnelDetailContent() {
               ) : (
                 <div className={`text-center py-12 ${isDark ? "text-slate-500" : "text-gray-500"}`}>
                   No merits on record
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Equipment Tab */}
+          {activeTab === "equipment" && (
+            <div className="space-y-6">
+              <h3 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                Assigned Equipment
+              </h3>
+
+              {equipment && (equipment.scanners.length > 0 || equipment.pickers.length > 0) ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Scanners */}
+                  {equipment.scanners.map((scanner) => {
+                    const location = locations?.find(l => l._id === scanner.locationId);
+                    return (
+                      <div
+                        key={scanner._id}
+                        className={`rounded-lg p-4 ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? "bg-cyan-500/20" : "bg-blue-100"}`}>
+                              <svg className={`w-5 h-5 ${isDark ? "text-cyan-400" : "text-blue-600"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                              </svg>
+                            </div>
+                            <div>
+                              <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                                Scanner #{scanner.number}
+                              </p>
+                              <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                                {scanner.model || "Unknown Model"}
+                              </p>
+                            </div>
+                          </div>
+                          <span className={`px-2 py-1 rounded text-xs font-medium ${
+                            scanner.status === "assigned"
+                              ? isDark ? "bg-green-500/20 text-green-400" : "bg-green-100 text-green-700"
+                              : isDark ? "bg-slate-600 text-slate-300" : "bg-gray-100 text-gray-600"
+                          }`}>
+                            {scanner.status}
+                          </span>
+                        </div>
+                        <div className={`mt-3 pt-3 border-t space-y-1 ${isDark ? "border-slate-700" : "border-gray-100"}`}>
+                          {location && (
+                            <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                              <span className="font-medium">Location:</span> {location.name}
+                            </p>
+                          )}
+                          {scanner.serialNumber && (
+                            <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                              <span className="font-medium">S/N:</span> {scanner.serialNumber}
+                            </p>
+                          )}
+                          {scanner.assignedAt && (
+                            <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                              <span className="font-medium">Assigned:</span> {new Date(scanner.assignedAt).toLocaleDateString()}
+                            </p>
+                          )}
+                          {scanner.conditionNotes && (
+                            <p className={`text-sm ${isDark ? "text-amber-400" : "text-amber-600"}`}>
+                              <span className="font-medium">Condition:</span> {scanner.conditionNotes}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Pickers */}
+                  {equipment.pickers.map((picker) => {
+                    const location = locations?.find(l => l._id === picker.locationId);
+                    return (
+                      <div
+                        key={picker._id}
+                        className={`rounded-lg p-4 ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? "bg-purple-500/20" : "bg-purple-100"}`}>
+                              <svg className={`w-5 h-5 ${isDark ? "text-purple-400" : "text-purple-600"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                              </svg>
+                            </div>
+                            <div>
+                              <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                                Picker #{picker.number}
+                              </p>
+                              <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                                {picker.model || "Unknown Model"}
+                              </p>
+                            </div>
+                          </div>
+                          <span className={`px-2 py-1 rounded text-xs font-medium ${
+                            picker.status === "assigned"
+                              ? isDark ? "bg-green-500/20 text-green-400" : "bg-green-100 text-green-700"
+                              : isDark ? "bg-slate-600 text-slate-300" : "bg-gray-100 text-gray-600"
+                          }`}>
+                            {picker.status}
+                          </span>
+                        </div>
+                        <div className={`mt-3 pt-3 border-t space-y-1 ${isDark ? "border-slate-700" : "border-gray-100"}`}>
+                          {location && (
+                            <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                              <span className="font-medium">Location:</span> {location.name}
+                            </p>
+                          )}
+                          {picker.serialNumber && (
+                            <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                              <span className="font-medium">S/N:</span> {picker.serialNumber}
+                            </p>
+                          )}
+                          {picker.assignedAt && (
+                            <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                              <span className="font-medium">Assigned:</span> {new Date(picker.assignedAt).toLocaleDateString()}
+                            </p>
+                          )}
+                          {picker.conditionNotes && (
+                            <p className={`text-sm ${isDark ? "text-amber-400" : "text-amber-600"}`}>
+                              <span className="font-medium">Condition:</span> {picker.conditionNotes}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className={`text-center py-12 ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                  No equipment assigned
                 </div>
               )}
             </div>

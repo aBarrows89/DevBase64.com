@@ -4,6 +4,7 @@ import { useState } from "react";
 import Protected from "../protected";
 import Sidebar from "@/components/Sidebar";
 import { useTheme } from "../theme-context";
+import { useAuth } from "../auth-context";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
@@ -13,11 +14,15 @@ type EquipmentType = "scanners" | "pickers";
 function EquipmentContent() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
+  const { user } = useAuth();
 
   const [activeTab, setActiveTab] = useState<EquipmentType>("scanners");
   const [selectedLocation, setSelectedLocation] = useState<Id<"locations"> | "all">("all");
   const [showNewEquipment, setShowNewEquipment] = useState(false);
   const [editingId, setEditingId] = useState<Id<"scanners"> | Id<"pickers"> | null>(null);
+  const [showRetireModal, setShowRetireModal] = useState(false);
+  const [retireId, setRetireId] = useState<Id<"scanners"> | Id<"pickers"> | null>(null);
+  const [retireReason, setRetireReason] = useState("");
   const [error, setError] = useState("");
 
   // Queries
@@ -35,6 +40,7 @@ function EquipmentContent() {
   const updateScanner = useMutation(api.equipment.updateScanner);
   const createPicker = useMutation(api.equipment.createPicker);
   const updatePicker = useMutation(api.equipment.updatePicker);
+  const retireEquipment = useMutation(api.equipment.retireEquipment);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -45,6 +51,7 @@ function EquipmentContent() {
     locationId: "" as string,
     purchaseDate: "",
     notes: "",
+    conditionNotes: "",
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -56,51 +63,60 @@ function EquipmentContent() {
       return;
     }
 
+    if (!formData.number.trim()) {
+      setError("Please enter an identifier");
+      return;
+    }
+
     try {
       if (editingId) {
         if (activeTab === "scanners") {
           await updateScanner({
             id: editingId as Id<"scanners">,
-            number: parseInt(formData.number) || undefined,
+            number: formData.number.trim() || undefined,
             pin: formData.pin || undefined,
             serialNumber: formData.serialNumber || undefined,
             model: formData.model || undefined,
             locationId: formData.locationId as Id<"locations">,
             purchaseDate: formData.purchaseDate || undefined,
             notes: formData.notes || undefined,
+            conditionNotes: formData.conditionNotes || undefined,
           });
         } else {
           await updatePicker({
             id: editingId as Id<"pickers">,
-            number: parseInt(formData.number) || undefined,
+            number: formData.number.trim() || undefined,
             pin: formData.pin || undefined,
             serialNumber: formData.serialNumber || undefined,
             model: formData.model || undefined,
             locationId: formData.locationId as Id<"locations">,
             purchaseDate: formData.purchaseDate || undefined,
             notes: formData.notes || undefined,
+            conditionNotes: formData.conditionNotes || undefined,
           });
         }
       } else {
         if (activeTab === "scanners") {
           await createScanner({
-            number: parseInt(formData.number),
+            number: formData.number.trim(),
             pin: formData.pin || undefined,
             serialNumber: formData.serialNumber || undefined,
             model: formData.model || undefined,
             locationId: formData.locationId as Id<"locations">,
             purchaseDate: formData.purchaseDate || undefined,
             notes: formData.notes || undefined,
+            conditionNotes: formData.conditionNotes || undefined,
           });
         } else {
           await createPicker({
-            number: parseInt(formData.number),
+            number: formData.number.trim(),
             pin: formData.pin || undefined,
             serialNumber: formData.serialNumber || undefined,
             model: formData.model || undefined,
             locationId: formData.locationId as Id<"locations">,
             purchaseDate: formData.purchaseDate || undefined,
             notes: formData.notes || undefined,
+            conditionNotes: formData.conditionNotes || undefined,
           });
         }
       }
@@ -113,6 +129,24 @@ function EquipmentContent() {
     }
   };
 
+  const handleRetire = async () => {
+    if (!retireId || !retireReason.trim() || !user?._id) return;
+
+    try {
+      await retireEquipment({
+        equipmentType: activeTab === "scanners" ? "scanner" : "picker",
+        equipmentId: retireId,
+        reason: retireReason.trim(),
+        userId: user._id,
+      });
+      setShowRetireModal(false);
+      setRetireId(null);
+      setRetireReason("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to retire equipment");
+    }
+  };
+
   const resetForm = () => {
     setFormData({
       number: "",
@@ -122,6 +156,7 @@ function EquipmentContent() {
       locationId: locations?.[0]?._id ?? "",
       purchaseDate: "",
       notes: "",
+      conditionNotes: "",
     });
   };
 
@@ -135,8 +170,15 @@ function EquipmentContent() {
       locationId: item.locationId,
       purchaseDate: item.purchaseDate || "",
       notes: item.notes || "",
+      conditionNotes: item.conditionNotes || "",
     });
     setShowNewEquipment(true);
+  };
+
+  const openRetireModal = (id: Id<"scanners"> | Id<"pickers">) => {
+    setRetireId(id);
+    setRetireReason("");
+    setShowRetireModal(true);
   };
 
   const currentItems = activeTab === "scanners" ? scanners : pickers;
@@ -300,13 +342,27 @@ function EquipmentContent() {
                     </p>
                   )}
 
-                  <div className="flex gap-2 mt-4 pt-4 border-t border-slate-700/50">
+                  {item.conditionNotes && (
+                    <div className={`text-sm mt-2 p-2 rounded ${isDark ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" : "bg-amber-50 text-amber-700 border border-amber-200"}`}>
+                      <span className="font-medium">Condition:</span> {item.conditionNotes}
+                    </div>
+                  )}
+
+                  <div className={`flex gap-2 mt-4 pt-4 border-t ${isDark ? "border-slate-700/50" : "border-gray-200"}`}>
                     <button
                       onClick={() => handleEdit(item)}
                       className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${isDark ? "bg-slate-700 text-slate-300 hover:bg-slate-600" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
                     >
                       Edit
                     </button>
+                    {item.status !== "retired" && (
+                      <button
+                        onClick={() => openRetireModal(item._id as Id<"scanners"> | Id<"pickers">)}
+                        className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${isDark ? "bg-red-500/20 text-red-400 hover:bg-red-500/30" : "bg-red-50 text-red-600 hover:bg-red-100"}`}
+                      >
+                        Retire
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -325,15 +381,15 @@ function EquipmentContent() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
-                      Number *
+                      Identifier *
                     </label>
                     <input
-                      type="number"
+                      type="text"
                       value={formData.number}
                       onChange={(e) => setFormData({ ...formData, number: e.target.value })}
                       className={`w-full px-4 py-3 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
                       required
-                      placeholder="1"
+                      placeholder="e.g., 1, A-12, SC-001"
                     />
                   </div>
                   <div>
@@ -411,8 +467,22 @@ function EquipmentContent() {
                   <textarea
                     value={formData.notes}
                     onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                    rows={3}
+                    rows={2}
                     className={`w-full px-4 py-3 border rounded-lg focus:outline-none resize-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                    placeholder="General notes about this equipment"
+                  />
+                </div>
+
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                    Condition Notes
+                  </label>
+                  <textarea
+                    value={formData.conditionNotes}
+                    onChange={(e) => setFormData({ ...formData, conditionNotes: e.target.value })}
+                    rows={2}
+                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none resize-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                    placeholder="Current condition (e.g., screen scratched, battery weak)"
                   />
                 </div>
 
@@ -436,6 +506,56 @@ function EquipmentContent() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Retire Equipment Modal */}
+        {showRetireModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className={`border rounded-xl p-4 sm:p-6 w-full max-w-md ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200"}`}>
+              <h2 className={`text-xl font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
+                Retire {activeTab === "scanners" ? "Scanner" : "Picker"}
+              </h2>
+              <p className={`text-sm mb-4 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                This will mark the equipment as retired and remove any current assignment. This action cannot be undone.
+              </p>
+              <div className="space-y-4">
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                    Reason for Retirement *
+                  </label>
+                  <textarea
+                    value={retireReason}
+                    onChange={(e) => setRetireReason(e.target.value)}
+                    rows={3}
+                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none resize-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                    placeholder="e.g., Damaged beyond repair, obsolete model, lost"
+                    required
+                  />
+                </div>
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowRetireModal(false);
+                      setRetireId(null);
+                      setRetireReason("");
+                    }}
+                    className={`flex-1 px-4 py-3 font-medium rounded-lg transition-colors ${isDark ? "bg-slate-700 text-white hover:bg-slate-600" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRetire}
+                    disabled={!retireReason.trim()}
+                    className={`flex-1 px-4 py-3 font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isDark ? "bg-red-500 text-white hover:bg-red-600" : "bg-red-600 text-white hover:bg-red-700"}`}
+                  >
+                    Retire Equipment
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}

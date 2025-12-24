@@ -46,6 +46,7 @@ function ProjectsContent() {
   const [isGeneratingTasks, setIsGeneratingTasks] = useState(false);
   const [showAddTask, setShowAddTask] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskAssignee, setNewTaskAssignee] = useState<string>("");
   const [taskFilter, setTaskFilter] = useState<"all" | "mine">("all"); // For task filtering
   const [selectedProjectId, setSelectedProjectId] = useState<Id<"projects"> | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -187,8 +188,10 @@ function ProjectsContent() {
       await createTask({
         projectId: selectedProjectId,
         title: newTaskTitle.trim(),
+        assignedTo: newTaskAssignee ? (newTaskAssignee as Id<"users">) : undefined,
       });
       setNewTaskTitle("");
+      setNewTaskAssignee("");
       setShowAddTask(false);
     } catch (error) {
       console.error("Failed to add task:", error);
@@ -702,31 +705,46 @@ function ProjectsContent() {
 
                 {/* Add Task Form */}
                 {showAddTask && (
-                  <form onSubmit={handleAddTask} className="mb-3 flex gap-2">
-                    <input
-                      type="text"
-                      value={newTaskTitle}
-                      onChange={(e) => setNewTaskTitle(e.target.value)}
-                      placeholder="Enter task title..."
-                      className="flex-1 px-3 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-cyan-500"
-                      autoFocus
-                    />
-                    <button
-                      type="submit"
-                      className="px-4 py-2 bg-cyan-500 text-white text-sm rounded-lg hover:bg-cyan-600"
-                    >
-                      Add
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowAddTask(false);
-                        setNewTaskTitle("");
-                      }}
-                      className="px-4 py-2 bg-slate-700 text-white text-sm rounded-lg hover:bg-slate-600"
-                    >
-                      Cancel
-                    </button>
+                  <form onSubmit={handleAddTask} className="mb-3 space-y-2">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newTaskTitle}
+                        onChange={(e) => setNewTaskTitle(e.target.value)}
+                        placeholder="Enter task title..."
+                        className="flex-1 px-3 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-cyan-500"
+                        autoFocus
+                      />
+                      <select
+                        value={newTaskAssignee}
+                        onChange={(e) => setNewTaskAssignee(e.target.value)}
+                        className="px-3 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500"
+                      >
+                        <option value="">Unassigned</option>
+                        {users.map((u) => (
+                          <option key={u._id} value={u._id}>{u.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAddTask(false);
+                          setNewTaskTitle("");
+                          setNewTaskAssignee("");
+                        }}
+                        className="px-4 py-2 bg-slate-700 text-white text-sm rounded-lg hover:bg-slate-600"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-4 py-2 bg-cyan-500 text-white text-sm rounded-lg hover:bg-cyan-600"
+                      >
+                        Add Task
+                      </button>
+                    </div>
                   </form>
                 )}
 
@@ -765,12 +783,19 @@ function ProjectsContent() {
                           )}
                         </button>
                         <div className="flex-1">
-                          <span className={`text-sm ${task.status === "done" ? "text-slate-400 line-through" : "text-white"}`}>
-                            {task.title}
-                          </span>
-                          {task.estimatedMinutes && (
-                            <span className="ml-2 text-xs text-slate-500">
-                              ~{task.estimatedMinutes < 60 ? `${task.estimatedMinutes}m` : `${Math.round(task.estimatedMinutes / 60)}h`}
+                          <div className="flex items-center gap-2">
+                            <span className={`text-sm ${task.status === "done" ? "text-slate-400 line-through" : "text-white"}`}>
+                              {task.title}
+                            </span>
+                            {task.estimatedMinutes && (
+                              <span className="text-xs text-slate-500">
+                                ~{task.estimatedMinutes < 60 ? `${task.estimatedMinutes}m` : `${Math.round(task.estimatedMinutes / 60)}h`}
+                              </span>
+                            )}
+                          </div>
+                          {task.assignedTo && (
+                            <span className="text-xs text-slate-500">
+                              Assigned: {users.find((u) => u._id === task.assignedTo)?.name || "Unknown"}
                             </span>
                           )}
                         </div>
