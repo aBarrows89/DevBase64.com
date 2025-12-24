@@ -525,15 +525,69 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_assigned", ["assignedTo"]),
 
+  // Equipment agreements (signed disclosures for assigned equipment)
+  equipmentAgreements: defineTable({
+    equipmentType: v.string(), // "scanner" | "picker"
+    equipmentId: v.union(v.id("scanners"), v.id("pickers")),
+    personnelId: v.id("personnel"),
+    equipmentNumber: v.string(), // Equipment identifier at time of signing
+    serialNumber: v.optional(v.string()), // Serial number at time of signing
+    equipmentValue: v.number(), // Dollar value (e.g., 100)
+    agreementText: v.string(), // Full disclosure text
+    signatureData: v.string(), // Base64 encoded signature image
+    signedAt: v.number(), // Timestamp when signed
+    witnessedBy: v.id("users"), // Admin/manager who processed assignment
+    witnessedByName: v.string(), // Name for display
+    // Revocation (when equipment is unassigned)
+    revokedAt: v.optional(v.number()),
+    revokedBy: v.optional(v.id("users")),
+    revokedReason: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_equipment", ["equipmentType", "equipmentId"])
+    .index("by_personnel", ["personnelId"])
+    .index("by_signed", ["signedAt"]),
+
+  // Equipment return condition checks (manager validates before reassignment)
+  equipmentConditionChecks: defineTable({
+    equipmentType: v.string(), // "scanner" | "picker"
+    equipmentId: v.union(v.id("scanners"), v.id("pickers")),
+    returnedBy: v.id("personnel"), // Who returned the equipment
+    checkedBy: v.id("users"), // Manager who performed the check
+    checkedByName: v.string(),
+    // Checklist items
+    checklist: v.object({
+      physicalCondition: v.boolean(), // No visible damage
+      screenFunctional: v.boolean(), // Screen works (for scanners)
+      buttonsWorking: v.boolean(), // All buttons responsive
+      batteryCondition: v.boolean(), // Battery holds charge
+      chargingPortOk: v.boolean(), // Charging port not damaged
+      scannerFunctional: v.boolean(), // Barcode scanning works
+      cleanCondition: v.boolean(), // Equipment is clean
+    }),
+    overallCondition: v.string(), // "excellent" | "good" | "fair" | "poor" | "damaged"
+    damageNotes: v.optional(v.string()), // Details of any damage found
+    repairRequired: v.boolean(),
+    readyForReassignment: v.boolean(), // Manager confirms ready to assign to next person
+    deductionRequired: v.optional(v.boolean()), // If damage requires pay deduction
+    deductionAmount: v.optional(v.number()), // Amount to deduct
+    checkedAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_equipment", ["equipmentType", "equipmentId"])
+    .index("by_personnel", ["returnedBy"])
+    .index("by_checked", ["checkedAt"]),
+
   // Equipment assignment history (for audit trail)
   equipmentHistory: defineTable({
     equipmentType: v.string(), // "scanner" | "picker"
     equipmentId: v.union(v.id("scanners"), v.id("pickers")),
-    action: v.string(), // "assigned" | "unassigned" | "maintenance" | "status_change"
+    action: v.string(), // "assigned" | "unassigned" | "maintenance" | "status_change" | "condition_check"
     previousStatus: v.optional(v.string()),
     newStatus: v.optional(v.string()),
     previousAssignee: v.optional(v.id("personnel")),
     newAssignee: v.optional(v.id("personnel")),
+    conditionCheckId: v.optional(v.id("equipmentConditionChecks")), // Link to condition check if applicable
     performedBy: v.id("users"),
     notes: v.optional(v.string()),
     createdAt: v.number(),

@@ -8,8 +8,12 @@ import { useAuth } from "../auth-context";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
+import SignaturePad from "@/components/SignaturePad";
 
 type EquipmentType = "scanners" | "pickers";
+
+// Equipment value for agreements
+const EQUIPMENT_VALUE = 100;
 
 function EquipmentContent() {
   const { theme } = useTheme();
@@ -25,6 +29,40 @@ function EquipmentContent() {
   const [retireReason, setRetireReason] = useState("");
   const [error, setError] = useState("");
 
+  // Assign modal state
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [assignEquipmentId, setAssignEquipmentId] = useState<Id<"scanners"> | Id<"pickers"> | null>(null);
+  const [assignEquipmentData, setAssignEquipmentData] = useState<{
+    number: string;
+    serialNumber?: string;
+  } | null>(null);
+  const [selectedPersonnelId, setSelectedPersonnelId] = useState<string>("");
+  const [signatureData, setSignatureData] = useState<string | null>(null);
+  const [assignStep, setAssignStep] = useState<"select" | "sign">("select");
+
+  // Return modal state
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [returnEquipmentId, setReturnEquipmentId] = useState<Id<"scanners"> | Id<"pickers"> | null>(null);
+  const [returnEquipmentData, setReturnEquipmentData] = useState<{
+    number: string;
+    assignedPersonName?: string | null;
+  } | null>(null);
+  const [checklist, setChecklist] = useState({
+    physicalCondition: true,
+    screenFunctional: true,
+    buttonsWorking: true,
+    batteryCondition: true,
+    chargingPortOk: true,
+    scannerFunctional: true,
+    cleanCondition: true,
+  });
+  const [overallCondition, setOverallCondition] = useState<string>("good");
+  const [damageNotes, setDamageNotes] = useState("");
+  const [repairRequired, setRepairRequired] = useState(false);
+  const [readyForReassignment, setReadyForReassignment] = useState(true);
+  const [deductionRequired, setDeductionRequired] = useState(false);
+  const [deductionAmount, setDeductionAmount] = useState<number>(0);
+
   // Queries
   const locations = useQuery(api.locations.listActive);
   const scanners = useQuery(api.equipment.listScanners,
@@ -34,6 +72,7 @@ function EquipmentContent() {
     selectedLocation === "all" ? {} : { locationId: selectedLocation }
   );
   const personnel = useQuery(api.personnel.list, {});
+  const activePersonnel = useQuery(api.equipment.listActivePersonnel);
 
   // Mutations
   const createScanner = useMutation(api.equipment.createScanner);
@@ -41,6 +80,8 @@ function EquipmentContent() {
   const createPicker = useMutation(api.equipment.createPicker);
   const updatePicker = useMutation(api.equipment.updatePicker);
   const retireEquipment = useMutation(api.equipment.retireEquipment);
+  const assignEquipmentWithAgreement = useMutation(api.equipment.assignEquipmentWithAgreement);
+  const returnEquipmentWithCheck = useMutation(api.equipment.returnEquipmentWithCheck);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -179,6 +220,127 @@ function EquipmentContent() {
     setRetireId(id);
     setRetireReason("");
     setShowRetireModal(true);
+  };
+
+  const openAssignModal = (item: NonNullable<typeof scanners>[0] | NonNullable<typeof pickers>[0]) => {
+    setAssignEquipmentId(item._id as Id<"scanners"> | Id<"pickers">);
+    setAssignEquipmentData({
+      number: String(item.number),
+      serialNumber: item.serialNumber,
+    });
+    setSelectedPersonnelId("");
+    setSignatureData(null);
+    setAssignStep("select");
+    setShowAssignModal(true);
+  };
+
+  const openReturnModal = (item: NonNullable<typeof scanners>[0] | NonNullable<typeof pickers>[0]) => {
+    setReturnEquipmentId(item._id as Id<"scanners"> | Id<"pickers">);
+    setReturnEquipmentData({
+      number: String(item.number),
+      assignedPersonName: item.assignedPersonName,
+    });
+    setChecklist({
+      physicalCondition: true,
+      screenFunctional: true,
+      buttonsWorking: true,
+      batteryCondition: true,
+      chargingPortOk: true,
+      scannerFunctional: true,
+      cleanCondition: true,
+    });
+    setOverallCondition("good");
+    setDamageNotes("");
+    setRepairRequired(false);
+    setReadyForReassignment(true);
+    setDeductionRequired(false);
+    setDeductionAmount(0);
+    setShowReturnModal(true);
+  };
+
+  const handleAssign = async () => {
+    if (!assignEquipmentId || !selectedPersonnelId || !signatureData || !user?._id) return;
+
+    try {
+      await assignEquipmentWithAgreement({
+        equipmentType: activeTab === "scanners" ? "scanner" : "picker",
+        equipmentId: assignEquipmentId,
+        personnelId: selectedPersonnelId as Id<"personnel">,
+        signatureData: signatureData,
+        userId: user._id,
+        userName: user.name,
+        equipmentValue: EQUIPMENT_VALUE,
+      });
+      setShowAssignModal(false);
+      setAssignEquipmentId(null);
+      setAssignEquipmentData(null);
+      setSelectedPersonnelId("");
+      setSignatureData(null);
+      setAssignStep("select");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to assign equipment");
+    }
+  };
+
+  const handleReturn = async () => {
+    if (!returnEquipmentId || !user?._id) return;
+
+    try {
+      await returnEquipmentWithCheck({
+        equipmentType: activeTab === "scanners" ? "scanner" : "picker",
+        equipmentId: returnEquipmentId,
+        checkedBy: user._id,
+        checkedByName: user.name,
+        checklist: checklist,
+        overallCondition: overallCondition,
+        damageNotes: damageNotes || undefined,
+        repairRequired: repairRequired,
+        readyForReassignment: readyForReassignment,
+        deductionRequired: deductionRequired,
+        deductionAmount: deductionRequired ? deductionAmount : undefined,
+      });
+      setShowReturnModal(false);
+      setReturnEquipmentId(null);
+      setReturnEquipmentData(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to return equipment");
+    }
+  };
+
+  const getAgreementText = () => {
+    if (!assignEquipmentData) return "";
+    const selectedPerson = activePersonnel?.find(p => p._id === selectedPersonnelId);
+    const employeeName = selectedPerson?.name || "Employee";
+    const serialDisplay = assignEquipmentData.serialNumber ? ` (Serial: ${assignEquipmentData.serialNumber})` : "";
+    const equipmentLabel = activeTab === "scanners" ? "Scanner" : "Picker";
+
+    return `EQUIPMENT RESPONSIBILITY AGREEMENT
+
+This Equipment Responsibility Agreement ("Agreement") is entered into between the Employee named below and IE Tires, LLC ("Company").
+
+EQUIPMENT ASSIGNED:
+${equipmentLabel} #${assignEquipmentData.number}${serialDisplay}
+Equipment Value: $${EQUIPMENT_VALUE.toFixed(2)}
+
+EMPLOYEE: ${employeeName}
+
+TERMS AND CONDITIONS:
+
+1. SOLE RESPONSIBILITY: The undersigned Employee acknowledges receipt of the above-described Company equipment and accepts full responsibility for its care, security, and proper use.
+
+2. AUTHORIZED USE ONLY: This equipment is issued exclusively to the undersigned Employee. No other individual is authorized to access, operate, or use this equipment under any circumstances.
+
+3. ON-PREMISES ONLY: This equipment must remain on Company premises at all times. Under no circumstances shall this equipment be removed from the workplace or taken to the Employee's residence.
+
+4. DAMAGE REPORTING: The Employee shall immediately report any damage, malfunction, or defect to their supervisor. Failure to promptly report damage may result in disciplinary action and financial liability.
+
+5. FINANCIAL LIABILITY:
+   a) Failure to return equipment upon separation from employment, reassignment, or request by management will result in a deduction of up to $${EQUIPMENT_VALUE.toFixed(2)} from the Employee's final pay.
+   b) Damage resulting from intentional misconduct, gross negligence, or careless handling may result in a deduction of up to $${EQUIPMENT_VALUE.toFixed(2)} from Employee's pay to cover replacement costs.
+
+6. RETURN REQUIREMENT: Upon termination of employment, reassignment, or request by management, the Employee shall immediately return this equipment in the same condition as received, allowing for reasonable wear and tear.
+
+By signing below, the Employee acknowledges that they have read, understand, and agree to abide by all terms and conditions set forth in this Agreement.`;
   };
 
   const currentItems = activeTab === "scanners" ? scanners : pickers;
@@ -348,13 +510,29 @@ function EquipmentContent() {
                     </div>
                   )}
 
-                  <div className={`flex gap-2 mt-4 pt-4 border-t ${isDark ? "border-slate-700/50" : "border-gray-200"}`}>
+                  <div className={`flex flex-wrap gap-2 mt-4 pt-4 border-t ${isDark ? "border-slate-700/50" : "border-gray-200"}`}>
                     <button
                       onClick={() => handleEdit(item)}
                       className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${isDark ? "bg-slate-700 text-slate-300 hover:bg-slate-600" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
                     >
                       Edit
                     </button>
+                    {item.status === "available" && (
+                      <button
+                        onClick={() => openAssignModal(item)}
+                        className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${isDark ? "bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30" : "bg-blue-50 text-blue-600 hover:bg-blue-100"}`}
+                      >
+                        Assign
+                      </button>
+                    )}
+                    {item.status === "assigned" && (
+                      <button
+                        onClick={() => openReturnModal(item)}
+                        className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${isDark ? "bg-amber-500/20 text-amber-400 hover:bg-amber-500/30" : "bg-amber-50 text-amber-600 hover:bg-amber-100"}`}
+                      >
+                        Return
+                      </button>
+                    )}
                     {item.status !== "retired" && (
                       <button
                         onClick={() => openRetireModal(item._id as Id<"scanners"> | Id<"pickers">)}
@@ -553,6 +731,321 @@ function EquipmentContent() {
                     className={`flex-1 px-4 py-3 font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isDark ? "bg-red-500 text-white hover:bg-red-600" : "bg-red-600 text-white hover:bg-red-700"}`}
                   >
                     Retire Equipment
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Assign Equipment Modal */}
+        {showAssignModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className={`border rounded-xl p-4 sm:p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200"}`}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className={`text-xl font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  Assign {activeTab === "scanners" ? "Scanner" : "Picker"} #{assignEquipmentData?.number}
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowAssignModal(false);
+                    setAssignEquipmentId(null);
+                    setAssignEquipmentData(null);
+                    setSelectedPersonnelId("");
+                    setSignatureData(null);
+                    setAssignStep("select");
+                  }}
+                  className={`p-1 rounded-lg transition-colors ${isDark ? "hover:bg-slate-700" : "hover:bg-gray-100"}`}
+                >
+                  <svg className={`w-5 h-5 ${isDark ? "text-slate-400" : "text-gray-500"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {assignStep === "select" ? (
+                <>
+                  <p className={`text-sm mb-4 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    Select an employee to assign this equipment. They will need to sign an equipment responsibility agreement.
+                  </p>
+                  <div className="space-y-4">
+                    <div>
+                      <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                        Assign to Employee *
+                      </label>
+                      <select
+                        value={selectedPersonnelId}
+                        onChange={(e) => setSelectedPersonnelId(e.target.value)}
+                        className={`w-full px-4 py-3 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                      >
+                        <option value="">Select an employee</option>
+                        {activePersonnel?.map((person) => (
+                          <option key={person._id} value={person._id}>
+                            {person.name} - {person.position} ({person.department})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="flex gap-3 pt-4">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAssignModal(false);
+                          setAssignEquipmentId(null);
+                          setAssignEquipmentData(null);
+                          setSelectedPersonnelId("");
+                        }}
+                        className={`flex-1 px-4 py-3 font-medium rounded-lg transition-colors ${isDark ? "bg-slate-700 text-white hover:bg-slate-600" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAssignStep("sign")}
+                        disabled={!selectedPersonnelId}
+                        className={`flex-1 px-4 py-3 font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isDark ? "bg-cyan-500 text-white hover:bg-cyan-600" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+                      >
+                        Continue to Agreement
+                      </button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className={`mb-4 p-3 rounded-lg ${isDark ? "bg-slate-700/50" : "bg-blue-50"}`}>
+                    <p className={`text-sm font-medium ${isDark ? "text-cyan-400" : "text-blue-700"}`}>
+                      Assigning to: {activePersonnel?.find(p => p._id === selectedPersonnelId)?.name}
+                    </p>
+                  </div>
+
+                  <div className={`mb-4 p-4 rounded-lg border max-h-64 overflow-y-auto ${isDark ? "bg-slate-900/50 border-slate-600" : "bg-gray-50 border-gray-200"}`}>
+                    <pre className={`text-xs whitespace-pre-wrap font-mono ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                      {getAgreementText()}
+                    </pre>
+                  </div>
+
+                  <div className="mb-4">
+                    <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                      Employee Signature *
+                    </label>
+                    <p className={`text-xs mb-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                      Have the employee sign below to acknowledge the equipment responsibility agreement.
+                    </p>
+                    <SignaturePad
+                      onSignatureChange={setSignatureData}
+                      width={500}
+                      height={150}
+                    />
+                  </div>
+
+                  <div className="flex gap-3 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAssignStep("select");
+                        setSignatureData(null);
+                      }}
+                      className={`flex-1 px-4 py-3 font-medium rounded-lg transition-colors ${isDark ? "bg-slate-700 text-white hover:bg-slate-600" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+                    >
+                      Back
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleAssign}
+                      disabled={!signatureData}
+                      className={`flex-1 px-4 py-3 font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isDark ? "bg-cyan-500 text-white hover:bg-cyan-600" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+                    >
+                      Assign Equipment
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Return Equipment Modal */}
+        {showReturnModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className={`border rounded-xl p-4 sm:p-6 w-full max-w-xl max-h-[90vh] overflow-y-auto ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200"}`}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className={`text-xl font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  Return {activeTab === "scanners" ? "Scanner" : "Picker"} #{returnEquipmentData?.number}
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowReturnModal(false);
+                    setReturnEquipmentId(null);
+                    setReturnEquipmentData(null);
+                  }}
+                  className={`p-1 rounded-lg transition-colors ${isDark ? "hover:bg-slate-700" : "hover:bg-gray-100"}`}
+                >
+                  <svg className={`w-5 h-5 ${isDark ? "text-slate-400" : "text-gray-500"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className={`mb-4 p-3 rounded-lg ${isDark ? "bg-slate-700/50" : "bg-amber-50"}`}>
+                <p className={`text-sm ${isDark ? "text-amber-400" : "text-amber-700"}`}>
+                  <span className="font-medium">Returning from:</span> {returnEquipmentData?.assignedPersonName || "Unknown"}
+                </p>
+              </div>
+
+              <div className="space-y-6">
+                {/* Condition Checklist */}
+                <div>
+                  <h3 className={`text-sm font-semibold mb-3 ${isDark ? "text-white" : "text-gray-900"}`}>
+                    Condition Checklist
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {[
+                      { key: "physicalCondition", label: "No physical damage" },
+                      { key: "screenFunctional", label: "Screen works properly" },
+                      { key: "buttonsWorking", label: "All buttons responsive" },
+                      { key: "batteryCondition", label: "Battery holds charge" },
+                      { key: "chargingPortOk", label: "Charging port undamaged" },
+                      { key: "scannerFunctional", label: "Scanning works" },
+                      { key: "cleanCondition", label: "Equipment is clean" },
+                    ].map((item) => (
+                      <label
+                        key={item.key}
+                        className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                          checklist[item.key as keyof typeof checklist]
+                            ? isDark ? "bg-green-500/10 border-green-500/30" : "bg-green-50 border-green-200"
+                            : isDark ? "bg-red-500/10 border-red-500/30" : "bg-red-50 border-red-200"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checklist[item.key as keyof typeof checklist]}
+                          onChange={(e) => setChecklist({ ...checklist, [item.key]: e.target.checked })}
+                          className="w-4 h-4 rounded"
+                        />
+                        <span className={`text-sm ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                          {item.label}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Overall Condition */}
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                    Overall Condition
+                  </label>
+                  <select
+                    value={overallCondition}
+                    onChange={(e) => setOverallCondition(e.target.value)}
+                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                  >
+                    <option value="excellent">Excellent - Like new</option>
+                    <option value="good">Good - Normal wear</option>
+                    <option value="fair">Fair - Some issues</option>
+                    <option value="poor">Poor - Multiple issues</option>
+                    <option value="damaged">Damaged - Needs repair</option>
+                  </select>
+                </div>
+
+                {/* Damage Notes */}
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                    Damage Notes (if any)
+                  </label>
+                  <textarea
+                    value={damageNotes}
+                    onChange={(e) => setDamageNotes(e.target.value)}
+                    rows={2}
+                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none resize-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                    placeholder="Describe any damage or issues found..."
+                  />
+                </div>
+
+                {/* Toggles */}
+                <div className="space-y-3">
+                  <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer ${isDark ? "border-slate-600" : "border-gray-200"}`}>
+                    <input
+                      type="checkbox"
+                      checked={repairRequired}
+                      onChange={(e) => {
+                        setRepairRequired(e.target.checked);
+                        if (e.target.checked) setReadyForReassignment(false);
+                      }}
+                      className="w-4 h-4 rounded"
+                    />
+                    <span className={`text-sm ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                      Repair required before next use
+                    </span>
+                  </label>
+
+                  <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer ${isDark ? "border-slate-600" : "border-gray-200"}`}>
+                    <input
+                      type="checkbox"
+                      checked={readyForReassignment}
+                      onChange={(e) => setReadyForReassignment(e.target.checked)}
+                      disabled={repairRequired}
+                      className="w-4 h-4 rounded disabled:opacity-50"
+                    />
+                    <span className={`text-sm ${isDark ? "text-slate-300" : "text-gray-700"} ${repairRequired ? "opacity-50" : ""}`}>
+                      Ready for reassignment
+                    </span>
+                  </label>
+
+                  <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer ${isDark ? "border-slate-600" : "border-gray-200"}`}>
+                    <input
+                      type="checkbox"
+                      checked={deductionRequired}
+                      onChange={(e) => setDeductionRequired(e.target.checked)}
+                      className="w-4 h-4 rounded"
+                    />
+                    <span className={`text-sm ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                      Pay deduction required for damage
+                    </span>
+                  </label>
+
+                  {deductionRequired && (
+                    <div className="ml-7">
+                      <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                        Deduction Amount
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <span className={`${isDark ? "text-slate-400" : "text-gray-500"}`}>$</span>
+                        <input
+                          type="number"
+                          value={deductionAmount}
+                          onChange={(e) => setDeductionAmount(Math.min(EQUIPMENT_VALUE, Math.max(0, Number(e.target.value))))}
+                          max={EQUIPMENT_VALUE}
+                          min={0}
+                          className={`w-32 px-4 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                        />
+                        <span className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                          (max ${EQUIPMENT_VALUE})
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex gap-3 pt-4 border-t border-slate-700/50">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowReturnModal(false);
+                      setReturnEquipmentId(null);
+                      setReturnEquipmentData(null);
+                    }}
+                    className={`flex-1 px-4 py-3 font-medium rounded-lg transition-colors ${isDark ? "bg-slate-700 text-white hover:bg-slate-600" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleReturn}
+                    className={`flex-1 px-4 py-3 font-medium rounded-lg transition-colors ${isDark ? "bg-amber-500 text-white hover:bg-amber-600" : "bg-amber-600 text-white hover:bg-amber-700"}`}
+                  >
+                    Complete Return
                   </button>
                 </div>
               </div>

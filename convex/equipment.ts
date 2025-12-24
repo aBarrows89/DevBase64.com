@@ -681,3 +681,339 @@ export const updateConditionNotes = mutation({
     return { success: true };
   },
 });
+
+// ============ EQUIPMENT AGREEMENTS ============
+
+// Generate the official equipment agreement text
+export const generateAgreementText = (
+  equipmentType: string,
+  equipmentNumber: string,
+  serialNumber: string | undefined,
+  employeeName: string,
+  equipmentValue: number
+): string => {
+  const serialDisplay = serialNumber ? ` (Serial: ${serialNumber})` : "";
+  const equipmentLabel = equipmentType === "scanner" ? "Scanner" : "Picker";
+
+  return `EQUIPMENT RESPONSIBILITY AGREEMENT
+
+This Equipment Responsibility Agreement ("Agreement") is entered into between the Employee named below and IE Tires, LLC ("Company").
+
+EQUIPMENT ASSIGNED:
+${equipmentLabel} #${equipmentNumber}${serialDisplay}
+Equipment Value: $${equipmentValue.toFixed(2)}
+
+EMPLOYEE: ${employeeName}
+
+TERMS AND CONDITIONS:
+
+1. SOLE RESPONSIBILITY: The undersigned Employee acknowledges receipt of the above-described Company equipment and accepts full responsibility for its care, security, and proper use.
+
+2. AUTHORIZED USE ONLY: This equipment is issued exclusively to the undersigned Employee. No other individual is authorized to access, operate, or use this equipment under any circumstances.
+
+3. ON-PREMISES ONLY: This equipment must remain on Company premises at all times. Under no circumstances shall this equipment be removed from the workplace or taken to the Employee's residence.
+
+4. DAMAGE REPORTING: The Employee shall immediately report any damage, malfunction, or defect to their supervisor. Failure to promptly report damage may result in disciplinary action and financial liability.
+
+5. FINANCIAL LIABILITY:
+   a) Failure to return equipment upon separation from employment, reassignment, or request by management will result in a deduction of up to $${equipmentValue.toFixed(2)} from the Employee's final pay.
+   b) Damage resulting from intentional misconduct, gross negligence, or careless handling may result in a deduction of up to $${equipmentValue.toFixed(2)} from Employee's pay to cover replacement costs.
+
+6. RETURN REQUIREMENT: Upon termination of employment, reassignment, or request by management, the Employee shall immediately return this equipment in the same condition as received, allowing for reasonable wear and tear.
+
+By signing below, the Employee acknowledges that they have read, understand, and agree to abide by all terms and conditions set forth in this Agreement.
+
+Signed electronically on ${new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  })}`;
+};
+
+// Assign equipment with signed agreement
+export const assignEquipmentWithAgreement = mutation({
+  args: {
+    equipmentType: v.string(), // "scanner" | "picker"
+    equipmentId: v.union(v.id("scanners"), v.id("pickers")),
+    personnelId: v.id("personnel"),
+    signatureData: v.string(), // Base64 encoded signature image
+    userId: v.id("users"), // Admin/manager witnessing
+    userName: v.string(), // Name for display
+    equipmentValue: v.optional(v.number()), // Default $100
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const equipmentValue = args.equipmentValue ?? 100;
+
+    // Get equipment
+    const equipment = await ctx.db.get(args.equipmentId);
+    if (!equipment) {
+      throw new Error(`${args.equipmentType} not found`);
+    }
+
+    if (equipment.status !== "available") {
+      throw new Error(
+        `Equipment is not available for assignment (current status: ${equipment.status})`
+      );
+    }
+
+    // Get personnel
+    const personnel = await ctx.db.get(args.personnelId);
+    if (!personnel) {
+      throw new Error("Personnel not found");
+    }
+
+    const employeeName = `${personnel.firstName} ${personnel.lastName}`;
+    const equipmentLabel = args.equipmentType === "scanner" ? "Scanner" : "Picker";
+
+    // Generate agreement text
+    const agreementText = generateAgreementText(
+      args.equipmentType,
+      equipment.number,
+      equipment.serialNumber,
+      employeeName,
+      equipmentValue
+    );
+
+    // Create agreement record
+    await ctx.db.insert("equipmentAgreements", {
+      equipmentType: args.equipmentType,
+      equipmentId: args.equipmentId,
+      personnelId: args.personnelId,
+      equipmentNumber: equipment.number,
+      serialNumber: equipment.serialNumber,
+      equipmentValue: equipmentValue,
+      agreementText: agreementText,
+      signatureData: args.signatureData,
+      signedAt: now,
+      witnessedBy: args.userId,
+      witnessedByName: args.userName,
+      createdAt: now,
+    });
+
+    // Update equipment
+    await ctx.db.patch(args.equipmentId, {
+      status: "assigned",
+      assignedTo: args.personnelId,
+      assignedAt: now,
+      updatedAt: now,
+    });
+
+    // Create history record
+    await ctx.db.insert("equipmentHistory", {
+      equipmentType: args.equipmentType,
+      equipmentId: args.equipmentId,
+      action: "assigned",
+      previousStatus: equipment.status,
+      newStatus: "assigned",
+      newAssignee: args.personnelId,
+      performedBy: args.userId,
+      notes: `${equipmentLabel} #${equipment.number} assigned to ${employeeName} with signed agreement`,
+      createdAt: now,
+    });
+
+    return { success: true };
+  },
+});
+
+// Return equipment with condition check
+export const returnEquipmentWithCheck = mutation({
+  args: {
+    equipmentType: v.string(), // "scanner" | "picker"
+    equipmentId: v.union(v.id("scanners"), v.id("pickers")),
+    checkedBy: v.id("users"),
+    checkedByName: v.string(),
+    checklist: v.object({
+      physicalCondition: v.boolean(),
+      screenFunctional: v.boolean(),
+      buttonsWorking: v.boolean(),
+      batteryCondition: v.boolean(),
+      chargingPortOk: v.boolean(),
+      scannerFunctional: v.boolean(),
+      cleanCondition: v.boolean(),
+    }),
+    overallCondition: v.string(), // "excellent" | "good" | "fair" | "poor" | "damaged"
+    damageNotes: v.optional(v.string()),
+    repairRequired: v.boolean(),
+    readyForReassignment: v.boolean(),
+    deductionRequired: v.optional(v.boolean()),
+    deductionAmount: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+
+    // Get equipment
+    const equipment = await ctx.db.get(args.equipmentId);
+    if (!equipment) {
+      throw new Error(`${args.equipmentType} not found`);
+    }
+
+    if (!equipment.assignedTo) {
+      throw new Error("Equipment is not currently assigned");
+    }
+
+    const returnedBy = equipment.assignedTo;
+
+    // Create condition check record
+    const checkId = await ctx.db.insert("equipmentConditionChecks", {
+      equipmentType: args.equipmentType,
+      equipmentId: args.equipmentId,
+      returnedBy: returnedBy,
+      checkedBy: args.checkedBy,
+      checkedByName: args.checkedByName,
+      checklist: args.checklist,
+      overallCondition: args.overallCondition,
+      damageNotes: args.damageNotes,
+      repairRequired: args.repairRequired,
+      readyForReassignment: args.readyForReassignment,
+      deductionRequired: args.deductionRequired,
+      deductionAmount: args.deductionAmount,
+      checkedAt: now,
+      createdAt: now,
+    });
+
+    // Determine new status
+    let newStatus = "available";
+    if (args.repairRequired) {
+      newStatus = "maintenance";
+    } else if (!args.readyForReassignment) {
+      newStatus = "maintenance";
+    }
+
+    // Update condition notes on equipment
+    const conditionNotes = args.damageNotes
+      ? `${args.overallCondition} - ${args.damageNotes}`
+      : args.overallCondition;
+
+    // Update equipment
+    await ctx.db.patch(args.equipmentId, {
+      status: newStatus,
+      assignedTo: undefined,
+      assignedAt: undefined,
+      conditionNotes: conditionNotes,
+      updatedAt: now,
+    });
+
+    // Revoke the active agreement
+    const agreements = await ctx.db
+      .query("equipmentAgreements")
+      .withIndex("by_equipment", (q) =>
+        q.eq("equipmentType", args.equipmentType).eq("equipmentId", args.equipmentId)
+      )
+      .collect();
+
+    const activeAgreement = agreements.find(
+      (a) => a.personnelId === returnedBy && !a.revokedAt
+    );
+
+    if (activeAgreement) {
+      await ctx.db.patch(activeAgreement._id, {
+        revokedAt: now,
+        revokedBy: args.checkedBy,
+        revokedReason: "Equipment returned",
+      });
+    }
+
+    // Create history record
+    await ctx.db.insert("equipmentHistory", {
+      equipmentType: args.equipmentType,
+      equipmentId: args.equipmentId,
+      action: "unassigned",
+      previousStatus: equipment.status,
+      newStatus: newStatus,
+      previousAssignee: returnedBy,
+      conditionCheckId: checkId,
+      performedBy: args.checkedBy,
+      notes: `Returned with condition: ${args.overallCondition}${
+        args.repairRequired ? " (repair required)" : ""
+      }`,
+      createdAt: now,
+    });
+
+    return { success: true, conditionCheckId: checkId };
+  },
+});
+
+// Get equipment agreement for specific equipment
+export const getEquipmentAgreement = query({
+  args: {
+    equipmentType: v.string(),
+    equipmentId: v.union(v.id("scanners"), v.id("pickers")),
+  },
+  handler: async (ctx, args) => {
+    const agreements = await ctx.db
+      .query("equipmentAgreements")
+      .withIndex("by_equipment", (q) =>
+        q.eq("equipmentType", args.equipmentType).eq("equipmentId", args.equipmentId)
+      )
+      .order("desc")
+      .collect();
+
+    // Return the active (non-revoked) agreement, or the most recent one
+    const active = agreements.find((a) => !a.revokedAt);
+    return active ?? agreements[0] ?? null;
+  },
+});
+
+// Get all agreements for a personnel
+export const getPersonnelAgreements = query({
+  args: { personnelId: v.id("personnel") },
+  handler: async (ctx, args) => {
+    const agreements = await ctx.db
+      .query("equipmentAgreements")
+      .withIndex("by_personnel", (q) => q.eq("personnelId", args.personnelId))
+      .order("desc")
+      .collect();
+
+    return agreements;
+  },
+});
+
+// Get condition check history for equipment
+export const getEquipmentConditionHistory = query({
+  args: {
+    equipmentType: v.string(),
+    equipmentId: v.union(v.id("scanners"), v.id("pickers")),
+  },
+  handler: async (ctx, args) => {
+    const checks = await ctx.db
+      .query("equipmentConditionChecks")
+      .withIndex("by_equipment", (q) =>
+        q.eq("equipmentType", args.equipmentType).eq("equipmentId", args.equipmentId)
+      )
+      .order("desc")
+      .collect();
+
+    // Enrich with personnel names
+    return await Promise.all(
+      checks.map(async (check) => {
+        const personnel = await ctx.db.get(check.returnedBy);
+        return {
+          ...check,
+          returnedByName: personnel
+            ? `${personnel.firstName} ${personnel.lastName}`
+            : "Unknown",
+        };
+      })
+    );
+  },
+});
+
+// List active personnel for assignment dropdown
+export const listActivePersonnel = query({
+  args: {},
+  handler: async (ctx) => {
+    const personnel = await ctx.db
+      .query("personnel")
+      .withIndex("by_status", (q) => q.eq("status", "active"))
+      .collect();
+
+    return personnel.map((p) => ({
+      _id: p._id,
+      name: `${p.firstName} ${p.lastName}`,
+      position: p.position,
+      department: p.department,
+    }));
+  },
+});
