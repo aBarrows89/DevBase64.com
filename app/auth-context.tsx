@@ -42,7 +42,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userId, setUserId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   // Track if we've ever successfully loaded user data for this session
   // This prevents clearing the session during transient null states (navigation, resubscription)
   const hasLoadedUserData = useRef(false);
@@ -63,21 +63,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUserId(savedUserId);
       } else {
         localStorage.removeItem("devbase64_user_id");
+        setInitialLoadComplete(true);
       }
+    } else {
+      setInitialLoadComplete(true);
     }
-    setIsLoading(false);
   }, []);
 
   // Update loading state based on user data
   // Track successful user loads to avoid clearing session during transient null states
   useEffect(() => {
     if (userId && userData === undefined) {
-      // Query is loading
-      setIsLoading(true);
+      // Query is loading - keep waiting
     } else if (userId && userData) {
       // Successfully loaded user data - mark as loaded
       hasLoadedUserData.current = true;
-      setIsLoading(false);
+      setInitialLoadComplete(true);
     } else if (userId && userData === null) {
       // Query returned null - only clear if we've never successfully loaded
       // This prevents logout during navigation/resubscription when queries temporarily return null
@@ -88,11 +89,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.removeItem("devbase64_user_id");
         setUserId(null);
       }
-      setIsLoading(false);
-    } else {
-      setIsLoading(false);
+      setInitialLoadComplete(true);
     }
   }, [userId, userData]);
+
+  // Compute isLoading: true if we haven't completed initial load, OR if we have a userId but query is still loading
+  const isLoading = !initialLoadComplete || (userId !== null && userData === undefined);
 
   const login = async (email: string, password: string) => {
     try {
@@ -115,6 +117,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUserId(null);
     localStorage.removeItem("devbase64_user_id");
     hasLoadedUserData.current = false; // Reset for next login
+    setInitialLoadComplete(true); // Keep as complete since we know there's no session
   };
 
   const user: User | null = userData
