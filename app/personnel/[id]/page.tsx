@@ -369,9 +369,15 @@ function PersonnelDetailContent() {
     date: new Date().toISOString().split("T")[0],
     status: "absent",
     notes: "",
+    actualStart: "",
+    actualEnd: "",
+    hoursWorked: "",
   });
+  const [editingAttendanceId, setEditingAttendanceId] = useState<Id<"attendance"> | null>(null);
 
   const [editPersonnelForm, setEditPersonnelForm] = useState({
+    firstName: "",
+    lastName: "",
     email: "",
     phone: "",
     position: "",
@@ -393,6 +399,8 @@ function PersonnelDetailContent() {
   const initEditForm = () => {
     if (personnel) {
       setEditPersonnelForm({
+        firstName: personnel.firstName,
+        lastName: personnel.lastName,
         email: personnel.email,
         phone: personnel.phone,
         position: personnel.position,
@@ -522,12 +530,19 @@ function PersonnelDetailContent() {
       date: attendanceForm.date,
       status: attendanceForm.status,
       notes: attendanceForm.notes || undefined,
+      actualStart: attendanceForm.actualStart || undefined,
+      actualEnd: attendanceForm.actualEnd || undefined,
+      hoursWorked: attendanceForm.hoursWorked ? parseFloat(attendanceForm.hoursWorked) : undefined,
     });
     setShowAttendanceModal(false);
+    setEditingAttendanceId(null);
     setAttendanceForm({
       date: new Date().toISOString().split("T")[0],
       status: "absent",
       notes: "",
+      actualStart: "",
+      actualEnd: "",
+      hoursWorked: "",
     });
   };
 
@@ -536,6 +551,8 @@ function PersonnelDetailContent() {
     try {
       const updateData: {
         personnelId: typeof personnelId;
+        firstName?: string;
+        lastName?: string;
         email: string;
         phone: string;
         position: string;
@@ -550,6 +567,8 @@ function PersonnelDetailContent() {
         };
       } = {
         personnelId,
+        firstName: editPersonnelForm.firstName,
+        lastName: editPersonnelForm.lastName,
         email: editPersonnelForm.email,
         phone: editPersonnelForm.phone,
         position: editPersonnelForm.position,
@@ -592,6 +611,27 @@ function PersonnelDetailContent() {
     if (confirm("Are you sure you want to delete this attendance record? This action cannot be undone.")) {
       await deleteAttendance({ attendanceId });
     }
+  };
+
+  const handleEditAttendance = (record: {
+    _id: Id<"attendance">;
+    date: string;
+    status: string;
+    notes?: string;
+    actualStart?: string;
+    actualEnd?: string;
+    hoursWorked?: number;
+  }) => {
+    setEditingAttendanceId(record._id);
+    setAttendanceForm({
+      date: record.date,
+      status: record.status,
+      notes: record.notes || "",
+      actualStart: record.actualStart || "",
+      actualEnd: record.actualEnd || "",
+      hoursWorked: record.hoursWorked?.toString() || "",
+    });
+    setShowAttendanceModal(true);
   };
 
   const handleFileUpload = async (writeUpId: Id<"writeUps">, files: FileList | null) => {
@@ -1573,18 +1613,32 @@ function PersonnelDetailContent() {
                             </p>
                           )}
                         </div>
-                        {canDeleteRecords && (
-                          <button
-                            onClick={() => handleDeleteAttendance(record._id)}
-                            className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
-                              isDark
-                                ? "bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30"
-                                : "bg-red-50 hover:bg-red-100 text-red-600 border border-red-200"
-                            }`}
-                          >
-                            Delete
-                          </button>
-                        )}
+                        <div className="flex gap-2">
+                          {canManagePersonnel && (
+                            <button
+                              onClick={() => handleEditAttendance(record)}
+                              className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                                isDark
+                                  ? "bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 border border-cyan-500/30"
+                                  : "bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200"
+                              }`}
+                            >
+                              Edit
+                            </button>
+                          )}
+                          {canDeleteRecords && (
+                            <button
+                              onClick={() => handleDeleteAttendance(record._id)}
+                              className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                                isDark
+                                  ? "bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30"
+                                  : "bg-red-50 hover:bg-red-100 text-red-600 border border-red-200"
+                              }`}
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       {/* Attachments Section */}
@@ -2180,16 +2234,13 @@ function PersonnelDetailContent() {
           </div>
         )}
 
-        {/* Attendance Modal - Absence Tracking Only */}
+        {/* Attendance Modal */}
         {showAttendanceModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className={`w-full max-w-md rounded-xl p-6 ${isDark ? "bg-slate-800" : "bg-white"}`}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className={`w-full max-w-md max-h-[90vh] overflow-y-auto rounded-xl p-6 ${isDark ? "bg-slate-800" : "bg-white"}`}>
               <h2 className={`text-lg font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
-                Record Absence
+                {editingAttendanceId ? "Edit Attendance Record" : "Record Attendance"}
               </h2>
-              <p className={`text-sm mb-4 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                Track when personnel are not present. Time clock integration coming soon.
-              </p>
               <div className="space-y-4">
                 <div>
                   <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
@@ -2204,18 +2255,56 @@ function PersonnelDetailContent() {
                 </div>
                 <div>
                   <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                    Absence Type
+                    Status
                   </label>
                   <select
                     value={attendanceForm.status}
                     onChange={(e) => setAttendanceForm({ ...attendanceForm, status: e.target.value })}
                     className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"} border focus:outline-none`}
                   >
+                    <option value="present">Present</option>
                     <option value="absent">Absent</option>
                     <option value="late">Late</option>
                     <option value="excused">Excused</option>
                     <option value="no_call_no_show">No Call No Show</option>
                   </select>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                      Time In
+                    </label>
+                    <input
+                      type="time"
+                      value={attendanceForm.actualStart}
+                      onChange={(e) => setAttendanceForm({ ...attendanceForm, actualStart: e.target.value })}
+                      className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"} border focus:outline-none`}
+                    />
+                  </div>
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                      Time Out
+                    </label>
+                    <input
+                      type="time"
+                      value={attendanceForm.actualEnd}
+                      onChange={(e) => setAttendanceForm({ ...attendanceForm, actualEnd: e.target.value })}
+                      className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"} border focus:outline-none`}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    Hours Worked
+                  </label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    value={attendanceForm.hoursWorked}
+                    onChange={(e) => setAttendanceForm({ ...attendanceForm, hoursWorked: e.target.value })}
+                    placeholder="e.g., 8.0"
+                    className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white placeholder-slate-500" : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400"} border focus:outline-none`}
+                  />
                 </div>
                 <div>
                   <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
@@ -2232,16 +2321,27 @@ function PersonnelDetailContent() {
               </div>
               <div className="flex gap-3 mt-6">
                 <button
-                  onClick={() => setShowAttendanceModal(false)}
+                  onClick={() => {
+                    setShowAttendanceModal(false);
+                    setEditingAttendanceId(null);
+                    setAttendanceForm({
+                      date: new Date().toISOString().split("T")[0],
+                      status: "absent",
+                      notes: "",
+                      actualStart: "",
+                      actualEnd: "",
+                      hoursWorked: "",
+                    });
+                  }}
                   className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-slate-700 hover:bg-slate-600 text-white" : "bg-gray-100 hover:bg-gray-200 text-gray-900"}`}
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleAddAttendance}
-                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-red-500 hover:bg-red-400 text-white" : "bg-red-600 hover:bg-red-700 text-white"}`}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-cyan-500 hover:bg-cyan-400 text-white" : "bg-blue-600 hover:bg-blue-700 text-white"}`}
                 >
-                  Record Absence
+                  {editingAttendanceId ? "Save Changes" : "Save Record"}
                 </button>
               </div>
             </div>
@@ -2256,6 +2356,30 @@ function PersonnelDetailContent() {
                 Edit Personnel Information
               </h2>
               <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                      First Name
+                    </label>
+                    <input
+                      type="text"
+                      value={editPersonnelForm.firstName}
+                      onChange={(e) => setEditPersonnelForm({ ...editPersonnelForm, firstName: e.target.value })}
+                      className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"} border focus:outline-none`}
+                    />
+                  </div>
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                      Last Name
+                    </label>
+                    <input
+                      type="text"
+                      value={editPersonnelForm.lastName}
+                      onChange={(e) => setEditPersonnelForm({ ...editPersonnelForm, lastName: e.target.value })}
+                      className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"} border focus:outline-none`}
+                    />
+                  </div>
+                </div>
                 <div>
                   <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                     Email
