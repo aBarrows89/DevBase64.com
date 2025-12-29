@@ -64,9 +64,9 @@ function getTenureMilestones(totalDays: number): {
   daysToVacation: number;
 } {
   return {
-    insuranceEligible: totalDays >= 90,
+    insuranceEligible: totalDays >= 60,
     vacationEligible: totalDays >= 365,
-    daysToInsurance: Math.max(0, 90 - totalDays),
+    daysToInsurance: Math.max(0, 60 - totalDays),
     daysToVacation: Math.max(0, 365 - totalDays),
   };
 }
@@ -1176,7 +1176,7 @@ function PersonnelDetailContent() {
                       <div className={`p-4 rounded-lg ${isDark ? "bg-slate-700/50" : "bg-gray-50"}`}>
                         <p className={`text-xs font-medium mb-3 ${isDark ? "text-slate-400" : "text-gray-600"}`}>Tenure Milestones</p>
                         <div className="flex flex-wrap gap-3">
-                          {/* Insurance Eligibility (90 days) */}
+                          {/* Insurance Eligibility (60 days) */}
                           <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
                             milestones.insuranceEligible
                               ? isDark
