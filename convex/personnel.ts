@@ -331,6 +331,44 @@ export const update = mutation({
   },
 });
 
+// Set all tenure check-ins as complete for a single personnel
+export const setAllTenureCheckInsComplete = mutation({
+  args: {
+    personnelId: v.id("personnel"),
+    completedByName: v.string(),
+    notes: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const personnel = await ctx.db.get(args.personnelId);
+    if (!personnel) {
+      throw new Error("Personnel not found");
+    }
+
+    const milestones = ["1_day", "3_day", "7_day", "30_day", "60_day"];
+    const currentCheckIns = personnel.tenureCheckIns || [];
+    const completedMilestones = currentCheckIns.map((c: { milestone: string }) => c.milestone);
+
+    // Find missing milestones and create check-ins for them
+    const newCheckIns = milestones
+      .filter(m => !completedMilestones.includes(m))
+      .map(milestone => ({
+        milestone,
+        completedAt: Date.now(),
+        completedByName: args.completedByName,
+        notes: args.notes,
+      }));
+
+    if (newCheckIns.length > 0) {
+      await ctx.db.patch(args.personnelId, {
+        tenureCheckIns: [...currentCheckIns, ...newCheckIns],
+        updatedAt: Date.now(),
+      });
+    }
+
+    return { added: newCheckIns.length };
+  },
+});
+
 // Terminate personnel
 export const terminate = mutation({
   args: {
@@ -464,6 +502,64 @@ export const removeTenureCheckIn = mutation({
     });
 
     return args.personnelId;
+  },
+});
+
+// Bulk mark all tenure check-ins complete for personnel hired before a date
+export const bulkCompleteTenureCheckIns = mutation({
+  args: {
+    beforeDate: v.string(), // YYYY-MM-DD format
+    completedByName: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const allPersonnel = await ctx.db
+      .query("personnel")
+      .filter((q) => q.eq(q.field("status"), "active"))
+      .collect();
+
+    const milestones = ["1_day", "3_day", "7_day", "30_day", "60_day"];
+    const cutoffDate = new Date(args.beforeDate);
+    cutoffDate.setHours(0, 0, 0, 0);
+
+    let updated = 0;
+    const results: { name: string; milestonesAdded: number }[] = [];
+
+    for (const person of allPersonnel) {
+      const hireDate = new Date(person.hireDate);
+      hireDate.setHours(0, 0, 0, 0);
+
+      // Only process if hired before the cutoff date
+      if (hireDate < cutoffDate) {
+        const currentCheckIns = person.tenureCheckIns || [];
+        const completedMilestones = currentCheckIns.map((c: { milestone: string }) => c.milestone);
+
+        // Find milestones that aren't already completed
+        const missingMilestones = milestones.filter(m => !completedMilestones.includes(m));
+
+        if (missingMilestones.length > 0) {
+          // Add all missing milestones
+          const newCheckIns = missingMilestones.map(milestone => ({
+            milestone,
+            completedAt: Date.now(),
+            completedByName: args.completedByName,
+            notes: "Bulk completed for employees hired before " + args.beforeDate,
+          }));
+
+          await ctx.db.patch(person._id, {
+            tenureCheckIns: [...currentCheckIns, ...newCheckIns],
+            updatedAt: Date.now(),
+          });
+
+          updated++;
+          results.push({
+            name: `${person.firstName} ${person.lastName}`,
+            milestonesAdded: missingMilestones.length,
+          });
+        }
+      }
+    }
+
+    return { updated, results };
   },
 });
 

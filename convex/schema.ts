@@ -296,7 +296,7 @@ export default defineSchema({
     tenureCheckIns: v.optional(v.array(v.object({
       milestone: v.string(), // "1_day" | "3_day" | "7_day" | "30_day" | "60_day"
       completedAt: v.number(), // Timestamp when check-in was completed
-      completedBy: v.id("users"), // Who conducted the check-in
+      completedBy: v.optional(v.id("users")), // Who conducted the check-in (optional for bulk/system operations)
       completedByName: v.string(), // Name of who conducted it (for display)
       notes: v.optional(v.string()), // Any notes from the check-in
     }))),
