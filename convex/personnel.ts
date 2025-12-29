@@ -406,6 +406,38 @@ export const removeTenureCheckIn = mutation({
   },
 });
 
+// Remove duplicate personnel records (keeps the oldest by createdAt)
+export const removeDuplicates = mutation({
+  handler: async (ctx) => {
+    const allPersonnel = await ctx.db.query("personnel").collect();
+
+    // Group by email (lowercase)
+    const byEmail: Record<string, typeof allPersonnel> = {};
+    for (const person of allPersonnel) {
+      const email = person.email.toLowerCase();
+      if (!byEmail[email]) {
+        byEmail[email] = [];
+      }
+      byEmail[email].push(person);
+    }
+
+    let deleted = 0;
+    for (const [email, records] of Object.entries(byEmail)) {
+      if (records.length > 1) {
+        // Sort by createdAt, keep the oldest
+        records.sort((a, b) => a.createdAt - b.createdAt);
+        // Delete all but the first (oldest)
+        for (let i = 1; i < records.length; i++) {
+          await ctx.db.delete(records[i]._id);
+          deleted++;
+        }
+      }
+    }
+
+    return { deleted, remaining: allPersonnel.length - deleted };
+  },
+});
+
 // Bulk import personnel (skips duplicates by email)
 export const bulkImport = mutation({
   args: {
