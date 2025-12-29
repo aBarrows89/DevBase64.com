@@ -119,6 +119,67 @@ export const getDepartments = query({
   },
 });
 
+// Get pending tenure check-ins (due or overdue)
+export const getPendingTenureCheckIns = query({
+  handler: async (ctx) => {
+    const personnel = await ctx.db
+      .query("personnel")
+      .filter((q) => q.eq(q.field("status"), "active"))
+      .collect();
+
+    const milestones = [
+      { key: "1_day", days: 1, label: "1 Day" },
+      { key: "3_day", days: 3, label: "3 Day" },
+      { key: "7_day", days: 7, label: "7 Day" },
+      { key: "30_day", days: 30, label: "30 Day" },
+      { key: "60_day", days: 60, label: "60 Day" },
+    ];
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const pending: {
+      personnelId: Id<"personnel">;
+      personnelName: string;
+      department: string;
+      milestone: string;
+      milestoneLabel: string;
+      daysOverdue: number;
+      hireDate: string;
+    }[] = [];
+
+    for (const person of personnel) {
+      const hireDate = new Date(person.hireDate);
+      hireDate.setHours(0, 0, 0, 0);
+      const daysSinceHire = Math.floor((today.getTime() - hireDate.getTime()) / (1000 * 60 * 60 * 24));
+
+      const completedMilestones = (person.tenureCheckIns || []).map((c: { milestone: string }) => c.milestone);
+
+      for (const milestone of milestones) {
+        // Check if milestone is due (employee has worked >= milestone days)
+        // and hasn't been completed yet
+        if (daysSinceHire >= milestone.days && !completedMilestones.includes(milestone.key)) {
+          const daysOverdue = daysSinceHire - milestone.days;
+          pending.push({
+            personnelId: person._id,
+            personnelName: `${person.firstName} ${person.lastName}`,
+            department: person.department,
+            milestone: milestone.key,
+            milestoneLabel: milestone.label,
+            daysOverdue,
+            hireDate: person.hireDate,
+          });
+        }
+      }
+    }
+
+    // Sort by most overdue first
+    pending.sort((a, b) => b.daysOverdue - a.daysOverdue);
+
+    return pending;
+  },
+});
+
 // ============ MUTATIONS ============
 
 // Create personnel from hired applicant

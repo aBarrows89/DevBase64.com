@@ -30,6 +30,7 @@ function DashboardContent() {
   const hiringAnalytics = useQuery(api.applications.getHiringAnalytics);
   const contactMessages = useQuery(api.contactMessages.getRecent);
   const dealerInquiries = useQuery(api.dealerInquiries.getRecent);
+  const pendingTenureCheckIns = useQuery(api.personnel.getPendingTenureCheckIns);
 
   // Combine and sort website messages
   const websiteMessages: WebsiteMessage[] = [
@@ -528,6 +529,84 @@ function DashboardContent() {
               )}
             </div>
           </div>
+
+          {/* Pending Tenure Check-ins */}
+          {pendingTenureCheckIns && pendingTenureCheckIns.length > 0 && (
+            <div className={`border rounded-xl p-4 sm:p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
+              <div className="flex items-center justify-between mb-4 sm:mb-6">
+                <h2 className={`text-base sm:text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  Due Tenure Check-ins
+                </h2>
+                <div className="flex items-center gap-2">
+                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${isDark ? "bg-amber-500/20 text-amber-400" : "bg-amber-100 text-amber-600"}`}>
+                    {pendingTenureCheckIns.length} pending
+                  </span>
+                  <Link
+                    href="/personnel"
+                    className={`text-sm transition-colors ${isDark ? "text-cyan-400 hover:text-cyan-300" : "text-blue-600 hover:text-blue-700"}`}
+                  >
+                    View all
+                  </Link>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {pendingTenureCheckIns.slice(0, 8).map((item, idx) => (
+                  <Link
+                    key={`${item.personnelId}-${item.milestone}-${idx}`}
+                    href={`/personnel/${item.personnelId}`}
+                    className={`block p-4 rounded-lg border transition-colors ${isDark ? "bg-slate-900/50 border-slate-700/50 hover:border-slate-600" : "bg-gray-50 border-gray-100 hover:border-gray-300"}`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 className={`font-medium truncate ${isDark ? "text-white" : "text-gray-900"}`}>
+                            {item.personnelName}
+                          </h3>
+                          <span className={`px-2 py-0.5 text-xs rounded-full flex-shrink-0 ${
+                            item.daysOverdue > 7
+                              ? isDark ? "bg-red-500/20 text-red-400" : "bg-red-100 text-red-600"
+                              : item.daysOverdue > 0
+                                ? isDark ? "bg-amber-500/20 text-amber-400" : "bg-amber-100 text-amber-600"
+                                : isDark ? "bg-green-500/20 text-green-400" : "bg-green-100 text-green-600"
+                          }`}>
+                            {item.milestoneLabel} Check-in
+                          </span>
+                        </div>
+                        <p className={`text-sm truncate ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                          {item.department}
+                        </p>
+                      </div>
+                      <div className="text-right ml-4 flex-shrink-0">
+                        <p className={`text-xs font-medium ${
+                          item.daysOverdue > 7
+                            ? isDark ? "text-red-400" : "text-red-600"
+                            : item.daysOverdue > 0
+                              ? isDark ? "text-amber-400" : "text-amber-600"
+                              : isDark ? "text-green-400" : "text-green-600"
+                        }`}>
+                          {item.daysOverdue === 0 ? "Due today" : `${item.daysOverdue} days overdue`}
+                        </p>
+                        <p className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                          Hired {new Date(item.hireDate).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+                {pendingTenureCheckIns.length > 8 && (
+                  <Link
+                    href="/personnel"
+                    className={`block text-center text-sm py-2 ${isDark ? "text-cyan-400 hover:text-cyan-300" : "text-blue-600 hover:text-blue-700"}`}
+                  >
+                    View all {pendingTenureCheckIns.length} pending check-ins
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
 
         </div>
       </main>
