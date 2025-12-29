@@ -406,6 +406,65 @@ export const removeTenureCheckIn = mutation({
   },
 });
 
+// Bulk import personnel (skips duplicates by email)
+export const bulkImport = mutation({
+  args: {
+    employees: v.array(
+      v.object({
+        firstName: v.string(),
+        lastName: v.string(),
+        email: v.string(),
+        phone: v.string(),
+        position: v.string(),
+        department: v.string(),
+        employeeType: v.string(),
+        hireDate: v.string(),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const results = {
+      imported: 0,
+      skipped: 0,
+      skippedEmails: [] as string[],
+    };
+
+    for (const employee of args.employees) {
+      // Check if email already exists
+      const existing = await ctx.db
+        .query("personnel")
+        .withIndex("by_email", (q) => q.eq("email", employee.email.toLowerCase()))
+        .first();
+
+      if (existing) {
+        results.skipped++;
+        results.skippedEmails.push(employee.email);
+        continue;
+      }
+
+      // Create the personnel record
+      await ctx.db.insert("personnel", {
+        firstName: employee.firstName,
+        lastName: employee.lastName,
+        email: employee.email.toLowerCase(),
+        phone: employee.phone,
+        position: employee.position,
+        department: employee.department,
+        employeeType: employee.employeeType,
+        hireDate: employee.hireDate,
+        status: "active",
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      results.imported++;
+    }
+
+    return results;
+  },
+});
+
 // Delete personnel (hard delete - use with caution)
 export const remove = mutation({
   args: { personnelId: v.id("personnel") },
