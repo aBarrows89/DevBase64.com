@@ -79,12 +79,20 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label
-                htmlFor="password"
-                className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}
-              >
-                Password
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label
+                  htmlFor="password"
+                  className={`block text-sm font-medium ${isDark ? "text-slate-300" : "text-gray-700"}`}
+                >
+                  Password
+                </label>
+                <a
+                  href="/forgot-password"
+                  className={`text-sm font-medium transition-colors ${isDark ? "text-cyan-400 hover:text-cyan-300" : "text-blue-600 hover:text-blue-700"}`}
+                >
+                  Forgot password?
+                </a>
+              </div>
               <input
                 id="password"
                 type="password"

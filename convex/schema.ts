@@ -14,6 +14,18 @@ export default defineSchema({
     lastLoginAt: v.optional(v.number()),
   }).index("by_email", ["email"]),
 
+  passwordResets: defineTable({
+    userId: v.id("users"),
+    email: v.string(),
+    token: v.string(), // Secure random token
+    expiresAt: v.number(), // Timestamp when token expires (1 hour from creation)
+    used: v.boolean(), // Whether the token has been used
+    createdAt: v.number(),
+  })
+    .index("by_token", ["token"])
+    .index("by_email", ["email"])
+    .index("by_user", ["userId"]),
+
   // ============ PROJECT MANAGEMENT ============
   projects: defineTable({
     name: v.string(),

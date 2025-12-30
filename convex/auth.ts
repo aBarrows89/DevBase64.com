@@ -377,3 +377,147 @@ export const deleteUser = mutation({
     return { success: true };
   },
 });
+
+// Generate a secure random token
+function generateResetToken(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return bufferToHex(bytes);
+}
+
+// Request password reset - generates a token
+export const requestPasswordReset = mutation({
+  args: {
+    email: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Find user by email
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_email", (q) => q.eq("email", args.email.toLowerCase()))
+      .first();
+
+    if (!user) {
+      // Don't reveal whether the email exists for security
+      return { success: true };
+    }
+
+    if (!user.isActive) {
+      return { success: false, error: "Account is deactivated" };
+    }
+
+    // Generate a secure token
+    const token = generateResetToken();
+    const expiresAt = Date.now() + 60 * 60 * 1000; // 1 hour from now
+
+    // Invalidate any existing unused tokens for this user
+    const existingTokens = await ctx.db
+      .query("passwordResets")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+
+    for (const existingToken of existingTokens) {
+      if (!existingToken.used) {
+        await ctx.db.patch(existingToken._id, { used: true });
+      }
+    }
+
+    // Create new reset token
+    await ctx.db.insert("passwordResets", {
+      userId: user._id,
+      email: user.email,
+      token,
+      expiresAt,
+      used: false,
+      createdAt: Date.now(),
+    });
+
+    // Return the token (in a real app, this would be emailed)
+    return {
+      success: true,
+      token, // In production, send this via email instead
+      email: user.email,
+    };
+  },
+});
+
+// Validate reset token
+export const validateResetToken = query({
+  args: {
+    token: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const resetRecord = await ctx.db
+      .query("passwordResets")
+      .withIndex("by_token", (q) => q.eq("token", args.token))
+      .first();
+
+    if (!resetRecord) {
+      return { valid: false, error: "Invalid reset token" };
+    }
+
+    if (resetRecord.used) {
+      return { valid: false, error: "This reset link has already been used" };
+    }
+
+    if (resetRecord.expiresAt < Date.now()) {
+      return { valid: false, error: "This reset link has expired" };
+    }
+
+    // Get user info
+    const user = await ctx.db.get(resetRecord.userId);
+    if (!user || !user.isActive) {
+      return { valid: false, error: "Invalid user account" };
+    }
+
+    return {
+      valid: true,
+      email: resetRecord.email,
+    };
+  },
+});
+
+// Reset password with token
+export const resetPasswordWithToken = mutation({
+  args: {
+    token: v.string(),
+    newPassword: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const resetRecord = await ctx.db
+      .query("passwordResets")
+      .withIndex("by_token", (q) => q.eq("token", args.token))
+      .first();
+
+    if (!resetRecord) {
+      return { success: false, error: "Invalid reset token" };
+    }
+
+    if (resetRecord.used) {
+      return { success: false, error: "This reset link has already been used" };
+    }
+
+    if (resetRecord.expiresAt < Date.now()) {
+      return { success: false, error: "This reset link has expired" };
+    }
+
+    // Get user
+    const user = await ctx.db.get(resetRecord.userId);
+    if (!user || !user.isActive) {
+      return { success: false, error: "Invalid user account" };
+    }
+
+    // Hash the new password
+    const newPasswordHash = await hashPassword(args.newPassword);
+
+    // Update the user's password
+    await ctx.db.patch(resetRecord.userId, {
+      passwordHash: newPasswordHash,
+      forcePasswordChange: false,
+    });
+
+    // Mark the token as used
+    await ctx.db.patch(resetRecord._id, { used: true });
+
+    return { success: true };
+  },
+});
