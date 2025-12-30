@@ -343,7 +343,26 @@ TERMS AND CONDITIONS:
 By signing below, the Employee acknowledges that they have read, understand, and agree to abide by all terms and conditions set forth in this Agreement.`;
   };
 
-  const currentItems = activeTab === "scanners" ? scanners : pickers;
+  // Sort equipment: available first, then assigned, then others
+  const sortByStatus = (items: typeof scanners | typeof pickers) => {
+    if (!items) return items;
+    const statusOrder: Record<string, number> = {
+      available: 0,
+      assigned: 1,
+      maintenance: 2,
+      lost: 3,
+      retired: 4,
+    };
+    return [...items].sort((a, b) => {
+      const orderA = statusOrder[a.status] ?? 99;
+      const orderB = statusOrder[b.status] ?? 99;
+      if (orderA !== orderB) return orderA - orderB;
+      // Secondary sort by number
+      return String(a.number).localeCompare(String(b.number), undefined, { numeric: true });
+    });
+  };
+
+  const currentItems = sortByStatus(activeTab === "scanners" ? scanners : pickers);
 
   const getStatusColor = (status: string) => {
     switch (status) {
