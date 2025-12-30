@@ -5,7 +5,7 @@ import { AuthProvider } from "./auth-context";
 import { ThemeProvider } from "./theme-context";
 import { SidebarProvider } from "./sidebar-context";
 
-// Hardcoded to production to avoid env variable issues
+// Production deployment
 const convex = new ConvexReactClient(
   "https://outstanding-dalmatian-787.convex.cloud"
 );

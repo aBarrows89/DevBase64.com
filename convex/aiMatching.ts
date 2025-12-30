@@ -61,13 +61,16 @@ export const analyzeResume = action({
     console.log(`Resume text length: ${resumeText.length} characters`);
 
     // Check if Anthropic API key is configured
-    if (!process.env.ANTHROPIC_API_KEY) {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
       console.error("ANTHROPIC_API_KEY not configured - using fallback analysis");
       return fallbackAnalysis(resumeText, jobs);
     }
 
+    console.log(`API key found, length: ${apiKey.length}, starts with: ${apiKey.substring(0, 10)}...`);
+
     const anthropic = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY,
+      apiKey: apiKey,
     });
 
     // Create a simple job list for the AI with indices
@@ -196,20 +199,25 @@ SCORING RULES:
 Return ALL ${jobs.length} jobs in the jobMatches array, sorted by score descending.
 Return ONLY valid JSON, no markdown code blocks, no other text.`;
 
-    try {
-      const message = await anthropic.messages.create({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 3000,
-        temperature: 0,
-        messages: [
-          {
-            role: "user",
-            content: prompt
-          }
-        ],
-      });
+    // Retry helper with exponential backoff for rate limits
+    const maxRetries = 3;
+    let lastError: any = null;
 
-      const responseText = message.content[0].type === 'text' ? message.content[0].text : "{}";
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const message = await anthropic.messages.create({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 3000,
+          temperature: 0,
+          messages: [
+            {
+              role: "user",
+              content: prompt
+            }
+          ],
+        });
+
+        const responseText = message.content[0].type === 'text' ? message.content[0].text : "{}";
       console.log("Claude Response received, length:", responseText.length);
 
       // Parse the AI response
@@ -306,10 +314,40 @@ Return ONLY valid JSON, no markdown code blocks, no other text.`;
         missingFields,
         candidateAnalysis,
       };
-    } catch (error: any) {
-      console.error("Anthropic API error:", error?.message || error);
-      return fallbackAnalysis(resumeText, jobs);
+      } catch (error: any) {
+        lastError = error;
+        console.error(`=== Anthropic API Error Details (attempt ${attempt}/${maxRetries}) ===`);
+        console.error("Error message:", error?.message);
+        console.error("Error status:", error?.status);
+        console.error("Error type:", error?.error?.type);
+        console.error("Error code:", error?.error?.error?.type);
+        console.error("Full error:", JSON.stringify(error, null, 2));
+
+        const isRateLimit = error?.status === 429 || error?.message?.includes('rate') || error?.message?.includes('overloaded');
+        const isCredits = error?.status === 400 && error?.message?.includes('credit');
+
+        if (isRateLimit && attempt < maxRetries) {
+          // Exponential backoff: 2s, 4s, 8s
+          const waitTime = Math.pow(2, attempt) * 1000;
+          console.log(`Rate limited (attempt ${attempt}/${maxRetries}), waiting ${waitTime}ms before retry...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          continue;
+        }
+
+        if (isCredits) {
+          console.error("OUT OF CREDITS - need to add more credits to Anthropic account");
+        }
+
+        if (attempt === maxRetries) {
+          console.error("All retry attempts exhausted, using fallback analysis");
+          return fallbackAnalysis(resumeText, jobs);
+        }
+      }
     }
+
+    // If we somehow exit the loop without returning, use fallback
+    console.error("Unexpected exit from retry loop, using fallback");
+    return fallbackAnalysis(resumeText, jobs);
   },
 });
 

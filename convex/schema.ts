@@ -600,7 +600,7 @@ export default defineSchema({
   documents: defineTable({
     name: v.string(), // Document name/title
     description: v.optional(v.string()), // Brief description
-    category: v.string(), // "forms" | "policies" | "templates" | "training" | "other"
+    category: v.string(), // "forms" | "policies" | "sops" | "templates" | "training" | "other"
     fileId: v.id("_storage"), // Convex storage ID for the file
     fileName: v.string(), // Original filename
     fileType: v.string(), // MIME type (application/pdf, etc.)

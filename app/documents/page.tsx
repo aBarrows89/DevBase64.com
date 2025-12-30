@@ -12,6 +12,7 @@ import { Id } from "@/convex/_generated/dataModel";
 const CATEGORIES = [
   { value: "forms", label: "Forms", icon: "📋" },
   { value: "policies", label: "Policies", icon: "📜" },
+  { value: "sops", label: "SOPs", icon: "📝" },
   { value: "templates", label: "Templates", icon: "📄" },
   { value: "training", label: "Training", icon: "📚" },
   { value: "other", label: "Other", icon: "📁" },

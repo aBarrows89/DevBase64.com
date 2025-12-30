@@ -163,6 +163,109 @@ function ApplicationsContent() {
             </div>
           )}
 
+          {/* Top Candidates Section */}
+          {applications.length > 0 && (() => {
+            const topCandidates = applications
+              .filter(app =>
+                app.candidateAnalysis?.overallScore &&
+                app.status !== "hired" &&
+                app.status !== "rejected"
+              )
+              .sort((a, b) => (b.candidateAnalysis?.overallScore || 0) - (a.candidateAnalysis?.overallScore || 0))
+              .slice(0, 3);
+
+            if (topCandidates.length === 0) return null;
+
+            return (
+              <div className={`rounded-xl p-4 sm:p-6 ${isDark ? "bg-gradient-to-r from-cyan-900/30 to-blue-900/30 border border-cyan-700/50" : "bg-gradient-to-r from-blue-50 to-cyan-50 border border-blue-200"}`}>
+                <div className="flex items-center gap-2 mb-4">
+                  <svg className={`w-5 h-5 ${isDark ? "text-cyan-400" : "text-blue-600"}`} fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                  </svg>
+                  <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>Top Candidates</h2>
+                  <span className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    (Highest scoring active applicants)
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {topCandidates.map((app, index) => (
+                    <div
+                      key={app._id}
+                      onClick={() => router.push(`/applications/${app._id}`)}
+                      className={`relative rounded-lg p-4 cursor-pointer transition-all hover:scale-[1.02] ${
+                        isDark
+                          ? "bg-slate-800/80 border border-slate-600 hover:border-cyan-500"
+                          : "bg-white border border-gray-200 hover:border-blue-400 shadow-sm hover:shadow-md"
+                      }`}
+                    >
+                      {/* Rank Badge */}
+                      <div className={`absolute -top-2 -left-2 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                        index === 0
+                          ? "bg-yellow-500 text-yellow-900"
+                          : index === 1
+                            ? "bg-gray-300 text-gray-700"
+                            : "bg-amber-600 text-amber-100"
+                      }`}>
+                        #{index + 1}
+                      </div>
+
+                      {/* Score */}
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <p className={`font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                            {app.firstName} {app.lastName}
+                          </p>
+                          <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                            {app.appliedJobTitle}
+                          </p>
+                        </div>
+                        <div className={`text-2xl font-bold ${
+                          (app.candidateAnalysis?.overallScore || 0) >= 80
+                            ? "text-green-500"
+                            : (app.candidateAnalysis?.overallScore || 0) >= 60
+                              ? "text-amber-500"
+                              : "text-red-500"
+                        }`}>
+                          {app.candidateAnalysis?.overallScore}
+                        </div>
+                      </div>
+
+                      {/* Quick Stats */}
+                      <div className="flex gap-4 text-xs">
+                        <div>
+                          <span className={isDark ? "text-slate-500" : "text-gray-400"}>Stability: </span>
+                          <span className={isDark ? "text-slate-300" : "text-gray-700"}>{app.candidateAnalysis?.stabilityScore}</span>
+                        </div>
+                        <div>
+                          <span className={isDark ? "text-slate-500" : "text-gray-400"}>Experience: </span>
+                          <span className={isDark ? "text-slate-300" : "text-gray-700"}>{app.candidateAnalysis?.experienceScore}</span>
+                        </div>
+                      </div>
+
+                      {/* Recommended Action */}
+                      <div className={`mt-3 text-xs px-2 py-1 rounded inline-block ${
+                        app.candidateAnalysis?.recommendedAction === "strong_candidate"
+                          ? isDark ? "bg-green-900/50 text-green-400" : "bg-green-100 text-green-700"
+                          : app.candidateAnalysis?.recommendedAction === "worth_interviewing"
+                            ? isDark ? "bg-blue-900/50 text-blue-400" : "bg-blue-100 text-blue-700"
+                            : isDark ? "bg-slate-700 text-slate-400" : "bg-gray-100 text-gray-600"
+                      }`}>
+                        {app.candidateAnalysis?.recommendedAction?.replace(/_/g, " ")}
+                      </div>
+
+                      {/* Status Badge */}
+                      <div className="absolute top-3 right-3">
+                        <span className={`text-xs px-2 py-0.5 rounded-full border ${statusColors[app.status]}`}>
+                          {app.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Filters */}
           <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
             <div className="flex-1">
