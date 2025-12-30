@@ -210,9 +210,41 @@ The AI will generate personalized interview questions based on:
 - Any concerns or gaps identified
 - Previous interview responses (for rounds 2 and 3)
 
-### During the Interview
+### Preliminary Evaluation (Small Talk Phase)
+
+**Before asking scripted questions**, conduct the preliminary evaluation during the initial small talk/greeting phase:
 
 1. Click on the interview round to expand it
+2. The **Preliminary Evaluation** section appears first (amber/yellow box)
+3. Rate the candidate on a 1-4 scale for each criterion:
+
+| Criterion | What to Evaluate |
+|-----------|------------------|
+| **Appearance** | Personal presentation, grooming, appropriate attire |
+| **Manner** | Professional demeanor, attitude, body language |
+| **Conversation** | Communication skills, clarity, engagement |
+| **Intelligence** | Quick thinking, comprehension, articulate responses |
+| **Sociability** | Interpersonal skills, friendliness, rapport building |
+| **Health Opinion** | General fitness impression, energy level |
+
+**Score Guide:**
+- 1 = Poor
+- 2 = Below Average
+- 3 = Good
+- 4 = Excellent
+
+4. Optionally add notes about your observations
+5. Click **Save Preliminary Evaluation**
+
+The average of these scores is displayed and factored into the AI's overall interview evaluation:
+- **3.5-4.0 avg**: Strong first impression (+10 points)
+- **2.5-3.4 avg**: Average impression (neutral)
+- **1.5-2.4 avg**: Below average (-10 points)
+- **1.0-1.4 avg**: Poor impression (-15-20 points)
+
+### During the Interview
+
+1. After completing the preliminary evaluation, proceed to the scripted questions
 2. For each question:
    - Read the question to the candidate
    - Record their response in the text area

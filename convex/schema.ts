@@ -156,6 +156,19 @@ export default defineSchema({
           round: v.number(), // 1, 2, or 3
           interviewerName: v.string(),
           conductedAt: v.number(),
+          // Preliminary evaluation (small talk phase) - scores 1-4
+          preliminaryEvaluation: v.optional(
+            v.object({
+              appearance: v.number(), // 1-4: Personal appearance/presentation
+              manner: v.number(), // 1-4: Professional demeanor/attitude
+              conversation: v.number(), // 1-4: Communication skills
+              intelligence: v.number(), // 1-4: Quick thinking/comprehension
+              sociability: v.number(), // 1-4: Interpersonal/social skills
+              overallHealthOpinion: v.number(), // 1-4: General health/fitness impression
+              notes: v.optional(v.string()), // Optional notes from small talk
+              evaluatedAt: v.number(), // When evaluation was recorded
+            })
+          ),
           questions: v.array(
             v.object({
               question: v.string(),

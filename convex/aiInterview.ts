@@ -248,13 +248,38 @@ export const evaluateInterview = action({
       `Q${i + 1}: ${q.question}\nA${i + 1}: ${q.answer || 'No answer provided'}`
     ).join('\n\n');
 
+    // Include preliminary evaluation if available
+    let preliminaryContext = '';
+    if (interviewRound.preliminaryEvaluation) {
+      const prelim = interviewRound.preliminaryEvaluation;
+      const avgScore = (prelim.appearance + prelim.manner + prelim.conversation +
+                        prelim.intelligence + prelim.sociability + prelim.overallHealthOpinion) / 6;
+      preliminaryContext = `
+PRELIMINARY EVALUATION (Small Talk Phase - Scores 1-4):
+- Appearance: ${prelim.appearance}/4
+- Manner: ${prelim.manner}/4
+- Conversation: ${prelim.conversation}/4
+- Intelligence: ${prelim.intelligence}/4
+- Sociability: ${prelim.sociability}/4
+- Health Opinion: ${prelim.overallHealthOpinion}/4
+- Average: ${avgScore.toFixed(1)}/4
+${prelim.notes ? `- Notes: ${prelim.notes}` : ''}
+
+IMPORTANT: Factor these preliminary scores into your overall evaluation. A preliminary average of:
+- 3.5-4.0: Strong first impression, boost overall score by ~10 points
+- 2.5-3.4: Average first impression, neutral impact
+- 1.5-2.4: Below average first impression, reduce overall score by ~10 points
+- 1.0-1.4: Poor first impression, reduce overall score by ~15-20 points
+`;
+    }
+
     const prompt = `You are an experienced HR manager at IE Tire evaluating a Round ${round} interview. Analyze the following interview Q&A and provide an evaluation.
 
 CANDIDATE: ${candidateName}
 POSITION: ${jobTitle} (${positionType})
 INTERVIEWER: ${interviewRound.interviewerName}
 ${job ? `DEPARTMENT: ${job.department}` : ''}
-
+${preliminaryContext}
 IMPORTANT NOTE ABOUT ANSWER FORMAT:
 The answers below are the INTERVIEWER'S NOTES, not verbatim transcriptions. Interviewers typically:
 - Write brief summaries or key points

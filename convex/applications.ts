@@ -350,6 +350,49 @@ export const updateInterviewAnswer = mutation({
   },
 });
 
+// Save preliminary evaluation for an interview round (small talk phase)
+export const savePreliminaryEvaluation = mutation({
+  args: {
+    applicationId: v.id("applications"),
+    round: v.number(),
+    evaluation: v.object({
+      appearance: v.number(), // 1-4
+      manner: v.number(), // 1-4
+      conversation: v.number(), // 1-4
+      intelligence: v.number(), // 1-4
+      sociability: v.number(), // 1-4
+      overallHealthOpinion: v.number(), // 1-4
+      notes: v.optional(v.string()),
+    }),
+  },
+  handler: async (ctx, args) => {
+    const application = await ctx.db.get(args.applicationId);
+    if (!application) {
+      throw new Error("Application not found");
+    }
+
+    const rounds = application.interviewRounds || [];
+    const roundIndex = rounds.findIndex((r) => r.round === args.round);
+    if (roundIndex === -1) {
+      throw new Error(`Interview round ${args.round} not found`);
+    }
+
+    const updatedRounds = [...rounds];
+    updatedRounds[roundIndex] = {
+      ...updatedRounds[roundIndex],
+      preliminaryEvaluation: {
+        ...args.evaluation,
+        evaluatedAt: Date.now(),
+      },
+    };
+
+    await ctx.db.patch(args.applicationId, {
+      interviewRounds: updatedRounds,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
 // Update interview notes for a round
 export const updateInterviewNotes = mutation({
   args: {

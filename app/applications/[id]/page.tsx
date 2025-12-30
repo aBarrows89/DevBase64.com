@@ -46,6 +46,16 @@ function ApplicationDetailContent({ id }: { id: string }) {
   const [expandedRound, setExpandedRound] = useState<number | null>(null);
   const [isEvaluating, setIsEvaluating] = useState<number | null>(null);
   const [answerInputs, setAnswerInputs] = useState<Record<string, string>>({});
+  const [prelimEvalForm, setPrelimEvalForm] = useState<Record<number, {
+    appearance: number;
+    manner: number;
+    conversation: number;
+    intelligence: number;
+    sociability: number;
+    overallHealthOpinion: number;
+    notes: string;
+  }>>({});
+  const [isSavingPrelimEval, setIsSavingPrelimEval] = useState<number | null>(null);
 
   // Interview mutations and actions
   const generateQuestions = useAction(api.aiInterview.generateInterviewQuestions);
@@ -54,6 +64,7 @@ function ApplicationDetailContent({ id }: { id: string }) {
   const updateInterviewAnswer = useMutation(api.applications.updateInterviewAnswer);
   const updateInterviewNotes = useMutation(api.applications.updateInterviewNotes);
   const saveInterviewEvaluation = useMutation(api.applications.saveInterviewEvaluation);
+  const savePreliminaryEvaluation = useMutation(api.applications.savePreliminaryEvaluation);
   const deleteInterviewRound = useMutation(api.applications.deleteInterviewRound);
   const updateNotes = useMutation(api.applications.updateNotes);
   const scheduleInterview = useMutation(api.applications.scheduleInterview);
@@ -222,6 +233,73 @@ function ApplicationDetailContent({ id }: { id: string }) {
     if (!confirm(`Delete interview round ${round}? This cannot be undone.`)) return;
     await deleteInterviewRound({ applicationId: application._id, round });
     if (expandedRound === round) setExpandedRound(null);
+  };
+
+  const handleSavePreliminaryEval = async (round: number) => {
+    if (!application) return;
+    const form = prelimEvalForm[round];
+    if (!form) return;
+
+    // Validate all scores are set (1-4)
+    const scores = [form.appearance, form.manner, form.conversation, form.intelligence, form.sociability, form.overallHealthOpinion];
+    if (scores.some(s => !s || s < 1 || s > 4)) {
+      alert("Please rate all categories (1-4)");
+      return;
+    }
+
+    setIsSavingPrelimEval(round);
+    try {
+      await savePreliminaryEvaluation({
+        applicationId: application._id,
+        round,
+        evaluation: {
+          appearance: form.appearance,
+          manner: form.manner,
+          conversation: form.conversation,
+          intelligence: form.intelligence,
+          sociability: form.sociability,
+          overallHealthOpinion: form.overallHealthOpinion,
+          notes: form.notes || undefined,
+        },
+      });
+      // Clear the form after successful save
+      setPrelimEvalForm(prev => {
+        const updated = { ...prev };
+        delete updated[round];
+        return updated;
+      });
+    } catch (error) {
+      console.error("Failed to save preliminary evaluation:", error);
+    } finally {
+      setIsSavingPrelimEval(null);
+    }
+  };
+
+  const initPrelimEvalForm = (round: number, existing?: {
+    appearance: number;
+    manner: number;
+    conversation: number;
+    intelligence: number;
+    sociability: number;
+    overallHealthOpinion: number;
+    notes?: string;
+  }) => {
+    if (prelimEvalForm[round]) return; // Already initialized
+    setPrelimEvalForm(prev => ({
+      ...prev,
+      [round]: existing ? {
+        ...existing,
+        notes: existing.notes || "",
+      } : {
+        appearance: 0,
+        manner: 0,
+        conversation: 0,
+        intelligence: 0,
+        sociability: 0,
+        overallHealthOpinion: 0,
+        notes: "",
+      },
+    }));
   };
 
   const getNextRound = () => {
@@ -617,6 +695,151 @@ function ApplicationDetailContent({ id }: { id: string }) {
                       {/* Expanded Content */}
                       {expandedRound === round.round && (
                         <div className="border-t border-slate-700 p-4 space-y-4">
+                          {/* Preliminary Evaluation (Small Talk Phase) */}
+                          <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
+                            <div className="flex items-center justify-between mb-4">
+                              <h4 className="text-amber-400 font-medium flex items-center gap-2">
+                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                  <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                Preliminary Evaluation (Small Talk Phase)
+                              </h4>
+                              {round.preliminaryEvaluation && (
+                                <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded">
+                                  Avg: {(
+                                    (round.preliminaryEvaluation.appearance +
+                                      round.preliminaryEvaluation.manner +
+                                      round.preliminaryEvaluation.conversation +
+                                      round.preliminaryEvaluation.intelligence +
+                                      round.preliminaryEvaluation.sociability +
+                                      round.preliminaryEvaluation.overallHealthOpinion) / 6
+                                  ).toFixed(1)} / 4
+                                </span>
+                              )}
+                            </div>
+
+                            {round.preliminaryEvaluation ? (
+                              // Display saved evaluation
+                              <div className="space-y-3">
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                  {[
+                                    { key: "appearance", label: "Appearance" },
+                                    { key: "manner", label: "Manner" },
+                                    { key: "conversation", label: "Conversation" },
+                                    { key: "intelligence", label: "Intelligence" },
+                                    { key: "sociability", label: "Sociability" },
+                                    { key: "overallHealthOpinion", label: "Health Opinion" },
+                                  ].map(({ key, label }) => (
+                                    <div key={key} className="bg-slate-800/50 rounded p-2 text-center">
+                                      <p className="text-slate-400 text-xs mb-1">{label}</p>
+                                      <p className="text-white font-bold text-lg">
+                                        {round.preliminaryEvaluation?.[key as keyof typeof round.preliminaryEvaluation]}
+                                        <span className="text-slate-500 text-sm font-normal">/4</span>
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                                {round.preliminaryEvaluation.notes && (
+                                  <div className="bg-slate-800/50 rounded p-3">
+                                    <p className="text-slate-400 text-xs mb-1">Notes</p>
+                                    <p className="text-slate-300 text-sm">{round.preliminaryEvaluation.notes}</p>
+                                  </div>
+                                )}
+                                <p className="text-slate-500 text-xs">
+                                  Evaluated {new Date(round.preliminaryEvaluation.evaluatedAt).toLocaleString()}
+                                </p>
+                              </div>
+                            ) : (
+                              // Evaluation form
+                              <div className="space-y-3">
+                                <p className="text-slate-400 text-xs mb-2">
+                                  Rate each category from 1 (Poor) to 4 (Excellent) during the initial small talk phase.
+                                </p>
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                  {[
+                                    { key: "appearance", label: "Appearance", desc: "Presentation & grooming" },
+                                    { key: "manner", label: "Manner", desc: "Professional demeanor" },
+                                    { key: "conversation", label: "Conversation", desc: "Communication skills" },
+                                    { key: "intelligence", label: "Intelligence", desc: "Quick thinking" },
+                                    { key: "sociability", label: "Sociability", desc: "Interpersonal skills" },
+                                    { key: "overallHealthOpinion", label: "Health Opinion", desc: "General fitness" },
+                                  ].map(({ key, label, desc }) => (
+                                    <div key={key} className="bg-slate-800/50 rounded p-2">
+                                      <p className="text-slate-300 text-xs font-medium mb-1">{label}</p>
+                                      <p className="text-slate-500 text-[10px] mb-2">{desc}</p>
+                                      <div className="flex gap-1">
+                                        {[1, 2, 3, 4].map((score) => (
+                                          <button
+                                            key={score}
+                                            onClick={() => {
+                                              initPrelimEvalForm(round.round);
+                                              setPrelimEvalForm(prev => ({
+                                                ...prev,
+                                                [round.round]: {
+                                                  ...(prev[round.round] || {
+                                                    appearance: 0,
+                                                    manner: 0,
+                                                    conversation: 0,
+                                                    intelligence: 0,
+                                                    sociability: 0,
+                                                    overallHealthOpinion: 0,
+                                                    notes: "",
+                                                  }),
+                                                  [key]: score,
+                                                },
+                                              }));
+                                            }}
+                                            className={`flex-1 py-1 text-xs font-medium rounded transition-colors ${
+                                              prelimEvalForm[round.round]?.[key as keyof typeof prelimEvalForm[number]] === score
+                                                ? "bg-amber-500 text-white"
+                                                : "bg-slate-700 text-slate-400 hover:bg-slate-600"
+                                            }`}
+                                          >
+                                            {score}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                                <div>
+                                  <label className="block text-slate-400 text-xs mb-1">Notes (optional)</label>
+                                  <textarea
+                                    placeholder="Any observations from the small talk phase..."
+                                    value={prelimEvalForm[round.round]?.notes || ""}
+                                    onChange={(e) => {
+                                      initPrelimEvalForm(round.round);
+                                      setPrelimEvalForm(prev => ({
+                                        ...prev,
+                                        [round.round]: {
+                                          ...(prev[round.round] || {
+                                            appearance: 0,
+                                            manner: 0,
+                                            conversation: 0,
+                                            intelligence: 0,
+                                            sociability: 0,
+                                            overallHealthOpinion: 0,
+                                            notes: "",
+                                          }),
+                                          notes: e.target.value,
+                                        },
+                                      }));
+                                    }}
+                                    rows={2}
+                                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-amber-500 resize-none text-sm"
+                                  />
+                                </div>
+                                <button
+                                  onClick={() => handleSavePreliminaryEval(round.round)}
+                                  disabled={isSavingPrelimEval === round.round}
+                                  className="w-full px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-slate-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors text-sm font-medium"
+                                >
+                                  {isSavingPrelimEval === round.round ? "Saving..." : "Save Preliminary Evaluation"}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
                           {/* Questions & Answers */}
                           <div className="space-y-4">
                             {round.questions.map((q, qIndex) => (
