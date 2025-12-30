@@ -8,6 +8,29 @@ import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 
+interface CompletionRecord {
+  _id: string;
+  personnelName: string;
+  equipmentNumber: string;
+  equipmentType: string;
+  completedAt: number;
+  totalTimeSpent: number;
+  allPassed: boolean;
+  shiftDate: string;
+  responses: Array<{
+    itemId: string;
+    question: string;
+    passed: boolean;
+    notes?: string;
+    timeSpent: number;
+    completedAt: number;
+  }>;
+  issues?: Array<{
+    itemId: string;
+    description: string;
+  }>;
+}
+
 function ManagerContent() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
@@ -39,6 +62,295 @@ function ManagerContent() {
     return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
   };
 
+  const formatFullDateTime = (timestamp: number) => {
+    return new Date(timestamp).toLocaleString();
+  };
+
+  const getLocationName = () => {
+    if (selectedLocation === "all") return "All Locations";
+    return locations?.find(l => l._id === selectedLocation)?.name || "Unknown";
+  };
+
+  // Print individual safety check record
+  const printRecord = (completion: CompletionRecord) => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+
+    const passedItems = completion.responses.filter(r => r.passed).length;
+    const failedItems = completion.responses.filter(r => !r.passed).length;
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Safety Check Record - ${completion.personnelName} - ${completion.shiftDate}</title>
+          <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font-family: Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; }
+            .header { border-bottom: 2px solid #000; padding-bottom: 20px; margin-bottom: 20px; }
+            .company-name { font-size: 24px; font-weight: bold; }
+            .document-title { font-size: 18px; color: #333; margin-top: 5px; }
+            .record-id { font-size: 12px; color: #666; margin-top: 10px; }
+            .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+            .info-box { border: 1px solid #ddd; padding: 15px; border-radius: 4px; }
+            .info-label { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
+            .info-value { font-size: 16px; font-weight: 600; margin-top: 4px; }
+            .status-passed { color: #16a34a; }
+            .status-failed { color: #dc2626; }
+            .summary-box { background: #f5f5f5; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
+            .summary-title { font-weight: 600; margin-bottom: 10px; }
+            .summary-stats { display: flex; gap: 30px; }
+            .stat { }
+            .stat-value { font-size: 20px; font-weight: bold; }
+            .stat-label { font-size: 12px; color: #666; }
+            .checklist { margin-top: 20px; }
+            .checklist-title { font-size: 16px; font-weight: 600; margin-bottom: 15px; border-bottom: 1px solid #ddd; padding-bottom: 10px; }
+            .checklist-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid #eee; }
+            .checklist-status { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; }
+            .checklist-status.passed { background: #dcfce7; color: #16a34a; }
+            .checklist-status.failed { background: #fee2e2; color: #dc2626; }
+            .checklist-content { flex: 1; }
+            .checklist-question { font-size: 14px; }
+            .checklist-note { font-size: 12px; color: #666; margin-top: 4px; font-style: italic; }
+            .checklist-time { font-size: 12px; color: #999; }
+            .issues-section { margin-top: 20px; padding: 15px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 4px; }
+            .issues-title { color: #dc2626; font-weight: 600; margin-bottom: 10px; }
+            .issue-item { font-size: 14px; margin: 5px 0; padding-left: 15px; position: relative; }
+            .issue-item:before { content: "•"; position: absolute; left: 0; color: #dc2626; }
+            .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666; }
+            .signature-line { margin-top: 40px; display: flex; gap: 40px; }
+            .signature-box { flex: 1; }
+            .signature-label { font-size: 12px; color: #666; margin-bottom: 30px; }
+            .signature-field { border-top: 1px solid #000; padding-top: 5px; font-size: 12px; }
+            @media print {
+              body { padding: 20px; }
+              .no-print { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="company-name">IE Tire LLC</div>
+            <div class="document-title">Pre-Operation Safety Inspection Record</div>
+            <div class="record-id">Record ID: ${completion._id}</div>
+          </div>
+
+          <div class="info-grid">
+            <div class="info-box">
+              <div class="info-label">Operator Name</div>
+              <div class="info-value">${completion.personnelName}</div>
+            </div>
+            <div class="info-box">
+              <div class="info-label">Equipment</div>
+              <div class="info-value">${completion.equipmentType === "picker" ? "Picker" : "Scanner"} #${completion.equipmentNumber}</div>
+            </div>
+            <div class="info-box">
+              <div class="info-label">Inspection Date</div>
+              <div class="info-value">${new Date(completion.shiftDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
+            </div>
+            <div class="info-box">
+              <div class="info-label">Completion Time</div>
+              <div class="info-value">${formatFullDateTime(completion.completedAt)}</div>
+            </div>
+          </div>
+
+          <div class="summary-box">
+            <div class="summary-title">Inspection Summary</div>
+            <div class="summary-stats">
+              <div class="stat">
+                <div class="stat-value ${completion.allPassed ? 'status-passed' : 'status-failed'}">${completion.allPassed ? 'PASSED' : 'ISSUES FOUND'}</div>
+                <div class="stat-label">Overall Status</div>
+              </div>
+              <div class="stat">
+                <div class="stat-value">${passedItems}/${completion.responses.length}</div>
+                <div class="stat-label">Items Passed</div>
+              </div>
+              <div class="stat">
+                <div class="stat-value">${failedItems}</div>
+                <div class="stat-label">Issues Found</div>
+              </div>
+              <div class="stat">
+                <div class="stat-value">${formatDuration(completion.totalTimeSpent)}</div>
+                <div class="stat-label">Total Duration</div>
+              </div>
+            </div>
+          </div>
+
+          ${completion.issues && completion.issues.length > 0 ? `
+            <div class="issues-section">
+              <div class="issues-title">Issues Requiring Attention</div>
+              ${completion.issues.map(issue => `<div class="issue-item">${issue.description}</div>`).join('')}
+            </div>
+          ` : ''}
+
+          <div class="checklist">
+            <div class="checklist-title">Detailed Inspection Checklist</div>
+            ${completion.responses.map((r, idx) => `
+              <div class="checklist-item">
+                <div class="checklist-status ${r.passed ? 'passed' : 'failed'}">${r.passed ? '✓' : '✗'}</div>
+                <div class="checklist-content">
+                  <div class="checklist-question">${idx + 1}. ${r.question}</div>
+                  ${r.notes ? `<div class="checklist-note">Note: ${r.notes}</div>` : ''}
+                </div>
+                <div class="checklist-time">${r.timeSpent}s</div>
+              </div>
+            `).join('')}
+          </div>
+
+          <div class="signature-line">
+            <div class="signature-box">
+              <div class="signature-label">Operator Signature:</div>
+              <div class="signature-field">Electronically signed by ${completion.personnelName} on ${formatFullDateTime(completion.completedAt)}</div>
+            </div>
+            <div class="signature-box">
+              <div class="signature-label">Supervisor Review (if required):</div>
+              <div class="signature-field">_______________________________</div>
+            </div>
+          </div>
+
+          <div class="footer">
+            <p>This document is an official record of a pre-operation safety inspection conducted in accordance with OSHA regulations (29 CFR 1910.178).</p>
+            <p style="margin-top: 10px;">Document generated: ${new Date().toLocaleString()} | IE Tire LLC Safety Management System</p>
+          </div>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.onload = () => {
+      printWindow.print();
+    };
+  };
+
+  // Print daily report
+  const printDailyReport = () => {
+    if (!completions || completions.length === 0) return;
+
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+
+    const locationName = getLocationName();
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Daily Safety Inspection Report - ${selectedDate}</title>
+          <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font-family: Arial, sans-serif; padding: 40px; max-width: 1000px; margin: 0 auto; }
+            .header { border-bottom: 2px solid #000; padding-bottom: 20px; margin-bottom: 20px; }
+            .company-name { font-size: 24px; font-weight: bold; }
+            .document-title { font-size: 18px; color: #333; margin-top: 5px; }
+            .report-info { font-size: 14px; color: #666; margin-top: 10px; }
+            .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 30px; }
+            .summary-box { border: 1px solid #ddd; padding: 15px; border-radius: 4px; text-align: center; }
+            .summary-value { font-size: 28px; font-weight: bold; }
+            .summary-label { font-size: 12px; color: #666; text-transform: uppercase; margin-top: 5px; }
+            .passed { color: #16a34a; }
+            .failed { color: #dc2626; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #ddd; padding: 10px; text-align: left; font-size: 13px; }
+            th { background: #f5f5f5; font-weight: 600; }
+            tr:nth-child(even) { background: #fafafa; }
+            .status-badge { display: inline-block; padding: 3px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; }
+            .status-passed { background: #dcfce7; color: #16a34a; }
+            .status-failed { background: #fee2e2; color: #dc2626; }
+            .issues-cell { font-size: 11px; color: #dc2626; }
+            .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666; }
+            .certification { margin-top: 30px; padding: 20px; border: 1px solid #ddd; }
+            .certification-title { font-weight: 600; margin-bottom: 15px; }
+            .signature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 20px; }
+            .signature-box { }
+            .signature-line { border-top: 1px solid #000; margin-top: 40px; padding-top: 5px; font-size: 12px; }
+            @media print {
+              body { padding: 20px; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="company-name">IE Tire LLC</div>
+            <div class="document-title">Daily Pre-Operation Safety Inspection Report</div>
+            <div class="report-info">
+              Date: ${new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} |
+              Location: ${locationName} |
+              Generated: ${new Date().toLocaleString()}
+            </div>
+          </div>
+
+          <div class="summary-grid">
+            <div class="summary-box">
+              <div class="summary-value">${totalCompletions}</div>
+              <div class="summary-label">Total Inspections</div>
+            </div>
+            <div class="summary-box">
+              <div class="summary-value passed">${passedCount}</div>
+              <div class="summary-label">All Items Passed</div>
+            </div>
+            <div class="summary-box">
+              <div class="summary-value failed">${failedCount}</div>
+              <div class="summary-label">With Issues</div>
+            </div>
+            <div class="summary-box">
+              <div class="summary-value">${totalCompletions > 0 ? Math.round((passedCount / totalCompletions) * 100) : 0}%</div>
+              <div class="summary-label">Compliance Rate</div>
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Operator</th>
+                <th>Equipment</th>
+                <th>Duration</th>
+                <th>Status</th>
+                <th>Issues/Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${(completions as CompletionRecord[]).map(c => `
+                <tr>
+                  <td>${formatTime(c.completedAt)}</td>
+                  <td>${c.personnelName}</td>
+                  <td>${c.equipmentType === "picker" ? "Picker" : "Scanner"} #${c.equipmentNumber}</td>
+                  <td>${formatDuration(c.totalTimeSpent)}</td>
+                  <td><span class="status-badge ${c.allPassed ? 'status-passed' : 'status-failed'}">${c.allPassed ? 'PASSED' : 'ISSUES'}</span></td>
+                  <td class="issues-cell">${c.issues && c.issues.length > 0 ? c.issues.map(i => i.description).join('; ') : '-'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+
+          <div class="certification">
+            <div class="certification-title">Supervisor Certification</div>
+            <p style="font-size: 13px; color: #333;">I hereby certify that I have reviewed the above safety inspection records and confirm that all equipment with issues has been properly addressed or removed from service pending repair.</p>
+            <div class="signature-grid">
+              <div class="signature-box">
+                <div class="signature-line">Supervisor Signature</div>
+              </div>
+              <div class="signature-box">
+                <div class="signature-line">Date</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="footer">
+            <p>This report documents pre-operation safety inspections conducted in accordance with OSHA regulations (29 CFR 1910.178) for powered industrial trucks.</p>
+            <p style="margin-top: 5px;">Retain this document for a minimum of 3 years as required by regulatory compliance standards.</p>
+            <p style="margin-top: 10px;">IE Tire LLC Safety Management System | Report ID: RPT-${selectedDate}-${Date.now()}</p>
+          </div>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.onload = () => {
+      printWindow.print();
+    };
+  };
+
   return (
     <div className={`flex h-screen ${isDark ? "bg-slate-900" : "bg-gray-50"}`}>
       <Sidebar />
@@ -55,6 +367,17 @@ function ManagerContent() {
                 Monitor and verify safety checklist compliance
               </p>
             </div>
+            {completions && completions.length > 0 && (
+              <button
+                onClick={printDailyReport}
+                className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${isDark ? "bg-cyan-500 text-white hover:bg-cyan-600" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                </svg>
+                Print Daily Report
+              </button>
+            )}
           </div>
 
           {/* Filters */}
@@ -206,9 +529,23 @@ function ManagerContent() {
                   {expandedId === completion._id && (
                     <div className={`border-t ${isDark ? "border-slate-700" : "border-gray-200"}`}>
                       <div className="p-4 space-y-3">
-                        <h4 className={`font-medium text-sm ${isDark ? "text-slate-300" : "text-gray-700"}`}>
-                          Checklist Responses
-                        </h4>
+                        <div className="flex items-center justify-between">
+                          <h4 className={`font-medium text-sm ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                            Checklist Responses
+                          </h4>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              printRecord(completion as CompletionRecord);
+                            }}
+                            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5 ${isDark ? "bg-slate-700 text-slate-300 hover:bg-slate-600" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                            </svg>
+                            Print Record
+                          </button>
+                        </div>
                         <div className="space-y-2">
                           {completion.responses.map((r, idx) => (
                             <div
