@@ -6,6 +6,8 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/app/auth-context";
 import { useTheme } from "@/app/theme-context";
 import { useSidebar } from "@/app/sidebar-context";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 
 interface NavItem {
   href: string;
@@ -63,6 +65,12 @@ export default function Sidebar() {
   const [openGroups, setOpenGroups] = useState<string[]>(["people"]); // Default open
 
   const isDark = theme === "dark";
+
+  // Get unread message count
+  const unreadCount = useQuery(
+    api.messages.getUnreadCount,
+    user ? { userId: user._id } : "skip"
+  );
 
   // Check if any item in a group is active
   const isGroupActive = (group: NavGroup) => {
@@ -140,6 +148,7 @@ export default function Sidebar() {
           {/* Top-level nav items */}
           {filteredNavItems.map((item) => {
             const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
+            const showBadge = item.href === "/messages" && unreadCount && unreadCount > 0;
             return (
               <Link
                 key={item.href}
@@ -168,7 +177,12 @@ export default function Sidebar() {
                     d={item.icon}
                   />
                 </svg>
-                <span className="font-medium text-sm sm:text-base truncate">{item.label}</span>
+                <span className="font-medium text-sm sm:text-base truncate flex-1">{item.label}</span>
+                {showBadge && (
+                  <span className="flex-shrink-0 min-w-[1.25rem] h-5 px-1.5 bg-cyan-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
               </Link>
             );
           })}
