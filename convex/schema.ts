@@ -608,6 +608,83 @@ export default defineSchema({
     .index("by_equipment", ["equipmentType", "equipmentId"])
     .index("by_created", ["createdAt"]),
 
+  // ============ SAFETY CHECKLISTS ============
+  // Safety checklist templates (admin-editable)
+  safetyChecklistTemplates: defineTable({
+    name: v.string(), // "Standard Picker Checklist"
+    isDefault: v.boolean(), // True for the standard template
+    equipmentType: v.string(), // "picker" | "scanner" | "all"
+    items: v.array(v.object({
+      id: v.string(), // Unique ID for the item
+      question: v.string(), // "Check hydraulic fluid levels"
+      description: v.optional(v.string()), // Detailed instructions
+      minimumSeconds: v.number(), // Minimum time before can proceed (e.g., 30)
+      order: v.number(), // Display order
+    })),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    createdBy: v.id("users"),
+  })
+    .index("by_default", ["isDefault"])
+    .index("by_equipment_type", ["equipmentType"]),
+
+  // Equipment-specific checklist configuration (overrides/additions)
+  equipmentChecklistConfig: defineTable({
+    equipmentType: v.string(), // "picker" or "scanner"
+    equipmentId: v.union(v.id("pickers"), v.id("scanners")), // Specific equipment
+    templateId: v.optional(v.id("safetyChecklistTemplates")), // Override default template
+    additionalItems: v.optional(v.array(v.object({
+      id: v.string(),
+      question: v.string(),
+      description: v.optional(v.string()),
+      minimumSeconds: v.number(),
+      order: v.number(),
+    }))), // Extra questions for this specific equipment
+    personnelOverrides: v.optional(v.array(v.object({
+      personnelId: v.id("personnel"),
+      additionalItems: v.array(v.object({
+        id: v.string(),
+        question: v.string(),
+        minimumSeconds: v.number(),
+      })),
+    }))), // Extra questions for specific people on this equipment
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_equipment", ["equipmentType", "equipmentId"]),
+
+  // Completed safety checklist records
+  safetyChecklistCompletions: defineTable({
+    equipmentType: v.string(), // "picker" | "scanner"
+    equipmentId: v.union(v.id("pickers"), v.id("scanners")),
+    equipmentNumber: v.string(), // Equipment number at time of completion (for display)
+    personnelId: v.id("personnel"),
+    personnelName: v.string(), // Name at time of completion (for display)
+    templateId: v.optional(v.id("safetyChecklistTemplates")),
+    responses: v.array(v.object({
+      itemId: v.string(),
+      question: v.string(),
+      passed: v.boolean(),
+      notes: v.optional(v.string()),
+      timeSpent: v.number(), // Actual seconds spent on this item
+      completedAt: v.number(),
+    })),
+    allPassed: v.boolean(),
+    totalTimeSpent: v.number(), // Total seconds
+    issues: v.optional(v.array(v.object({
+      itemId: v.string(),
+      description: v.string(),
+    }))),
+    shiftDate: v.string(), // "2024-12-30" for easy querying
+    locationId: v.optional(v.id("locations")),
+    completedAt: v.number(),
+  })
+    .index("by_personnel", ["personnelId"])
+    .index("by_personnel_date", ["personnelId", "shiftDate"])
+    .index("by_equipment", ["equipmentType", "equipmentId"])
+    .index("by_equipment_date", ["equipmentType", "equipmentId", "shiftDate"])
+    .index("by_date", ["shiftDate"]),
+
   // ============ DOCUMENT HUB ============
   // Frequently used documents (forms, templates, etc.)
   documents: defineTable({

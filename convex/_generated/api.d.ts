@@ -27,6 +27,7 @@ import type * as notifications from "../notifications.js";
 import type * as personnel from "../personnel.js";
 import type * as projectSuggestions from "../projectSuggestions.js";
 import type * as projects from "../projects.js";
+import type * as safetyChecklist from "../safetyChecklist.js";
 import type * as shifts from "../shifts.js";
 import type * as tasks from "../tasks.js";
 import type * as timeClock from "../timeClock.js";
@@ -58,6 +59,7 @@ declare const fullApi: ApiFromModules<{
   personnel: typeof personnel;
   projectSuggestions: typeof projectSuggestions;
   projects: typeof projects;
+  safetyChecklist: typeof safetyChecklist;
   shifts: typeof shifts;
   tasks: typeof tasks;
   timeClock: typeof timeClock;

@@ -9,6 +9,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import SignaturePad from "@/components/SignaturePad";
+import QRCodeModal from "@/components/QRCodeModal";
 
 type EquipmentType = "scanners" | "pickers";
 
@@ -63,6 +64,22 @@ function EquipmentContent() {
   const [deductionRequired, setDeductionRequired] = useState(false);
   const [deductionAmount, setDeductionAmount] = useState<number>(0);
 
+  // QR Code modal state
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [qrEquipment, setQREquipment] = useState<{
+    id: string;
+    type: "picker" | "scanner";
+    number: string;
+    locationName: string;
+  } | null>(null);
+
+  // Safety history modal state
+  const [showSafetyHistoryModal, setShowSafetyHistoryModal] = useState(false);
+  const [safetyHistoryEquipment, setSafetyHistoryEquipment] = useState<{
+    id: Id<"pickers">;
+    number: string;
+  } | null>(null);
+
   // Queries
   const locations = useQuery(api.locations.listActive);
   const scanners = useQuery(api.equipment.listScanners,
@@ -73,6 +90,12 @@ function EquipmentContent() {
   );
   const personnel = useQuery(api.personnel.list, {});
   const activePersonnel = useQuery(api.equipment.listActivePersonnel);
+  const safetyCompletions = useQuery(
+    api.safetyChecklist.getEquipmentCompletions,
+    safetyHistoryEquipment
+      ? { equipmentType: "picker", equipmentId: safetyHistoryEquipment.id, limit: 10 }
+      : "skip"
+  );
 
   // Mutations
   const createScanner = useMutation(api.equipment.createScanner);
@@ -364,6 +387,24 @@ By signing below, the Employee acknowledges that they have read, understand, and
 
   const currentItems = sortByStatus(activeTab === "scanners" ? scanners : pickers);
 
+  const openQRModal = (item: NonNullable<typeof pickers>[0]) => {
+    setQREquipment({
+      id: item._id,
+      type: "picker",
+      number: String(item.number),
+      locationName: item.locationName,
+    });
+    setShowQRModal(true);
+  };
+
+  const openSafetyHistoryModal = (item: NonNullable<typeof pickers>[0]) => {
+    setSafetyHistoryEquipment({
+      id: item._id,
+      number: String(item.number),
+    });
+    setShowSafetyHistoryModal(true);
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "available":
@@ -559,6 +600,30 @@ By signing below, the Employee acknowledges that they have read, understand, and
                       >
                         Retire
                       </button>
+                    )}
+                    {activeTab === "pickers" && (
+                      <>
+                        <button
+                          onClick={() => openSafetyHistoryModal(item as NonNullable<typeof pickers>[0])}
+                          className={`px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1 ${isDark ? "bg-green-500/20 text-green-400 hover:bg-green-500/30" : "bg-green-50 text-green-600 hover:bg-green-100"}`}
+                          title="Safety Check History"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                          </svg>
+                          Safety
+                        </button>
+                        <button
+                          onClick={() => openQRModal(item as NonNullable<typeof pickers>[0])}
+                          className={`px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1 ${isDark ? "bg-purple-500/20 text-purple-400 hover:bg-purple-500/30" : "bg-purple-50 text-purple-600 hover:bg-purple-100"}`}
+                          title="Safety Check QR Code"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h2M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                          </svg>
+                          QR
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -1067,6 +1132,132 @@ By signing below, the Employee acknowledges that they have read, understand, and
                     Complete Return
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* QR Code Modal */}
+        {showQRModal && qrEquipment && (
+          <QRCodeModal
+            isOpen={showQRModal}
+            onClose={() => {
+              setShowQRModal(false);
+              setQREquipment(null);
+            }}
+            equipmentType={qrEquipment.type}
+            equipmentId={qrEquipment.id}
+            equipmentNumber={qrEquipment.number}
+            locationName={qrEquipment.locationName}
+            isDark={isDark}
+          />
+        )}
+
+        {/* Safety History Modal */}
+        {showSafetyHistoryModal && safetyHistoryEquipment && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className={`border rounded-xl p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200"}`}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className={`text-xl font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  Safety Check History - Picker #{safetyHistoryEquipment.number}
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowSafetyHistoryModal(false);
+                    setSafetyHistoryEquipment(null);
+                  }}
+                  className={`p-1 rounded-lg transition-colors ${isDark ? "hover:bg-slate-700" : "hover:bg-gray-100"}`}
+                >
+                  <svg className={`w-5 h-5 ${isDark ? "text-slate-400" : "text-gray-500"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {!safetyCompletions ? (
+                <div className={`text-center py-12 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                  Loading...
+                </div>
+              ) : safetyCompletions.length === 0 ? (
+                <div className={`text-center py-12 ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                  <svg className="w-12 h-12 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                  </svg>
+                  <p>No safety checks recorded for this picker</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {safetyCompletions.map((completion) => (
+                    <div
+                      key={completion._id}
+                      className={`rounded-lg p-4 ${isDark ? "bg-slate-700/50 border border-slate-600" : "bg-gray-50 border border-gray-200"}`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                            completion.allPassed
+                              ? "bg-green-500/20 text-green-400"
+                              : "bg-red-500/20 text-red-400"
+                          }`}>
+                            {completion.allPassed ? (
+                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              </svg>
+                            ) : (
+                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                              </svg>
+                            )}
+                          </div>
+                          <div>
+                            <p className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"}`}>
+                              {completion.personnelName}
+                            </p>
+                            <p className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                              {new Date(completion.completedAt).toLocaleDateString()} at {new Date(completion.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          </div>
+                        </div>
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${
+                          completion.allPassed
+                            ? isDark ? "bg-green-500/20 text-green-400" : "bg-green-100 text-green-700"
+                            : isDark ? "bg-red-500/20 text-red-400" : "bg-red-100 text-red-700"
+                        }`}>
+                          {completion.allPassed ? "Passed" : "Issues"}
+                        </span>
+                      </div>
+
+                      <div className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                        <span className="font-medium">Duration:</span> {Math.floor(completion.totalTimeSpent / 60)}m {completion.totalTimeSpent % 60}s
+                        <span className="mx-2">•</span>
+                        <span className="font-medium">Items:</span> {completion.responses.length}
+                      </div>
+
+                      {completion.issues && completion.issues.length > 0 && (
+                        <div className={`mt-2 pt-2 border-t ${isDark ? "border-slate-600" : "border-gray-200"}`}>
+                          <p className={`text-xs font-medium mb-1 ${isDark ? "text-red-400" : "text-red-600"}`}>Issues:</p>
+                          {completion.issues.map((issue: { itemId: string; description: string }, idx: number) => (
+                            <p key={idx} className={`text-xs ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                              • {issue.description}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-6">
+                <button
+                  onClick={() => {
+                    setShowSafetyHistoryModal(false);
+                    setSafetyHistoryEquipment(null);
+                  }}
+                  className={`w-full px-4 py-3 font-medium rounded-lg transition-colors ${isDark ? "bg-slate-700 text-white hover:bg-slate-600" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+                >
+                  Close
+                </button>
               </div>
             </div>
           </div>

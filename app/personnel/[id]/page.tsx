@@ -28,6 +28,7 @@ const TABS = [
   { id: "attendance", label: "Attendance" },
   { id: "merits", label: "Merits" },
   { id: "equipment", label: "Equipment" },
+  { id: "safety", label: "Safety" },
 ];
 
 // Helper function to calculate tenure
@@ -309,6 +310,7 @@ function PersonnelDetailContent() {
   const equipment = useQuery(api.equipment.getPersonnelEquipment, { personnelId });
   const equipmentAgreements = useQuery(api.equipment.getPersonnelAgreements, { personnelId });
   const locations = useQuery(api.locations.list);
+  const safetyCompletions = useQuery(api.safetyChecklist.getPersonnelCompletions, { personnelId, limit: 20 });
 
   // Get linked application if exists
   const linkedApplication = useQuery(
@@ -1993,6 +1995,98 @@ function PersonnelDetailContent() {
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Safety Tab */}
+          {activeTab === "safety" && (
+            <div className="space-y-6">
+              <h3 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                Safety Checklist History
+              </h3>
+
+              {!safetyCompletions ? (
+                <div className={`text-center py-12 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                  Loading...
+                </div>
+              ) : safetyCompletions.length === 0 ? (
+                <div className={`text-center py-12 ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                  No safety checklists completed yet
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {safetyCompletions.map((completion) => (
+                    <div
+                      key={completion._id}
+                      className={`rounded-lg p-4 ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                            completion.allPassed
+                              ? isDark ? "bg-green-500/20" : "bg-green-100"
+                              : isDark ? "bg-red-500/20" : "bg-red-100"
+                          }`}>
+                            {completion.allPassed ? (
+                              <svg className={`w-5 h-5 ${isDark ? "text-green-400" : "text-green-600"}`} fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              </svg>
+                            ) : (
+                              <svg className={`w-5 h-5 ${isDark ? "text-red-400" : "text-red-600"}`} fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                              </svg>
+                            )}
+                          </div>
+                          <div>
+                            <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                              Picker #{completion.equipmentNumber}
+                            </p>
+                            <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                              {new Date(completion.completedAt).toLocaleDateString()} at {new Date(completion.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          </div>
+                        </div>
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${
+                          completion.allPassed
+                            ? isDark ? "bg-green-500/20 text-green-400" : "bg-green-100 text-green-700"
+                            : isDark ? "bg-red-500/20 text-red-400" : "bg-red-100 text-red-700"
+                        }`}>
+                          {completion.allPassed ? "All Passed" : "Issues Found"}
+                        </span>
+                      </div>
+
+                      <div className={`space-y-2 text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                        <div className="flex justify-between">
+                          <span>Total Time:</span>
+                          <span className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                            {Math.floor(completion.totalTimeSpent / 60)}m {completion.totalTimeSpent % 60}s
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Items Checked:</span>
+                          <span className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                            {completion.responses.filter((r: { passed: boolean }) => r.passed).length}/{completion.responses.length} passed
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Show issues if any */}
+                      {completion.issues && completion.issues.length > 0 && (
+                        <div className={`mt-3 pt-3 border-t ${isDark ? "border-slate-700" : "border-gray-100"}`}>
+                          <p className={`text-xs font-medium mb-2 ${isDark ? "text-red-400" : "text-red-600"}`}>Issues Reported:</p>
+                          <div className="space-y-1">
+                            {completion.issues.map((issue: { itemId: string; description: string }, idx: number) => (
+                              <p key={idx} className={`text-sm ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                                • {issue.description}
+                              </p>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
