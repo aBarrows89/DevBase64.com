@@ -275,6 +275,7 @@ function ProjectsContent() {
         <div className="flex-1 p-3 sm:p-6 overflow-hidden">
           <KanbanBoard
             projects={projects}
+            users={users}
             onStatusChange={handleStatusChange}
             onProjectClick={handleProjectClick}
           />

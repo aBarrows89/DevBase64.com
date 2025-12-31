@@ -9,12 +9,14 @@ import ProjectCard from "./ProjectCard";
 import { Doc } from "@/convex/_generated/dataModel";
 
 type Project = Doc<"projects">;
+type User = Doc<"users">;
 
 interface KanbanColumnProps {
   id: string;
   title: string;
   color: string;
   projects: Project[];
+  users?: User[];
   onProjectClick: (project: Project) => void;
 }
 
@@ -46,6 +48,7 @@ export default function KanbanColumn({
   title,
   color,
   projects,
+  users,
   onProjectClick,
 }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id });
@@ -82,6 +85,7 @@ export default function KanbanColumn({
             <ProjectCard
               key={project._id}
               project={project}
+              users={users}
               onClick={() => onProjectClick(project)}
             />
           ))}

@@ -9,8 +9,11 @@ type Project = Doc<"projects"> & {
   completedTaskCount?: number;
 };
 
+type User = Doc<"users">;
+
 interface ProjectCardProps {
   project: Project;
+  users?: User[];
   isDragging?: boolean;
   onClick?: () => void;
 }
@@ -24,6 +27,7 @@ const priorityColors: Record<string, string> = {
 
 export default function ProjectCard({
   project,
+  users,
   isDragging,
   onClick,
 }: ProjectCardProps) {
@@ -44,6 +48,12 @@ export default function ProjectCard({
   const dragging = isDragging || isSortableDragging;
   const hasTaskCount = typeof project.taskCount === "number";
 
+  // Get assignee first name
+  const assignee = project.assignedTo && users
+    ? users.find((u) => u._id === project.assignedTo)
+    : null;
+  const assigneeFirstName = assignee?.name?.split(" ")[0];
+
   return (
     <div
       ref={setNodeRef}
@@ -55,9 +65,16 @@ export default function ProjectCard({
         dragging ? "opacity-50 shadow-2xl scale-105" : ""
       }`}
     >
-      <h3 className="text-white text-sm font-medium line-clamp-2">
-        {project.name}
-      </h3>
+      <div className="flex items-start justify-between gap-2">
+        <h3 className="text-white text-sm font-medium line-clamp-2 flex-1">
+          {project.name}
+        </h3>
+        {assigneeFirstName && (
+          <span className="flex-shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+            {assigneeFirstName}
+          </span>
+        )}
+      </div>
       {hasTaskCount && project.taskCount! > 0 && (
         <div className="flex items-center gap-1.5 mt-1.5">
           <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

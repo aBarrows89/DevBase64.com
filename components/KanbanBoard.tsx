@@ -20,9 +20,11 @@ import ProjectCard from "./ProjectCard";
 import { Doc } from "@/convex/_generated/dataModel";
 
 type Project = Doc<"projects">;
+type User = Doc<"users">;
 
 interface KanbanBoardProps {
   projects: Project[];
+  users?: User[];
   onStatusChange: (projectId: string, newStatus: string) => void;
   onProjectClick: (project: Project) => void;
 }
@@ -36,6 +38,7 @@ const COLUMNS = [
 
 export default function KanbanBoard({
   projects,
+  users,
   onStatusChange,
   onProjectClick,
 }: KanbanBoardProps) {
@@ -98,6 +101,7 @@ export default function KanbanBoard({
             title={column.title}
             color={column.color}
             projects={getProjectsByStatus(column.id)}
+            users={users}
             onProjectClick={onProjectClick}
           />
         ))}
@@ -105,7 +109,7 @@ export default function KanbanBoard({
 
       <DragOverlay>
         {activeProject ? (
-          <ProjectCard project={activeProject} isDragging />
+          <ProjectCard project={activeProject} users={users} isDragging />
         ) : null}
       </DragOverlay>
     </DndContext>
