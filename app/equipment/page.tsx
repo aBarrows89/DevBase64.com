@@ -863,7 +863,10 @@ By signing below, the Employee acknowledges that they have read, understand, and
                         className={`w-full px-4 py-3 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
                       >
                         <option value="">Select an employee</option>
-                        {activePersonnel?.map((person) => (
+                        {activePersonnel
+                          ?.slice()
+                          .sort((a, b) => a.name.localeCompare(b.name))
+                          .map((person) => (
                           <option key={person._id} value={person._id}>
                             {person.name} - {person.position} ({person.department})
                           </option>
