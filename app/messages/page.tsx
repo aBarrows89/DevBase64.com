@@ -58,6 +58,23 @@ function MessagesContent() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const prevMessageCountRef = useRef<number>(0);
+  const lastMessageIdRef = useRef<string | null>(null);
+
+  // Sound mute state (persisted to localStorage)
+  const [isMuted, setIsMuted] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("messageSoundMuted") === "true";
+    }
+    return false;
+  });
+
+  const toggleMute = () => {
+    setIsMuted((prev) => {
+      const newValue = !prev;
+      localStorage.setItem("messageSoundMuted", String(newValue));
+      return newValue;
+    });
+  };
 
   // Emoji & GIF picker state
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -138,27 +155,35 @@ function MessagesContent() {
   useEffect(() => {
     audioRef.current = new Audio("/horn.mp3");
     audioRef.current.volume = 0.5;
+    // Preload the audio
+    audioRef.current.load();
   }, []);
 
   // Play notification sound for new messages from others
   useEffect(() => {
-    if (!messages || !user) return;
+    if (!messages || !user || messages.length === 0) return;
 
-    const currentCount = messages.length;
-    const prevCount = prevMessageCountRef.current;
+    const lastMessage = messages[messages.length - 1];
+    const lastMessageId = lastMessage._id;
 
-    // Check if there's a new message and it's not from the current user
-    if (currentCount > prevCount && prevCount > 0) {
-      const lastMessage = messages[messages.length - 1];
-      if (lastMessage && lastMessage.senderId !== user._id) {
-        audioRef.current?.play().catch(() => {
-          // Audio play failed - user hasn't interacted with page yet
-        });
+    // Check if this is a new message we haven't seen
+    if (lastMessageIdRef.current && lastMessageId !== lastMessageIdRef.current) {
+      // Only play sound if message is from someone else and not muted
+      if (lastMessage.senderId !== user._id && !isMuted) {
+        const playSound = () => {
+          if (audioRef.current) {
+            audioRef.current.currentTime = 0;
+            audioRef.current.play().catch((err) => {
+              console.log("Audio play failed:", err);
+            });
+          }
+        };
+        playSound();
       }
     }
 
-    prevMessageCountRef.current = currentCount;
-  }, [messages, user]);
+    lastMessageIdRef.current = lastMessageId;
+  }, [messages, user, isMuted]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -387,6 +412,27 @@ function MessagesContent() {
                       : "Direct Message"}
                   </p>
                 </div>
+                {/* Mute Toggle Button */}
+                <button
+                  onClick={toggleMute}
+                  className={`p-2 rounded-lg transition-colors ${
+                    isMuted
+                      ? "text-red-400 hover:bg-red-500/20"
+                      : "text-slate-400 hover:text-white hover:bg-slate-800"
+                  }`}
+                  title={isMuted ? "Unmute notifications" : "Mute notifications"}
+                >
+                  {isMuted ? (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                    </svg>
+                  )}
+                </button>
               </div>
 
               {/* Messages */}
