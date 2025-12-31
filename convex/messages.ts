@@ -215,3 +215,61 @@ export const getAllUsers = query({
     return users.filter((u) => u.isActive);
   },
 });
+
+// Search for linkable items (projects, applications, personnel)
+export const searchLinkableItems = query({
+  args: { searchQuery: v.string() },
+  handler: async (ctx, args) => {
+    const query = args.searchQuery.toLowerCase();
+    const results: Array<{
+      type: "project" | "application" | "personnel";
+      id: string;
+      name: string;
+      subtitle: string;
+    }> = [];
+
+    // Search projects
+    const projects = await ctx.db.query("projects").collect();
+    for (const project of projects) {
+      if (project.name.toLowerCase().includes(query)) {
+        results.push({
+          type: "project",
+          id: project._id,
+          name: project.name,
+          subtitle: `Project - ${project.status}`,
+        });
+      }
+    }
+
+    // Search applications
+    const applications = await ctx.db.query("applications").collect();
+    for (const app of applications) {
+      const fullName = `${app.firstName} ${app.lastName}`.toLowerCase();
+      if (fullName.includes(query) || app.email?.toLowerCase().includes(query)) {
+        results.push({
+          type: "application",
+          id: app._id,
+          name: `${app.firstName} ${app.lastName}`,
+          subtitle: `Applicant - ${app.status}`,
+        });
+      }
+    }
+
+    // Search personnel
+    const personnel = await ctx.db.query("personnel").collect();
+    for (const person of personnel) {
+      const fullName = `${person.firstName} ${person.lastName}`.toLowerCase();
+      if (fullName.includes(query)) {
+        results.push({
+          type: "personnel",
+          id: person._id,
+          name: `${person.firstName} ${person.lastName}`,
+          subtitle: `${person.position} - ${person.department}`,
+        });
+      }
+    }
+
+    // Return top 10 results
+    return results.slice(0, 10);
+  },
+});

@@ -76,6 +76,12 @@ function MessagesContent() {
     });
   };
 
+  // # Link mention state
+  const [showLinkPicker, setShowLinkPicker] = useState(false);
+  const [linkSearchQuery, setLinkSearchQuery] = useState("");
+  const [linkSearchPosition, setLinkSearchPosition] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+
   // Emoji & GIF picker state
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showGifPicker, setShowGifPicker] = useState(false);
@@ -131,9 +137,106 @@ function MessagesContent() {
     setGifSearchQuery("");
   };
 
+  // Handle # link input detection
+  const handleMessageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    const cursorPos = e.target.selectionStart || 0;
+    setNewMessage(value);
+
+    // Check if we're typing a # link
+    const textBeforeCursor = value.slice(0, cursorPos);
+    const hashMatch = textBeforeCursor.match(/#(\w*)$/);
+
+    if (hashMatch) {
+      setShowLinkPicker(true);
+      setLinkSearchQuery(hashMatch[1]);
+      setLinkSearchPosition(hashMatch.index || 0);
+      setShowEmojiPicker(false);
+      setShowGifPicker(false);
+    } else {
+      setShowLinkPicker(false);
+      setLinkSearchQuery("");
+    }
+  };
+
+  // Handle link item selection
+  const handleLinkSelect = (item: { type: string; id: string; name: string }) => {
+    const beforeHash = newMessage.slice(0, linkSearchPosition);
+    const afterSearch = newMessage.slice(linkSearchPosition + linkSearchQuery.length + 1);
+    const linkText = `[#${item.type}:${item.id}:${item.name}]`;
+
+    setNewMessage(beforeHash + linkText + afterSearch + " ");
+    setShowLinkPicker(false);
+    setLinkSearchQuery("");
+    inputRef.current?.focus();
+  };
+
   // Check if message is a GIF
   const isGifMessage = (content: string) => content.startsWith("[GIF]");
   const getGifUrl = (content: string) => content.replace("[GIF]", "");
+
+  // Render message content with links
+  const renderMessageContent = (content: string) => {
+    if (isGifMessage(content)) {
+      return (
+        <img
+          src={getGifUrl(content)}
+          alt="GIF"
+          className="max-w-full rounded-2xl"
+          style={{ maxHeight: "200px" }}
+        />
+      );
+    }
+
+    // Parse # links in format [#type:id:name]
+    const linkRegex = /\[#(project|application|personnel):([^:]+):([^\]]+)\]/g;
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = linkRegex.exec(content)) !== null) {
+      // Add text before the link
+      if (match.index > lastIndex) {
+        parts.push(content.slice(lastIndex, match.index));
+      }
+
+      const [, type, id, name] = match;
+      const href = type === "project" ? `/projects`
+        : type === "application" ? `/applications/${id}`
+        : `/personnel/${id}`;
+
+      const colors = {
+        project: "bg-purple-500/20 text-purple-300 hover:bg-purple-500/30",
+        application: "bg-green-500/20 text-green-300 hover:bg-green-500/30",
+        personnel: "bg-blue-500/20 text-blue-300 hover:bg-blue-500/30",
+      };
+
+      parts.push(
+        <a
+          key={`${id}-${match.index}`}
+          href={href}
+          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium ${colors[type as keyof typeof colors]} transition-colors`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <span className="opacity-70">#</span>
+          {name}
+        </a>
+      );
+
+      lastIndex = match.index + match[0].length;
+    }
+
+    // Add remaining text
+    if (lastIndex < content.length) {
+      parts.push(content.slice(lastIndex));
+    }
+
+    return parts.length > 0 ? (
+      <p className="text-sm whitespace-pre-wrap break-words">{parts}</p>
+    ) : (
+      <p className="text-sm whitespace-pre-wrap break-words">{content}</p>
+    );
+  };
 
   const conversations = useQuery(
     api.messages.getConversations,
@@ -146,6 +249,12 @@ function MessagesContent() {
   ) as EnrichedMessage[] | undefined;
 
   const allUsers = useQuery(api.messages.getAllUsers) as User[] | undefined;
+
+  // Search for linkable items when # is typed
+  const linkableItems = useQuery(
+    api.messages.searchLinkableItems,
+    showLinkPicker && linkSearchQuery ? { searchQuery: linkSearchQuery } : "skip"
+  );
 
   const sendMessage = useMutation(api.messages.sendMessage);
   const createConversation = useMutation(api.messages.createConversation);
@@ -465,18 +574,7 @@ function MessagesContent() {
                                 }`
                           }`}
                         >
-                          {isGifMessage(msg.content) ? (
-                            <img
-                              src={getGifUrl(msg.content)}
-                              alt="GIF"
-                              className="max-w-full rounded-2xl"
-                              style={{ maxHeight: "200px" }}
-                            />
-                          ) : (
-                            <p className="text-sm whitespace-pre-wrap break-words">
-                              {msg.content}
-                            </p>
-                          )}
+                          {renderMessageContent(msg.content)}
                         </div>
                         <p
                           className={`text-[10px] sm:text-xs text-slate-500 mt-1 ${
@@ -506,6 +604,49 @@ function MessagesContent() {
                       width={300}
                       height={400}
                     />
+                  </div>
+                )}
+
+                {/* # Link Picker */}
+                {showLinkPicker && (
+                  <div className="absolute bottom-full left-0 mb-2 z-50 w-full max-w-sm bg-slate-800 border border-slate-700 rounded-xl overflow-hidden shadow-xl">
+                    <div className="p-2 border-b border-slate-700">
+                      <span className="text-slate-400 text-xs">
+                        Type to search projects, applicants, or personnel
+                      </span>
+                    </div>
+                    <div className="max-h-48 overflow-y-auto">
+                      {linkableItems && linkableItems.length > 0 ? (
+                        linkableItems.map((item) => (
+                          <button
+                            key={`${item.type}-${item.id}`}
+                            type="button"
+                            onClick={() => handleLinkSelect(item)}
+                            className="w-full p-3 flex items-center gap-3 hover:bg-slate-700/50 transition-colors text-left"
+                          >
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
+                              item.type === "project" ? "bg-purple-500/20 text-purple-400" :
+                              item.type === "application" ? "bg-green-500/20 text-green-400" :
+                              "bg-blue-500/20 text-blue-400"
+                            }`}>
+                              {item.type === "project" ? "P" : item.type === "application" ? "A" : "E"}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-white text-sm font-medium truncate">{item.name}</p>
+                              <p className="text-slate-400 text-xs truncate">{item.subtitle}</p>
+                            </div>
+                          </button>
+                        ))
+                      ) : linkSearchQuery ? (
+                        <div className="p-4 text-center text-slate-400 text-sm">
+                          No results found for &quot;{linkSearchQuery}&quot;
+                        </div>
+                      ) : (
+                        <div className="p-4 text-center text-slate-400 text-sm">
+                          Start typing to search...
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -592,10 +733,11 @@ function MessagesContent() {
                   </button>
 
                   <input
+                    ref={inputRef}
                     type="text"
                     value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    placeholder="Type a message..."
+                    onChange={handleMessageInputChange}
+                    placeholder="Type a message... (use # to link)"
                     className="flex-1 px-3 sm:px-4 py-2.5 sm:py-3 bg-slate-800 border border-slate-700 rounded-xl text-white text-sm sm:text-base placeholder-slate-500 focus:outline-none focus:border-cyan-500"
                   />
                   <button
