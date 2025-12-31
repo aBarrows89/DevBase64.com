@@ -1,12 +1,21 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Protected from "../protected";
 import Sidebar from "@/components/Sidebar";
 import { useAuth } from "../auth-context";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id, Doc } from "@/convex/_generated/dataModel";
+import dynamic from "next/dynamic";
+import { GiphyFetch } from "@giphy/js-fetch-api";
+import { Grid } from "@giphy/react-components";
+
+// Dynamic import for emoji picker to avoid SSR issues
+const EmojiPicker = dynamic(() => import("emoji-picker-react"), { ssr: false });
+
+// GIPHY API setup (using public beta key - replace with your own for production)
+const gf = new GiphyFetch("GlVGYHkr3WSBnllca54iNt0yFbjz7L65");
 
 type User = Doc<"users">;
 
@@ -46,6 +55,65 @@ function MessagesContent() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showMobileChat, setShowMobileChat] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Emoji & GIF picker state
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showGifPicker, setShowGifPicker] = useState(false);
+  const [gifSearchQuery, setGifSearchQuery] = useState("");
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
+  const gifPickerRef = useRef<HTMLDivElement>(null);
+
+  // Close pickers when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target as Node)) {
+        setShowEmojiPicker(false);
+      }
+      if (gifPickerRef.current && !gifPickerRef.current.contains(event.target as Node)) {
+        setShowGifPicker(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // GIPHY fetch function
+  const fetchGifs = useCallback(
+    (offset: number) => {
+      if (gifSearchQuery.trim()) {
+        return gf.search(gifSearchQuery, { offset, limit: 10 });
+      }
+      return gf.trending({ offset, limit: 10 });
+    },
+    [gifSearchQuery]
+  );
+
+  // Handle emoji selection
+  const handleEmojiClick = (emojiData: { emoji: string }) => {
+    setNewMessage((prev) => prev + emojiData.emoji);
+    setShowEmojiPicker(false);
+  };
+
+  // Handle GIF selection
+  const handleGifClick = async (gif: { images: { fixed_height: { url: string } }; title: string }) => {
+    if (!selectedConversation || !user) return;
+
+    // Send GIF as a special message format
+    await sendMessage({
+      conversationId: selectedConversation._id,
+      senderId: user._id,
+      content: `[GIF]${gif.images.fixed_height.url}`,
+      mentions: [],
+    });
+
+    setShowGifPicker(false);
+    setGifSearchQuery("");
+  };
+
+  // Check if message is a GIF
+  const isGifMessage = (content: string) => content.startsWith("[GIF]");
+  const getGifUrl = (content: string) => content.replace("[GIF]", "");
 
   const conversations = useQuery(
     api.messages.getConversations,
@@ -312,15 +380,28 @@ function MessagesContent() {
                           </p>
                         )}
                         <div
-                          className={`px-3 sm:px-4 py-2 rounded-2xl ${
-                            isOwn
-                              ? "bg-cyan-500 text-white"
-                              : "bg-slate-800 text-white"
+                          className={`rounded-2xl overflow-hidden ${
+                            isGifMessage(msg.content)
+                              ? ""
+                              : `px-3 sm:px-4 py-2 ${
+                                  isOwn
+                                    ? "bg-cyan-500 text-white"
+                                    : "bg-slate-800 text-white"
+                                }`
                           }`}
                         >
-                          <p className="text-sm whitespace-pre-wrap break-words">
-                            {msg.content}
-                          </p>
+                          {isGifMessage(msg.content) ? (
+                            <img
+                              src={getGifUrl(msg.content)}
+                              alt="GIF"
+                              className="max-w-full rounded-2xl"
+                              style={{ maxHeight: "200px" }}
+                            />
+                          ) : (
+                            <p className="text-sm whitespace-pre-wrap break-words">
+                              {msg.content}
+                            </p>
+                          )}
                         </div>
                         <p
                           className={`text-[10px] sm:text-xs text-slate-500 mt-1 ${
@@ -337,8 +418,104 @@ function MessagesContent() {
               </div>
 
               {/* Message Input */}
-              <div className="p-3 sm:p-4 border-t border-slate-700">
-                <form onSubmit={handleSendMessage} className="flex gap-2 sm:gap-3">
+              <div className="p-3 sm:p-4 border-t border-slate-700 relative">
+                {/* Emoji Picker */}
+                {showEmojiPicker && (
+                  <div
+                    ref={emojiPickerRef}
+                    className="absolute bottom-full left-0 mb-2 z-50"
+                  >
+                    <EmojiPicker
+                      onEmojiClick={handleEmojiClick}
+                      theme={"dark" as const}
+                      width={300}
+                      height={400}
+                    />
+                  </div>
+                )}
+
+                {/* GIF Picker */}
+                {showGifPicker && (
+                  <div
+                    ref={gifPickerRef}
+                    className="absolute bottom-full left-0 mb-2 z-50 w-full max-w-md bg-slate-800 border border-slate-700 rounded-xl overflow-hidden shadow-xl"
+                  >
+                    <div className="p-3 border-b border-slate-700">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-white font-medium text-sm">Search GIFs</span>
+                        <button
+                          onClick={() => setShowGifPicker(false)}
+                          className="text-slate-400 hover:text-white p-1"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        value={gifSearchQuery}
+                        onChange={(e) => setGifSearchQuery(e.target.value)}
+                        placeholder="Search GIPHY..."
+                        className="w-full px-3 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+                    <div className="h-64 overflow-y-auto p-2">
+                      <Grid
+                        key={gifSearchQuery}
+                        width={380}
+                        columns={2}
+                        fetchGifs={fetchGifs}
+                        onGifClick={(gif, e) => {
+                          e.preventDefault();
+                          handleGifClick(gif);
+                        }}
+                        noLink={true}
+                      />
+                    </div>
+                    <div className="p-2 border-t border-slate-700 text-center">
+                      <span className="text-slate-500 text-xs">Powered by GIPHY</span>
+                    </div>
+                  </div>
+                )}
+
+                <form onSubmit={handleSendMessage} className="flex gap-2 sm:gap-3 items-center">
+                  {/* Emoji Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEmojiPicker(!showEmojiPicker);
+                      setShowGifPicker(false);
+                    }}
+                    className={`p-2.5 rounded-xl transition-colors flex-shrink-0 ${
+                      showEmojiPicker
+                        ? "bg-cyan-500 text-white"
+                        : "text-slate-400 hover:text-white hover:bg-slate-800"
+                    }`}
+                    title="Add emoji"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </button>
+
+                  {/* GIF Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowGifPicker(!showGifPicker);
+                      setShowEmojiPicker(false);
+                    }}
+                    className={`px-2.5 py-1.5 rounded-xl transition-colors flex-shrink-0 font-bold text-xs ${
+                      showGifPicker
+                        ? "bg-cyan-500 text-white"
+                        : "text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-600"
+                    }`}
+                    title="Add GIF"
+                  >
+                    GIF
+                  </button>
+
                   <input
                     type="text"
                     value={newMessage}
