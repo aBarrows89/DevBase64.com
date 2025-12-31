@@ -56,6 +56,8 @@ function MessagesContent() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showMobileChat, setShowMobileChat] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const prevMessageCountRef = useRef<number>(0);
 
   // Emoji & GIF picker state
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -131,6 +133,32 @@ function MessagesContent() {
   const sendMessage = useMutation(api.messages.sendMessage);
   const createConversation = useMutation(api.messages.createConversation);
   const markAsRead = useMutation(api.messages.markAsRead);
+
+  // Initialize audio on client side
+  useEffect(() => {
+    audioRef.current = new Audio("/horn.mp3");
+    audioRef.current.volume = 0.5;
+  }, []);
+
+  // Play notification sound for new messages from others
+  useEffect(() => {
+    if (!messages || !user) return;
+
+    const currentCount = messages.length;
+    const prevCount = prevMessageCountRef.current;
+
+    // Check if there's a new message and it's not from the current user
+    if (currentCount > prevCount && prevCount > 0) {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage && lastMessage.senderId !== user._id) {
+        audioRef.current?.play().catch(() => {
+          // Audio play failed - user hasn't interacted with page yet
+        });
+      }
+    }
+
+    prevMessageCountRef.current = currentCount;
+  }, [messages, user]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
