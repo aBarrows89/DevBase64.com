@@ -10,6 +10,7 @@ import { Id, Doc } from "@/convex/_generated/dataModel";
 import dynamic from "next/dynamic";
 import { GiphyFetch } from "@giphy/js-fetch-api";
 import { Grid } from "@giphy/react-components";
+import { Theme } from "emoji-picker-react";
 
 // Dynamic import for emoji picker to avoid SSR issues
 const EmojiPicker = dynamic(() => import("emoji-picker-react"), { ssr: false });
@@ -427,7 +428,7 @@ function MessagesContent() {
                   >
                     <EmojiPicker
                       onEmojiClick={handleEmojiClick}
-                      theme={"dark" as const}
+                      theme={Theme.DARK}
                       width={300}
                       height={400}
                     />
