@@ -18,6 +18,8 @@ const EMPLOYEE_TYPES = [
 ];
 
 const DEPARTMENTS = [
+  "Executive",
+  "IT",
   "Warehouse",
   "Office",
   "Sales",

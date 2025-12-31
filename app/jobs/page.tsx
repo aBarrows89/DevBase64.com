@@ -13,7 +13,7 @@ const STATUS_OPTIONS = [
   { value: "closed", label: "Closed", color: "bg-slate-500/20 text-slate-400 border-slate-500/30" },
 ];
 
-const DEPARTMENT_OPTIONS = ["Operations", "IT", "Sales", "Logistics", "Management", "HR", "Finance"];
+const DEPARTMENT_OPTIONS = ["Executive", "Operations", "IT", "Sales", "Logistics", "Management", "HR", "Finance"];
 const TYPE_OPTIONS = ["Full-time", "Part-time", "Contract", "Temporary"];
 const POSITION_TYPE_OPTIONS = [
   { value: "hourly", label: "Hourly" },

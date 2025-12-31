@@ -2516,7 +2516,10 @@ function PersonnelDetailContent() {
                     onChange={(e) => setEditPersonnelForm({ ...editPersonnelForm, department: e.target.value })}
                     className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"} border focus:outline-none`}
                   >
+                    <option value="Executive">Executive</option>
+                    <option value="IT">IT</option>
                     <option value="Warehouse">Warehouse</option>
+                    <option value="Office">Office</option>
                     <option value="Sales">Sales</option>
                     <option value="Management">Management</option>
                     <option value="Administration">Administration</option>
