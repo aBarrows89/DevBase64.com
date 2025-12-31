@@ -1017,3 +1017,61 @@ export const listActivePersonnel = query({
     }));
   },
 });
+
+// Delete equipment (superuser only - checked on frontend)
+export const deleteEquipment = mutation({
+  args: {
+    equipmentType: v.string(), // "scanner" | "picker"
+    equipmentId: v.union(v.id("scanners"), v.id("pickers")),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    // Get equipment to verify it exists
+    const equipment = await ctx.db.get(args.equipmentId);
+    if (!equipment) {
+      throw new Error(`${args.equipmentType} not found`);
+    }
+
+    // Delete related records
+    // 1. Delete equipment history
+    const history = await ctx.db
+      .query("equipmentHistory")
+      .withIndex("by_equipment", (q) =>
+        q.eq("equipmentType", args.equipmentType).eq("equipmentId", args.equipmentId)
+      )
+      .collect();
+
+    for (const record of history) {
+      await ctx.db.delete(record._id);
+    }
+
+    // 2. Delete equipment agreements
+    const agreements = await ctx.db
+      .query("equipmentAgreements")
+      .withIndex("by_equipment", (q) =>
+        q.eq("equipmentType", args.equipmentType).eq("equipmentId", args.equipmentId)
+      )
+      .collect();
+
+    for (const agreement of agreements) {
+      await ctx.db.delete(agreement._id);
+    }
+
+    // 3. Delete condition checks
+    const conditionChecks = await ctx.db
+      .query("equipmentConditionChecks")
+      .withIndex("by_equipment", (q) =>
+        q.eq("equipmentType", args.equipmentType).eq("equipmentId", args.equipmentId)
+      )
+      .collect();
+
+    for (const check of conditionChecks) {
+      await ctx.db.delete(check._id);
+    }
+
+    // 4. Delete the equipment itself
+    await ctx.db.delete(args.equipmentId);
+
+    return { success: true };
+  },
+});

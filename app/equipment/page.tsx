@@ -105,6 +105,13 @@ function EquipmentContent() {
   const retireEquipment = useMutation(api.equipment.retireEquipment);
   const assignEquipmentWithAgreement = useMutation(api.equipment.assignEquipmentWithAgreement);
   const returnEquipmentWithCheck = useMutation(api.equipment.returnEquipmentWithCheck);
+  const deleteEquipmentMutation = useMutation(api.equipment.deleteEquipment);
+
+  // Delete modal state (superuser only)
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteId, setDeleteId] = useState<Id<"scanners"> | Id<"pickers"> | null>(null);
+  const [deleteNumber, setDeleteNumber] = useState("");
+  const isSuperuser = user?.role === "super_admin";
 
   // Form state
   const [formData, setFormData] = useState({
@@ -243,6 +250,29 @@ function EquipmentContent() {
     setRetireId(id);
     setRetireReason("");
     setShowRetireModal(true);
+  };
+
+  const openDeleteModal = (item: NonNullable<typeof scanners>[0] | NonNullable<typeof pickers>[0]) => {
+    setDeleteId(item._id as Id<"scanners"> | Id<"pickers">);
+    setDeleteNumber(String(item.number));
+    setShowDeleteModal(true);
+  };
+
+  const handleDelete = async () => {
+    if (!deleteId || !user?._id) return;
+
+    try {
+      await deleteEquipmentMutation({
+        equipmentType: activeTab === "scanners" ? "scanner" : "picker",
+        equipmentId: deleteId,
+        userId: user._id,
+      });
+      setShowDeleteModal(false);
+      setDeleteId(null);
+      setDeleteNumber("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete equipment");
+    }
   };
 
   const openAssignModal = (item: NonNullable<typeof scanners>[0] | NonNullable<typeof pickers>[0]) => {
@@ -601,6 +631,15 @@ By signing below, the Employee acknowledges that they have read, understand, and
                         Retire
                       </button>
                     )}
+                    {isSuperuser && (
+                      <button
+                        onClick={() => openDeleteModal(item)}
+                        className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${isDark ? "bg-red-600/30 text-red-300 hover:bg-red-600/50" : "bg-red-100 text-red-700 hover:bg-red-200"}`}
+                        title="Permanently delete (Superuser only)"
+                      >
+                        Delete
+                      </button>
+                    )}
                     {activeTab === "pickers" && (
                       <>
                         <button
@@ -817,6 +856,64 @@ By signing below, the Employee acknowledges that they have read, understand, and
                     Retire Equipment
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Equipment Modal (Superuser Only) */}
+        {showDeleteModal && isSuperuser && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className={`border rounded-xl p-4 sm:p-6 w-full max-w-md ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200"}`}>
+              <div className="flex items-center gap-3 mb-4">
+                <div className={`p-3 rounded-full ${isDark ? "bg-red-500/20" : "bg-red-100"}`}>
+                  <svg className={`w-6 h-6 ${isDark ? "text-red-400" : "text-red-600"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className={`text-xl font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                    Delete {activeTab === "scanners" ? "Scanner" : "Picker"}
+                  </h2>
+                  <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    #{deleteNumber}
+                  </p>
+                </div>
+              </div>
+
+              <div className={`p-4 rounded-lg mb-4 ${isDark ? "bg-red-500/10 border border-red-500/30" : "bg-red-50 border border-red-200"}`}>
+                <p className={`text-sm font-medium ${isDark ? "text-red-400" : "text-red-700"}`}>
+                  Warning: This action cannot be undone!
+                </p>
+                <p className={`text-sm mt-1 ${isDark ? "text-red-300/80" : "text-red-600"}`}>
+                  This will permanently delete this equipment and all associated records including:
+                </p>
+                <ul className={`text-sm mt-2 ml-4 list-disc ${isDark ? "text-red-300/80" : "text-red-600"}`}>
+                  <li>Equipment history</li>
+                  <li>Signed agreements</li>
+                  <li>Condition check records</li>
+                </ul>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDeleteModal(false);
+                    setDeleteId(null);
+                    setDeleteNumber("");
+                  }}
+                  className={`flex-1 px-4 py-3 font-medium rounded-lg transition-colors ${isDark ? "bg-slate-700 text-slate-300 hover:bg-slate-600" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  className="flex-1 px-4 py-3 font-medium rounded-lg transition-colors bg-red-600 text-white hover:bg-red-700"
+                >
+                  Delete Permanently
+                </button>
               </div>
             </div>
           </div>
