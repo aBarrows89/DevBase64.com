@@ -209,8 +209,15 @@ function ApplicationsContent() {
                         #{index + 1}
                       </div>
 
-                      {/* Score */}
-                      <div className="flex items-start justify-between mb-3">
+                      {/* Status Badge - moved to top right */}
+                      <div className="absolute top-3 right-3">
+                        <span className={`text-xs px-2 py-0.5 rounded-full border ${statusColors[app.status]}`}>
+                          {app.status}
+                        </span>
+                      </div>
+
+                      {/* Name and Score */}
+                      <div className="flex items-start justify-between mb-3 pr-16">
                         <div>
                           <p className={`font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
                             {app.firstName} {app.lastName}
@@ -251,13 +258,6 @@ function ApplicationsContent() {
                             : isDark ? "bg-slate-700 text-slate-400" : "bg-gray-100 text-gray-600"
                       }`}>
                         {app.candidateAnalysis?.recommendedAction?.replace(/_/g, " ")}
-                      </div>
-
-                      {/* Status Badge */}
-                      <div className="absolute top-3 right-3">
-                        <span className={`text-xs px-2 py-0.5 rounded-full border ${statusColors[app.status]}`}>
-                          {app.status}
-                        </span>
                       </div>
                     </div>
                   ))}
