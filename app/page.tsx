@@ -26,7 +26,7 @@ function DashboardContent() {
   const { user } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === "dark";
-  const projects = useQuery(api.projects.getAll);
+  const projects = useQuery(api.projects.getAll, {});
   const applications = useQuery(api.applications.getRecent);
   const upcomingInterviews = useQuery(api.applications.getUpcomingInterviews);
   const hiringAnalytics = useQuery(api.applications.getHiringAnalytics);

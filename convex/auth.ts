@@ -127,6 +127,18 @@ export const login = mutation({
     // Update last login
     await ctx.db.patch(user._id, { lastLoginAt: Date.now() });
 
+    // Log the login event
+    await ctx.db.insert("auditLogs", {
+      action: "User logged in",
+      actionType: "login",
+      resourceType: "user",
+      resourceId: user._id,
+      userId: user._id,
+      userEmail: user.email,
+      details: `User ${user.name} logged in`,
+      timestamp: Date.now(),
+    });
+
     return {
       success: true,
       userId: user._id,

@@ -18,6 +18,7 @@ import type * as auditLogs from "../auditLogs.js";
 import type * as auth from "../auth.js";
 import type * as bulkUpload from "../bulkUpload.js";
 import type * as contactMessages from "../contactMessages.js";
+import type * as crons from "../crons.js";
 import type * as dealerInquiries from "../dealerInquiries.js";
 import type * as documents from "../documents.js";
 import type * as equipment from "../equipment.js";
@@ -54,6 +55,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   bulkUpload: typeof bulkUpload;
   contactMessages: typeof contactMessages;
+  crons: typeof crons;
   dealerInquiries: typeof dealerInquiries;
   documents: typeof documents;
   equipment: typeof equipment;

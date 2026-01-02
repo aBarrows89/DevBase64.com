@@ -18,7 +18,7 @@ export default defineSchema({
   projects: defineTable({
     name: v.string(),
     description: v.string(),
-    status: v.string(), // "backlog" | "in_progress" | "review" | "done"
+    status: v.string(), // "backlog" | "in_progress" | "review" | "done" | "archived"
     priority: v.string(), // "low" | "medium" | "high" | "urgent"
     createdBy: v.id("users"),
     assignedTo: v.optional(v.id("users")),
@@ -36,6 +36,8 @@ export default defineSchema({
       })
     ),
     repositoryId: v.optional(v.id("repositories")),
+    doneAt: v.optional(v.number()), // Timestamp when marked as done
+    archivedAt: v.optional(v.number()), // Timestamp when archived
     createdAt: v.number(),
     updatedAt: v.number(),
   })

@@ -29,9 +29,11 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
 
 function ProjectsContent() {
   const { user } = useAuth();
-  const projects = useQuery(api.projects.getAll) || [];
+  const projects = useQuery(api.projects.getAll, {}) || [];
+  const stats = useQuery(api.projects.getStats);
   const users = useQuery(api.auth.getAllUsers) || [];
   const updateStatus = useMutation(api.projects.updateStatus);
+  const archiveProject = useMutation(api.projects.archive);
   const createProject = useMutation(api.projects.create);
   const updateProject = useMutation(api.projects.update);
   const deleteProject = useMutation(api.projects.remove);
@@ -80,6 +82,7 @@ function ProjectsContent() {
     await updateStatus({
       projectId: projectId as Id<"projects">,
       status: newStatus,
+      userId: user?._id,
     });
   };
 
@@ -269,6 +272,36 @@ function ProjectsContent() {
               <span className="sm:hidden">New</span>
             </button>
           </div>
+
+          {/* Stats Row */}
+          {stats && (
+            <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+              <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-3">
+                <p className="text-slate-400 text-xs font-medium">Active</p>
+                <p className="text-white text-xl font-bold">{stats.activeProjects}</p>
+              </div>
+              <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3">
+                <p className="text-green-400 text-xs font-medium">Done This Week</p>
+                <p className="text-green-400 text-xl font-bold">{stats.completedThisWeek}</p>
+              </div>
+              <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-3">
+                <p className="text-cyan-400 text-xs font-medium">Done This Month</p>
+                <p className="text-cyan-400 text-xl font-bold">{stats.completedThisMonth}</p>
+              </div>
+              <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-3">
+                <p className="text-purple-400 text-xs font-medium">Created This Week</p>
+                <p className="text-purple-400 text-xl font-bold">{stats.createdThisWeek}</p>
+              </div>
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
+                <p className="text-amber-400 text-xs font-medium">In Progress</p>
+                <p className="text-amber-400 text-xl font-bold">{stats.byStatus.in_progress}</p>
+              </div>
+              <div className="bg-slate-700/50 border border-slate-600 rounded-lg p-3">
+                <p className="text-slate-400 text-xs font-medium">Archived</p>
+                <p className="text-slate-300 text-xl font-bold">{stats.archivedTotal}</p>
+              </div>
+            </div>
+          )}
         </header>
 
         {/* Kanban Board */}
