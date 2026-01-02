@@ -86,7 +86,7 @@ export default function Sidebar() {
   const { user, logout, canViewPersonnel, canViewShifts, canManageTimeOff } = useAuth();
   const { theme } = useTheme();
   const { isOpen, close } = useSidebar();
-  const [openGroups, setOpenGroups] = useState<string[]>(["people"]); // Default open
+  const [openGroups, setOpenGroups] = useState<string[]>([]); // All closed by default
 
   const isDark = theme === "dark";
 
