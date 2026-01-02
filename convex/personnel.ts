@@ -192,6 +192,7 @@ export const createFromApplication = mutation({
     hireDate: v.string(),
     hourlyRate: v.optional(v.number()),
     notes: v.optional(v.string()),
+    userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
     // Get the application data
@@ -236,6 +237,23 @@ export const createFromApplication = mutation({
       updatedAt: now,
     });
 
+    // Log the hire action
+    if (args.userId) {
+      const user = await ctx.db.get(args.userId);
+      if (user) {
+        await ctx.db.insert("auditLogs", {
+          action: "Hired applicant",
+          actionType: "create",
+          resourceType: "personnel",
+          resourceId: personnelId,
+          userId: args.userId,
+          userEmail: user.email,
+          details: `Hired ${application.firstName} ${application.lastName} as ${args.position}`,
+          timestamp: now,
+        });
+      }
+    }
+
     return personnelId;
   },
 });
@@ -261,6 +279,7 @@ export const create = mutation({
       })
     ),
     notes: v.optional(v.string()),
+    userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
@@ -282,6 +301,23 @@ export const create = mutation({
       createdAt: now,
       updatedAt: now,
     });
+
+    // Log the creation
+    if (args.userId) {
+      const user = await ctx.db.get(args.userId);
+      if (user) {
+        await ctx.db.insert("auditLogs", {
+          action: "Created personnel",
+          actionType: "create",
+          resourceType: "personnel",
+          resourceId: personnelId,
+          userId: args.userId,
+          userEmail: user.email,
+          details: `Created personnel record for ${args.firstName} ${args.lastName}`,
+          timestamp: now,
+        });
+      }
+    }
 
     return personnelId;
   },
@@ -309,9 +345,11 @@ export const update = mutation({
       })
     ),
     notes: v.optional(v.string()),
+    locationId: v.optional(v.id("locations")),
+    userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    const { personnelId, ...updates } = args;
+    const { personnelId, userId, ...updates } = args;
 
     const existing = await ctx.db.get(personnelId);
     if (!existing) {
@@ -319,14 +357,39 @@ export const update = mutation({
     }
 
     // Build the update object with only defined values
-    const updateData: Record<string, unknown> = { updatedAt: Date.now() };
+    const now = Date.now();
+    const updateData: Record<string, unknown> = { updatedAt: now };
+    const changedFields: string[] = [];
+
     for (const [key, value] of Object.entries(updates)) {
       if (value !== undefined) {
         updateData[key] = value;
+        // Track what changed for audit log
+        if (key !== "userId" && existing[key as keyof typeof existing] !== value) {
+          changedFields.push(key);
+        }
       }
     }
 
     await ctx.db.patch(personnelId, updateData);
+
+    // Log the update
+    if (userId && changedFields.length > 0) {
+      const user = await ctx.db.get(userId);
+      if (user) {
+        await ctx.db.insert("auditLogs", {
+          action: "Updated personnel",
+          actionType: "update",
+          resourceType: "personnel",
+          resourceId: personnelId,
+          userId: userId,
+          userEmail: user.email,
+          details: `Updated ${existing.firstName} ${existing.lastName}: ${changedFields.join(", ")}`,
+          timestamp: now,
+        });
+      }
+    }
+
     return personnelId;
   },
 });
@@ -375,6 +438,7 @@ export const terminate = mutation({
     personnelId: v.id("personnel"),
     terminationDate: v.string(),
     terminationReason: v.string(),
+    userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db.get(args.personnelId);
@@ -382,12 +446,30 @@ export const terminate = mutation({
       throw new Error("Personnel not found");
     }
 
+    const now = Date.now();
     await ctx.db.patch(args.personnelId, {
       status: "terminated",
       terminationDate: args.terminationDate,
       terminationReason: args.terminationReason,
-      updatedAt: Date.now(),
+      updatedAt: now,
     });
+
+    // Log the termination
+    if (args.userId) {
+      const user = await ctx.db.get(args.userId);
+      if (user) {
+        await ctx.db.insert("auditLogs", {
+          action: "Terminated personnel",
+          actionType: "delete",
+          resourceType: "personnel",
+          resourceId: args.personnelId,
+          userId: args.userId,
+          userEmail: user.email,
+          details: `Terminated ${existing.firstName} ${existing.lastName}: ${args.terminationReason}`,
+          timestamp: now,
+        });
+      }
+    }
 
     return args.personnelId;
   },
