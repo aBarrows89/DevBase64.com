@@ -310,7 +310,10 @@ export const submitChecklist = mutation({
       itemId: v.string(),
       question: v.string(),
       passed: v.boolean(),
+      response: v.optional(v.string()), // "yes" | "no" | "na"
       notes: v.optional(v.string()),
+      damageReported: v.optional(v.boolean()),
+      damageDetails: v.optional(v.string()),
       timeSpent: v.number(),
       completedAt: v.number(),
     })),
@@ -339,12 +342,12 @@ export const submitChecklist = mutation({
     const allPassed = args.responses.every((r) => r.passed);
     const totalTimeSpent = args.responses.reduce((sum, r) => sum + r.timeSpent, 0);
 
-    // Collect issues (failed items)
+    // Collect issues (failed items and damage reports)
     const issues = args.responses
-      .filter((r) => !r.passed)
+      .filter((r) => !r.passed || r.damageReported)
       .map((r) => ({
         itemId: r.itemId,
-        description: r.notes || `Failed: ${r.question}`,
+        description: r.damageDetails || r.notes || `Failed: ${r.question}`,
       }));
 
     // Get today's date
@@ -390,6 +393,10 @@ export const upsertTemplate = mutation({
       description: v.optional(v.string()),
       minimumSeconds: v.number(),
       order: v.number(),
+      // Damage reporting fields
+      responseType: v.optional(v.string()), // "yes_no" | "yes_no_na" | "condition_report"
+      requiresDetailsOn: v.optional(v.string()), // "yes" | "no" | "na" | "always" | "never"
+      detailsPrompt: v.optional(v.string()),
     })),
     userId: v.id("users"),
   },
@@ -468,6 +475,9 @@ export const configureEquipmentChecklist = mutation({
       description: v.optional(v.string()),
       minimumSeconds: v.number(),
       order: v.number(),
+      responseType: v.optional(v.string()),
+      requiresDetailsOn: v.optional(v.string()),
+      detailsPrompt: v.optional(v.string()),
     }))),
   },
   handler: async (ctx, args) => {
@@ -515,6 +525,9 @@ export const addPersonnelOverride = mutation({
       id: v.string(),
       question: v.string(),
       minimumSeconds: v.number(),
+      responseType: v.optional(v.string()),
+      requiresDetailsOn: v.optional(v.string()),
+      detailsPrompt: v.optional(v.string()),
     })),
   },
   handler: async (ctx, args) => {

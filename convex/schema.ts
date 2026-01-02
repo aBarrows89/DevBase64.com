@@ -620,6 +620,10 @@ export default defineSchema({
       description: v.optional(v.string()), // Detailed instructions
       minimumSeconds: v.number(), // Minimum time before can proceed (e.g., 30)
       order: v.number(), // Display order
+      // Damage reporting fields
+      responseType: v.optional(v.string()), // "yes_no" | "yes_no_na" | "condition_report" - defaults to "yes_no"
+      requiresDetailsOn: v.optional(v.string()), // "yes" | "no" | "na" | "always" | "never" - when to require details
+      detailsPrompt: v.optional(v.string()), // Custom prompt for details (e.g., "Describe the damage observed")
     })),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -639,6 +643,10 @@ export default defineSchema({
       description: v.optional(v.string()),
       minimumSeconds: v.number(),
       order: v.number(),
+      // Damage reporting fields
+      responseType: v.optional(v.string()), // "yes_no" | "yes_no_na" | "condition_report"
+      requiresDetailsOn: v.optional(v.string()), // "yes" | "no" | "na" | "always" | "never"
+      detailsPrompt: v.optional(v.string()),
     }))), // Extra questions for this specific equipment
     personnelOverrides: v.optional(v.array(v.object({
       personnelId: v.id("personnel"),
@@ -646,6 +654,9 @@ export default defineSchema({
         id: v.string(),
         question: v.string(),
         minimumSeconds: v.number(),
+        responseType: v.optional(v.string()),
+        requiresDetailsOn: v.optional(v.string()),
+        detailsPrompt: v.optional(v.string()),
       })),
     }))), // Extra questions for specific people on this equipment
     createdAt: v.number(),
@@ -665,7 +676,10 @@ export default defineSchema({
       itemId: v.string(),
       question: v.string(),
       passed: v.boolean(),
+      response: v.optional(v.string()), // "yes" | "no" | "na" - the actual response given
       notes: v.optional(v.string()),
+      damageReported: v.optional(v.boolean()), // True if damage was reported for this item
+      damageDetails: v.optional(v.string()), // Description of damage if reported
       timeSpent: v.number(), // Actual seconds spent on this item
       completedAt: v.number(),
     })),

@@ -15,6 +15,9 @@ interface ChecklistItem {
   description?: string;
   minimumSeconds: number;
   order: number;
+  responseType?: string; // "yes_no" | "yes_no_na" | "condition_report"
+  requiresDetailsOn?: string; // "yes" | "no" | "na" | "always" | "never"
+  detailsPrompt?: string;
 }
 
 interface Template {
@@ -51,6 +54,9 @@ function SafetyChecklistsContent() {
     question: "",
     description: "",
     minimumSeconds: 10,
+    responseType: "yes_no" as string,
+    requiresDetailsOn: "never" as string,
+    detailsPrompt: "",
   });
 
   // Queries
@@ -110,6 +116,9 @@ function SafetyChecklistsContent() {
       description: newItem.description.trim() || undefined,
       minimumSeconds: newItem.minimumSeconds,
       order: templateForm.items.length + 1,
+      responseType: newItem.responseType,
+      requiresDetailsOn: newItem.requiresDetailsOn,
+      detailsPrompt: newItem.detailsPrompt.trim() || undefined,
     };
 
     setTemplateForm({
@@ -117,7 +126,14 @@ function SafetyChecklistsContent() {
       items: [...templateForm.items, item],
     });
 
-    setNewItem({ question: "", description: "", minimumSeconds: 10 });
+    setNewItem({
+      question: "",
+      description: "",
+      minimumSeconds: 10,
+      responseType: "yes_no",
+      requiresDetailsOn: "never",
+      detailsPrompt: "",
+    });
   };
 
   const handleRemoveItem = (itemId: string) => {
@@ -425,69 +441,119 @@ function SafetyChecklistsContent() {
 
                   {/* Items List */}
                   {templateForm.items.length > 0 && (
-                    <div className="space-y-2 mb-4">
+                    <div className="space-y-3 mb-4">
                       {templateForm.items.map((item, idx) => (
                         <div
                           key={item.id}
-                          className={`flex items-start gap-3 p-3 rounded-lg ${isDark ? "bg-slate-700/50 border border-slate-600" : "bg-gray-50 border border-gray-200"}`}
+                          className={`p-4 rounded-lg ${isDark ? "bg-slate-700/50 border border-slate-600" : "bg-gray-50 border border-gray-200"}`}
                         >
-                          <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0 ${isDark ? "bg-slate-600 text-slate-300" : "bg-gray-200 text-gray-600"}`}>
-                            {idx + 1}
-                          </span>
-                          <div className="flex-1 min-w-0">
-                            <input
-                              type="text"
-                              value={item.question}
-                              onChange={(e) => handleUpdateItem(item.id, "question", e.target.value)}
-                              className={`w-full px-2 py-1 text-sm border rounded focus:outline-none ${isDark ? "bg-slate-800 border-slate-600 text-white" : "bg-white border-gray-200 text-gray-900"}`}
-                            />
-                            <input
-                              type="text"
-                              value={item.description || ""}
-                              onChange={(e) => handleUpdateItem(item.id, "description", e.target.value)}
-                              placeholder="Description (optional)"
-                              className={`w-full px-2 py-1 text-xs mt-1 border rounded focus:outline-none ${isDark ? "bg-slate-800 border-slate-600 text-slate-400 placeholder-slate-500" : "bg-white border-gray-200 text-gray-600 placeholder-gray-400"}`}
-                            />
-                          </div>
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            <input
-                              type="number"
-                              value={item.minimumSeconds}
-                              onChange={(e) => handleUpdateItem(item.id, "minimumSeconds", parseInt(e.target.value) || 5)}
-                              min={5}
-                              max={300}
-                              className={`w-16 px-2 py-1 text-sm text-center border rounded focus:outline-none ${isDark ? "bg-slate-800 border-slate-600 text-white" : "bg-white border-gray-200 text-gray-900"}`}
-                            />
-                            <span className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>sec</span>
-                          </div>
-                          <div className="flex flex-col gap-1 flex-shrink-0">
+                          {/* Header row with question and controls */}
+                          <div className="flex items-start gap-3">
+                            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0 ${isDark ? "bg-slate-600 text-slate-300" : "bg-gray-200 text-gray-600"}`}>
+                              {idx + 1}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <input
+                                type="text"
+                                value={item.question}
+                                onChange={(e) => handleUpdateItem(item.id, "question", e.target.value)}
+                                className={`w-full px-2 py-1 text-sm border rounded focus:outline-none ${isDark ? "bg-slate-800 border-slate-600 text-white" : "bg-white border-gray-200 text-gray-900"}`}
+                              />
+                              <input
+                                type="text"
+                                value={item.description || ""}
+                                onChange={(e) => handleUpdateItem(item.id, "description", e.target.value)}
+                                placeholder="Description (optional)"
+                                className={`w-full px-2 py-1 text-xs mt-1 border rounded focus:outline-none ${isDark ? "bg-slate-800 border-slate-600 text-slate-400 placeholder-slate-500" : "bg-white border-gray-200 text-gray-600 placeholder-gray-400"}`}
+                              />
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              <input
+                                type="number"
+                                value={item.minimumSeconds}
+                                onChange={(e) => handleUpdateItem(item.id, "minimumSeconds", parseInt(e.target.value) || 5)}
+                                min={5}
+                                max={300}
+                                className={`w-16 px-2 py-1 text-sm text-center border rounded focus:outline-none ${isDark ? "bg-slate-800 border-slate-600 text-white" : "bg-white border-gray-200 text-gray-900"}`}
+                              />
+                              <span className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>sec</span>
+                            </div>
+                            <div className="flex flex-col gap-1 flex-shrink-0">
+                              <button
+                                onClick={() => handleMoveItem(item.id, "up")}
+                                disabled={idx === 0}
+                                className={`p-1 rounded transition-colors disabled:opacity-30 ${isDark ? "hover:bg-slate-600" : "hover:bg-gray-200"}`}
+                              >
+                                <svg className={`w-4 h-4 ${isDark ? "text-slate-400" : "text-gray-500"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={() => handleMoveItem(item.id, "down")}
+                                disabled={idx === templateForm.items.length - 1}
+                                className={`p-1 rounded transition-colors disabled:opacity-30 ${isDark ? "hover:bg-slate-600" : "hover:bg-gray-200"}`}
+                              >
+                                <svg className={`w-4 h-4 ${isDark ? "text-slate-400" : "text-gray-500"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                              </button>
+                            </div>
                             <button
-                              onClick={() => handleMoveItem(item.id, "up")}
-                              disabled={idx === 0}
-                              className={`p-1 rounded transition-colors disabled:opacity-30 ${isDark ? "hover:bg-slate-600" : "hover:bg-gray-200"}`}
+                              onClick={() => handleRemoveItem(item.id)}
+                              className={`p-1 rounded transition-colors flex-shrink-0 ${isDark ? "hover:bg-red-500/20 text-slate-400 hover:text-red-400" : "hover:bg-red-50 text-gray-400 hover:text-red-600"}`}
                             >
-                              <svg className={`w-4 h-4 ${isDark ? "text-slate-400" : "text-gray-500"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                               </svg>
                             </button>
-                            <button
-                              onClick={() => handleMoveItem(item.id, "down")}
-                              disabled={idx === templateForm.items.length - 1}
-                              className={`p-1 rounded transition-colors disabled:opacity-30 ${isDark ? "hover:bg-slate-600" : "hover:bg-gray-200"}`}
-                            >
-                              <svg className={`w-4 h-4 ${isDark ? "text-slate-400" : "text-gray-500"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                              </svg>
-                            </button>
                           </div>
-                          <button
-                            onClick={() => handleRemoveItem(item.id)}
-                            className={`p-1 rounded transition-colors flex-shrink-0 ${isDark ? "hover:bg-red-500/20 text-slate-400 hover:text-red-400" : "hover:bg-red-50 text-gray-400 hover:text-red-600"}`}
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
+
+                          {/* Response type and damage reporting options */}
+                          <div className={`mt-3 pt-3 border-t grid grid-cols-1 md:grid-cols-3 gap-3 ${isDark ? "border-slate-600" : "border-gray-200"}`}>
+                            <div>
+                              <label className={`block text-xs font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                                Response Type
+                              </label>
+                              <select
+                                value={item.responseType || "yes_no"}
+                                onChange={(e) => handleUpdateItem(item.id, "responseType", e.target.value)}
+                                className={`w-full px-2 py-1.5 text-xs border rounded focus:outline-none ${isDark ? "bg-slate-800 border-slate-600 text-white" : "bg-white border-gray-200 text-gray-900"}`}
+                              >
+                                <option value="yes_no">Yes / No</option>
+                                <option value="yes_no_na">Yes / No / N/A</option>
+                                <option value="condition_report">Condition Report</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className={`block text-xs font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                                Require Details
+                              </label>
+                              <select
+                                value={item.requiresDetailsOn || "never"}
+                                onChange={(e) => handleUpdateItem(item.id, "requiresDetailsOn", e.target.value)}
+                                className={`w-full px-2 py-1.5 text-xs border rounded focus:outline-none ${isDark ? "bg-slate-800 border-slate-600 text-white" : "bg-white border-gray-200 text-gray-900"}`}
+                              >
+                                <option value="never">Never</option>
+                                <option value="no">When "No" is selected</option>
+                                <option value="yes">When "Yes" is selected</option>
+                                {(item.responseType === "yes_no_na") && <option value="na">When "N/A" is selected</option>}
+                                <option value="always">Always required</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className={`block text-xs font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                                Details Prompt
+                              </label>
+                              <input
+                                type="text"
+                                value={item.detailsPrompt || ""}
+                                onChange={(e) => handleUpdateItem(item.id, "detailsPrompt", e.target.value)}
+                                placeholder="Describe the issue..."
+                                disabled={item.requiresDetailsOn === "never"}
+                                className={`w-full px-2 py-1.5 text-xs border rounded focus:outline-none disabled:opacity-50 ${isDark ? "bg-slate-800 border-slate-600 text-white placeholder-slate-500" : "bg-white border-gray-200 text-gray-900 placeholder-gray-400"}`}
+                              />
+                            </div>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -512,6 +578,54 @@ function SafetyChecklistsContent() {
                         className={`px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white placeholder-slate-500 focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 placeholder-gray-400 focus:border-blue-500"}`}
                       />
                     </div>
+
+                    {/* Response type and damage options for new item */}
+                    <div className={`grid grid-cols-1 md:grid-cols-3 gap-3 mt-3 pt-3 border-t ${isDark ? "border-slate-600" : "border-gray-200"}`}>
+                      <div>
+                        <label className={`block text-xs font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                          Response Type
+                        </label>
+                        <select
+                          value={newItem.responseType}
+                          onChange={(e) => setNewItem({ ...newItem, responseType: e.target.value })}
+                          className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                        >
+                          <option value="yes_no">Yes / No</option>
+                          <option value="yes_no_na">Yes / No / N/A</option>
+                          <option value="condition_report">Condition Report</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className={`block text-xs font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                          Require Details
+                        </label>
+                        <select
+                          value={newItem.requiresDetailsOn}
+                          onChange={(e) => setNewItem({ ...newItem, requiresDetailsOn: e.target.value })}
+                          className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                        >
+                          <option value="never">Never</option>
+                          <option value="no">When "No" is selected</option>
+                          <option value="yes">When "Yes" is selected</option>
+                          {newItem.responseType === "yes_no_na" && <option value="na">When "N/A" is selected</option>}
+                          <option value="always">Always required</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className={`block text-xs font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                          Details Prompt
+                        </label>
+                        <input
+                          type="text"
+                          value={newItem.detailsPrompt}
+                          onChange={(e) => setNewItem({ ...newItem, detailsPrompt: e.target.value })}
+                          placeholder="Describe the issue..."
+                          disabled={newItem.requiresDetailsOn === "never"}
+                          className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none disabled:opacity-50 ${isDark ? "bg-slate-900/50 border-slate-600 text-white placeholder-slate-500 focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 placeholder-gray-400 focus:border-blue-500"}`}
+                        />
+                      </div>
+                    </div>
+
                     <div className="flex items-center gap-4 mt-3">
                       <div className="flex items-center gap-2">
                         <label className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>Min. time:</label>

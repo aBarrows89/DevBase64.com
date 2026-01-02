@@ -15,13 +15,19 @@ type ChecklistItem = {
   description?: string;
   minimumSeconds: number;
   order: number;
+  responseType?: string; // "yes_no" | "yes_no_na" | "condition_report"
+  requiresDetailsOn?: string; // "yes" | "no" | "na" | "always" | "never"
+  detailsPrompt?: string;
 };
 
 type Response = {
   itemId: string;
   question: string;
   passed: boolean;
+  response?: string; // "yes" | "no" | "na"
   notes?: string;
+  damageReported?: boolean;
+  damageDetails?: string;
   timeSpent: number;
   completedAt: number;
 };
@@ -39,6 +45,8 @@ function SafetyCheckContent() {
   const [currentItemIndex, setCurrentItemIndex] = useState(0);
   const [responses, setResponses] = useState<Response[]>([]);
   const [currentNotes, setCurrentNotes] = useState("");
+  const [currentDamageDetails, setCurrentDamageDetails] = useState("");
+  const [showDamageField, setShowDamageField] = useState(false);
   const [itemStartTime, setItemStartTime] = useState<number>(Date.now());
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -81,6 +89,8 @@ function SafetyCheckContent() {
       setItemStartTime(Date.now());
       setElapsedSeconds(0);
       setCurrentNotes("");
+      setCurrentDamageDetails("");
+      setShowDamageField(false);
     }
   }, [currentItemIndex, step]);
 
@@ -93,14 +103,38 @@ function SafetyCheckContent() {
     setElapsedSeconds(0);
   };
 
-  const handleResponse = useCallback((passed: boolean) => {
+  // Check if details are required for the current response
+  const checkRequiresDetails = useCallback((responseValue: string) => {
+    if (!currentItem) return false;
+    const item = currentItem as ChecklistItem;
+    const requiresOn = item.requiresDetailsOn || "never";
+    if (requiresOn === "never") return false;
+    if (requiresOn === "always") return true;
+    return requiresOn === responseValue;
+  }, [currentItem]);
+
+  const handleResponse = useCallback((responseValue: "yes" | "no" | "na") => {
     if (!currentItem || !canProceed) return;
+
+    // Check if we need to show damage details field first
+    const needsDetails = checkRequiresDetails(responseValue);
+    if (needsDetails && !showDamageField) {
+      setShowDamageField(true);
+      return; // Don't proceed yet, wait for details
+    }
+
+    // Determine if passed based on response
+    const passed = responseValue === "yes";
+    const damageReported = responseValue === "no" || (needsDetails && currentDamageDetails.trim() !== "");
 
     const response: Response = {
       itemId: currentItem.id,
       question: currentItem.question,
       passed,
+      response: responseValue,
       notes: currentNotes || undefined,
+      damageReported: damageReported || undefined,
+      damageDetails: currentDamageDetails.trim() || undefined,
       timeSpent: Math.floor((Date.now() - itemStartTime) / 1000),
       completedAt: Date.now(),
     };
@@ -114,7 +148,7 @@ function SafetyCheckContent() {
       // All items completed, submit
       handleSubmit(newResponses);
     }
-  }, [currentItem, canProceed, currentNotes, itemStartTime, responses, currentItemIndex, items.length]);
+  }, [currentItem, canProceed, currentNotes, currentDamageDetails, showDamageField, checkRequiresDetails, itemStartTime, responses, currentItemIndex, items.length]);
 
   const handleSubmit = async (finalResponses: Response[]) => {
     if (!selectedPersonnelId || !checklistData) return;
@@ -299,7 +333,7 @@ function SafetyCheckContent() {
                 )}
 
                 {/* Notes */}
-                <div className="mb-6">
+                <div className="mb-4">
                   <label className="block text-slate-400 text-xs mb-1">Notes (optional)</label>
                   <textarea
                     value={currentNotes}
@@ -310,41 +344,87 @@ function SafetyCheckContent() {
                   />
                 </div>
 
-                {/* Pass/Fail Buttons */}
-                <div className="grid grid-cols-2 gap-4">
-                  <button
-                    onClick={() => handleResponse(false)}
-                    disabled={!canProceed || isSubmitting}
-                    className={`py-4 rounded-xl font-semibold transition-all ${
-                      canProceed
-                        ? "bg-red-500 hover:bg-red-600 text-white"
-                        : "bg-slate-700 text-slate-500 cursor-not-allowed"
-                    }`}
-                  >
-                    <span className="flex items-center justify-center gap-2">
-                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                      </svg>
-                      FAIL
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => handleResponse(true)}
-                    disabled={!canProceed || isSubmitting}
-                    className={`py-4 rounded-xl font-semibold transition-all ${
-                      canProceed
-                        ? "bg-green-500 hover:bg-green-600 text-white"
-                        : "bg-slate-700 text-slate-500 cursor-not-allowed"
-                    }`}
-                  >
-                    <span className="flex items-center justify-center gap-2">
-                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                      </svg>
-                      PASS
-                    </span>
-                  </button>
-                </div>
+                {/* Damage Details Field (shown when required) */}
+                {showDamageField && (
+                  <div className="mb-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                    <label className="block text-amber-400 text-sm font-medium mb-2">
+                      {(currentItem as ChecklistItem).detailsPrompt || "Please describe the issue or damage observed:"}
+                    </label>
+                    <textarea
+                      value={currentDamageDetails}
+                      onChange={(e) => setCurrentDamageDetails(e.target.value)}
+                      placeholder="Provide detailed description..."
+                      rows={3}
+                      autoFocus
+                      className="w-full px-3 py-2 bg-slate-700 border border-amber-500/50 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 resize-none text-sm"
+                    />
+                    <p className="text-amber-400/70 text-xs mt-2">
+                      Details are required before submitting this response.
+                    </p>
+                  </div>
+                )}
+
+                {/* Response Buttons based on responseType */}
+                {(() => {
+                  const typedItem = currentItem as ChecklistItem;
+                  const responseType = typedItem.responseType || "yes_no";
+                  const showNA = responseType === "yes_no_na";
+
+                  return (
+                    <div className={`grid gap-3 ${showNA ? "grid-cols-3" : "grid-cols-2"}`}>
+                      <button
+                        onClick={() => handleResponse("no")}
+                        disabled={!canProceed || isSubmitting || (showDamageField && !currentDamageDetails.trim())}
+                        className={`py-4 rounded-xl font-semibold transition-all ${
+                          canProceed && (!showDamageField || currentDamageDetails.trim())
+                            ? "bg-red-500 hover:bg-red-600 text-white"
+                            : "bg-slate-700 text-slate-500 cursor-not-allowed"
+                        }`}
+                      >
+                        <span className="flex items-center justify-center gap-2">
+                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                          </svg>
+                          NO
+                        </span>
+                      </button>
+                      {showNA && (
+                        <button
+                          onClick={() => handleResponse("na")}
+                          disabled={!canProceed || isSubmitting || (showDamageField && !currentDamageDetails.trim())}
+                          className={`py-4 rounded-xl font-semibold transition-all ${
+                            canProceed && (!showDamageField || currentDamageDetails.trim())
+                              ? "bg-slate-500 hover:bg-slate-600 text-white"
+                              : "bg-slate-700 text-slate-500 cursor-not-allowed"
+                          }`}
+                        >
+                          <span className="flex items-center justify-center gap-2">
+                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+                            </svg>
+                            N/A
+                          </span>
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleResponse("yes")}
+                        disabled={!canProceed || isSubmitting || (showDamageField && !currentDamageDetails.trim())}
+                        className={`py-4 rounded-xl font-semibold transition-all ${
+                          canProceed && (!showDamageField || currentDamageDetails.trim())
+                            ? "bg-green-500 hover:bg-green-600 text-white"
+                            : "bg-slate-700 text-slate-500 cursor-not-allowed"
+                        }`}
+                      >
+                        <span className="flex items-center justify-center gap-2">
+                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                          YES
+                        </span>
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 
@@ -428,9 +508,13 @@ function SafetyCheckContent() {
                 {responses.map((r, idx) => (
                   <div key={idx} className="p-3 flex items-start gap-3">
                     <div className={`w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center ${
-                      r.passed ? "bg-green-500" : "bg-red-500"
+                      r.response === "na" ? "bg-slate-500" : r.passed ? "bg-green-500" : "bg-red-500"
                     }`}>
-                      {r.passed ? (
+                      {r.response === "na" ? (
+                        <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+                        </svg>
+                      ) : r.passed ? (
                         <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
                           <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                         </svg>
@@ -441,7 +525,20 @@ function SafetyCheckContent() {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-slate-300 text-sm">{r.question}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-slate-300 text-sm">{r.question}</p>
+                        <span className={`text-xs px-1.5 py-0.5 rounded ${
+                          r.response === "na" ? "bg-slate-600 text-slate-300" :
+                          r.passed ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
+                        }`}>
+                          {r.response === "na" ? "N/A" : r.passed ? "YES" : "NO"}
+                        </span>
+                      </div>
+                      {r.damageDetails && (
+                        <p className="text-amber-400 text-xs mt-1 bg-amber-500/10 px-2 py-1 rounded">
+                          Damage: {r.damageDetails}
+                        </p>
+                      )}
                       {r.notes && (
                         <p className="text-slate-500 text-xs mt-1">Note: {r.notes}</p>
                       )}
