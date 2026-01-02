@@ -7,6 +7,8 @@ import { useAuth } from "./auth-context";
 import { useTheme } from "./theme-context";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { SearchButton } from "@/components/GlobalSearch";
+import ActivityFeed from "@/components/ActivityFeed";
 
 // Combined type for website messages
 interface WebsiteMessage {
@@ -94,6 +96,7 @@ function DashboardContent() {
               </p>
             </div>
             <div className="hidden sm:flex items-center gap-4">
+              <SearchButton />
               <span className={`text-sm ${isDark ? "text-slate-500" : "text-gray-400"}`}>
                 {new Date().toLocaleDateString("en-US", {
                   weekday: "long",
@@ -530,13 +533,17 @@ function DashboardContent() {
             </div>
           </div>
 
-          {/* Pending Tenure Check-ins */}
-          {pendingTenureCheckIns && pendingTenureCheckIns.length > 0 && (
-            <div className={`border rounded-xl p-4 sm:p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
-              <div className="flex items-center justify-between mb-4 sm:mb-6">
-                <h2 className={`text-base sm:text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
-                  Due Tenure Check-ins
-                </h2>
+          {/* Activity Feed */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+            <ActivityFeed limit={15} />
+
+            {/* Pending Tenure Check-ins */}
+            {pendingTenureCheckIns && pendingTenureCheckIns.length > 0 && (
+              <div className={`border rounded-xl p-4 sm:p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
+                <div className="flex items-center justify-between mb-4 sm:mb-6">
+                  <h2 className={`text-base sm:text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                    Due Tenure Check-ins
+                  </h2>
                 <div className="flex items-center gap-2">
                   <span className={`px-2 py-1 text-xs font-medium rounded-full ${isDark ? "bg-amber-500/20 text-amber-400" : "bg-amber-100 text-amber-600"}`}>
                     {pendingTenureCheckIns.length} pending
@@ -607,6 +614,7 @@ function DashboardContent() {
               </div>
             </div>
           )}
+          </div>
 
         </div>
       </main>

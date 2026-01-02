@@ -4,6 +4,8 @@ import { ConvexProvider, ConvexReactClient } from "convex/react";
 import { AuthProvider } from "./auth-context";
 import { ThemeProvider } from "./theme-context";
 import { SidebarProvider } from "./sidebar-context";
+import GlobalSearch from "@/components/GlobalSearch";
+import KeyboardShortcuts from "@/components/KeyboardShortcuts";
 
 // Production deployment
 const convex = new ConvexReactClient(
@@ -15,7 +17,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <ConvexProvider client={convex}>
       <ThemeProvider>
         <SidebarProvider>
-          <AuthProvider>{children}</AuthProvider>
+          <AuthProvider>
+            {children}
+            <GlobalSearch />
+            <KeyboardShortcuts />
+          </AuthProvider>
         </SidebarProvider>
       </ThemeProvider>
     </ConvexProvider>

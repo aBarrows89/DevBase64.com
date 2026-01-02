@@ -8,11 +8,13 @@
  * @module
  */
 
+import type * as activity from "../activity.js";
 import type * as aiInterview from "../aiInterview.js";
 import type * as aiMatching from "../aiMatching.js";
 import type * as aiTasks from "../aiTasks.js";
 import type * as applications from "../applications.js";
 import type * as attendance from "../attendance.js";
+import type * as auditLogs from "../auditLogs.js";
 import type * as auth from "../auth.js";
 import type * as bulkUpload from "../bulkUpload.js";
 import type * as contactMessages from "../contactMessages.js";
@@ -27,7 +29,9 @@ import type * as notifications from "../notifications.js";
 import type * as personnel from "../personnel.js";
 import type * as projectSuggestions from "../projectSuggestions.js";
 import type * as projects from "../projects.js";
+import type * as reports from "../reports.js";
 import type * as safetyChecklist from "../safetyChecklist.js";
+import type * as search from "../search.js";
 import type * as shifts from "../shifts.js";
 import type * as tasks from "../tasks.js";
 import type * as timeClock from "../timeClock.js";
@@ -40,11 +44,13 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  activity: typeof activity;
   aiInterview: typeof aiInterview;
   aiMatching: typeof aiMatching;
   aiTasks: typeof aiTasks;
   applications: typeof applications;
   attendance: typeof attendance;
+  auditLogs: typeof auditLogs;
   auth: typeof auth;
   bulkUpload: typeof bulkUpload;
   contactMessages: typeof contactMessages;
@@ -59,7 +65,9 @@ declare const fullApi: ApiFromModules<{
   personnel: typeof personnel;
   projectSuggestions: typeof projectSuggestions;
   projects: typeof projects;
+  reports: typeof reports;
   safetyChecklist: typeof safetyChecklist;
+  search: typeof search;
   shifts: typeof shifts;
   tasks: typeof tasks;
   timeClock: typeof timeClock;
