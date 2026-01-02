@@ -67,6 +67,9 @@ export const getToday = query({
     const enriched = await Promise.all(
       callOffs.map(async (callOff) => {
         const personnel = await ctx.db.get(callOff.personnelId);
+        const acknowledger = callOff.acknowledgedBy
+          ? await ctx.db.get(callOff.acknowledgedBy)
+          : null;
         return {
           ...callOff,
           personnelName: personnel
@@ -75,6 +78,7 @@ export const getToday = query({
           personnelDepartment: personnel?.department,
           personnelPosition: personnel?.position,
           personnelPhone: personnel?.phone,
+          acknowledgerName: acknowledger?.name,
         };
       })
     );
@@ -104,6 +108,7 @@ export const getUnacknowledged = query({
           personnelDepartment: personnel?.department,
           personnelPosition: personnel?.position,
           personnelLocationId: personnel?.locationId,
+          acknowledgerName: undefined as string | undefined,
         };
       })
     );

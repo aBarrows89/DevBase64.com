@@ -14,6 +14,7 @@ import type * as aiMatching from "../aiMatching.js";
 import type * as aiTasks from "../aiTasks.js";
 import type * as announcements from "../announcements.js";
 import type * as applications from "../applications.js";
+import type * as arp from "../arp.js";
 import type * as attendance from "../attendance.js";
 import type * as auditLogs from "../auditLogs.js";
 import type * as auth from "../auth.js";
@@ -55,6 +56,7 @@ declare const fullApi: ApiFromModules<{
   aiTasks: typeof aiTasks;
   announcements: typeof announcements;
   applications: typeof applications;
+  arp: typeof arp;
   attendance: typeof attendance;
   auditLogs: typeof auditLogs;
   auth: typeof auth;

@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 
 // Helper to check if a write-up is expired (90 days from date)
 function isWriteUpExpired(date: string): boolean {
@@ -166,6 +167,23 @@ export const create = mutation({
       issuedBy: args.issuedBy,
       createdAt: Date.now(),
     });
+
+    // Check for active ARP enrollment and auto-fail if exists
+    // ANY write-up during ARP (attendance, safety, conduct, etc.) triggers failure
+    const activeEnrollment = await ctx.db
+      .query("arpEnrollments")
+      .withIndex("by_personnel", (q) => q.eq("personnelId", args.personnelId))
+      .filter((q) => q.eq(q.field("status"), "active"))
+      .first();
+
+    if (activeEnrollment) {
+      // Auto-fail the ARP enrollment
+      await ctx.scheduler.runAfter(0, internal.arp.internalFailEnrollment, {
+        enrollmentId: activeEnrollment._id,
+        reason: `Write-up issued: ${args.category} - ${args.severity}`,
+        writeUpId: writeUpId,
+      });
+    }
 
     return writeUpId;
   },

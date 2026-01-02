@@ -993,4 +993,75 @@ export default defineSchema({
     .index("by_personnel", ["personnelId"])
     .index("by_year", ["year"])
     .index("by_personnel_year", ["personnelId", "year"]),
+
+  // ============ ATTENDANCE RECOVERY PROGRAM (ARP) ============
+  // ARP Enrollments - Main enrollment record
+  arpEnrollments: defineTable({
+    personnelId: v.id("personnel"),
+    enrollmentDate: v.string(), // YYYY-MM-DD
+    programTier: v.number(), // 1, 2, or 3
+    programDurationDays: v.number(), // 30, 60, or 90
+    programEndDate: v.string(), // YYYY-MM-DD
+    coachId: v.id("personnel"), // Coach must be personnel (T&D team member)
+    status: v.string(), // "active" | "completed" | "failed"
+    outcomeDate: v.optional(v.string()), // When completed/failed
+    failureReason: v.optional(v.string()),
+    failureWriteUpId: v.optional(v.id("writeUps")), // Write-up that caused failure
+    nextEligibleDate: v.optional(v.string()), // 90 days after failure
+    enrollmentCount: v.number(), // 1, 2, or 3 (which enrollment this is)
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_personnel", ["personnelId"])
+    .index("by_status", ["status"])
+    .index("by_coach", ["coachId"]),
+
+  // ARP Meetings - Scheduled/completed coaching meetings
+  arpMeetings: defineTable({
+    enrollmentId: v.id("arpEnrollments"),
+    meetingNumber: v.number(), // 1, 2, 3, etc.
+    scheduledDate: v.string(), // YYYY-MM-DD
+    completedDate: v.optional(v.string()),
+    meetingType: v.string(), // "initial" | "weekly" | "final"
+    status: v.string(), // "scheduled" | "completed" | "missed" | "rescheduled"
+    notes: v.optional(v.string()),
+    actionItems: v.optional(v.string()),
+    coachId: v.id("personnel"), // Could be different from enrollment coach
+    createdAt: v.number(),
+  })
+    .index("by_enrollment", ["enrollmentId"])
+    .index("by_status", ["status"])
+    .index("by_date", ["scheduledDate"]),
+
+  // ARP Root Cause Assessment
+  arpRootCause: defineTable({
+    enrollmentId: v.id("arpEnrollments"),
+    sleepWakeIssues: v.boolean(),
+    transportation: v.boolean(),
+    childcareFamily: v.boolean(),
+    healthIssues: v.boolean(),
+    timeManagement: v.boolean(),
+    scheduleConflicts: v.boolean(),
+    engagementMotivation: v.boolean(),
+    other: v.boolean(),
+    otherDescription: v.optional(v.string()),
+    summary: v.optional(v.string()),
+    assessedDate: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_enrollment", ["enrollmentId"]),
+
+  // ARP Training Assignments
+  arpTraining: defineTable({
+    enrollmentId: v.id("arpEnrollments"),
+    moduleCode: v.string(), // "core" | "sleep" | "time" | etc.
+    moduleName: v.string(),
+    assignedDate: v.string(),
+    dueDate: v.optional(v.string()),
+    completedDate: v.optional(v.string()),
+    status: v.string(), // "assigned" | "in_progress" | "completed"
+    createdAt: v.number(),
+  })
+    .index("by_enrollment", ["enrollmentId"])
+    .index("by_status", ["status"]),
 });
