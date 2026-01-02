@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { useAuth } from "../auth-context";
 import { useRouter } from "next/navigation";
 import { useTheme } from "../theme-context";
@@ -43,10 +44,15 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
-            IE Tire
-          </h1>
-          <p className={`mt-2 ${isDark ? "text-slate-500" : "text-gray-500"}`}>Business Intelligence Dashboard</p>
+          <Image
+            src="/logo.gif"
+            alt="Import Export Tire Company"
+            width={200}
+            height={56}
+            className="h-14 w-auto mx-auto"
+            priority
+          />
+          <p className={`mt-3 ${isDark ? "text-slate-500" : "text-gray-500"}`}>Business Intelligence Dashboard</p>
         </div>
 
         {/* Login Form */}
