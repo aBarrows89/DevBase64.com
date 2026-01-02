@@ -593,7 +593,7 @@ function PersonnelDetailContent() {
         };
       }
 
-      await updatePersonnel(updateData);
+      await updatePersonnel({ ...updateData, userId: user?._id });
       setShowEditPersonnelModal(false);
     } catch (error) {
       console.error("Error updating personnel:", error);
@@ -747,6 +747,7 @@ function PersonnelDetailContent() {
         personnelId,
         terminationDate: terminateForm.terminationDate,
         terminationReason: terminateForm.terminationReason,
+        userId: user?._id,
       });
       setShowTerminateModal(false);
       setTerminateForm({

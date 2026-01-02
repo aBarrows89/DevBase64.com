@@ -123,6 +123,7 @@ function ApplicationDetailContent({ id }: { id: string }) {
         employeeType: hireForm.employeeType,
         hireDate: hireForm.hireDate,
         hourlyRate: hireForm.hourlyRate ? parseFloat(hireForm.hourlyRate) : undefined,
+        userId: user?._id,
       });
       setShowHireModal(false);
       // Navigate to the new personnel record

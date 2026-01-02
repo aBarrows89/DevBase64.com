@@ -32,7 +32,7 @@ function NewEmployeeContent() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
   const router = useRouter();
-  const { canManagePersonnel } = useAuth();
+  const { user, canManagePersonnel } = useAuth();
   const createPersonnel = useMutation(api.personnel.create);
   const locations = useQuery(api.locations.listActive);
 
@@ -131,6 +131,7 @@ function NewEmployeeContent() {
         locationId: formData.locationId ? formData.locationId as Id<"locations"> : undefined,
         emergencyContact,
         notes: formData.notes.trim() || undefined,
+        userId: user?._id,
       });
 
       router.push("/personnel");

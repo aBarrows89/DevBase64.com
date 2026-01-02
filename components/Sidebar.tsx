@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/app/auth-context";
 import { useTheme } from "@/app/theme-context";
@@ -130,10 +131,14 @@ export default function Sidebar() {
         {/* Logo */}
         <div className={`p-4 sm:p-6 border-b flex items-center justify-between ${isDark ? "border-slate-700" : "border-gray-200"}`}>
           <div>
-            <h1 className={`text-lg sm:text-xl font-bold ${isDark ? "bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent" : "text-blue-600"}`}>
-              IE Tire
-            </h1>
-            <p className={`text-xs mt-1 ${isDark ? "text-slate-500" : "text-gray-500"}`}>Business Intelligence</p>
+            <Image
+              src="/logo.gif"
+              alt="Import Export Tire Company"
+              width={140}
+              height={40}
+              className="h-10 w-auto"
+              priority
+            />
           </div>
           {/* Close button for mobile */}
           <button
@@ -379,9 +384,15 @@ export function MobileHeader() {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
         </svg>
       </button>
-      <h1 className={`text-lg font-bold flex-1 ${isDark ? "bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent" : "text-blue-600"}`}>
-        IE Tire
-      </h1>
+      <div className="flex-1">
+        <Image
+          src="/logo.gif"
+          alt="Import Export Tire Company"
+          width={100}
+          height={28}
+          className="h-7 w-auto"
+        />
+      </div>
       {/* Search button for mobile */}
       <button
         onClick={() => {
