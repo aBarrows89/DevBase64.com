@@ -484,12 +484,14 @@ export default defineSchema({
     state: v.optional(v.string()),
     zipCode: v.optional(v.string()),
     isActive: v.boolean(),
+    managerId: v.optional(v.id("users")), // Manager responsible for this location
     notes: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_name", ["name"])
-    .index("by_active", ["isActive"]),
+    .index("by_active", ["isActive"])
+    .index("by_manager", ["managerId"]),
 
   // ============ EQUIPMENT INVENTORY ============
   // Scanners (RF scanners, barcode scanners, etc.)
@@ -769,4 +771,226 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_personnel", ["personnelId"])
     .index("by_date", ["date"]),
+
+  // ============ EMPLOYEE PORTAL ============
+  // Time Off Requests
+  timeOffRequests: defineTable({
+    personnelId: v.id("personnel"),
+    requestType: v.string(), // "vacation" | "sick" | "personal" | "bereavement" | "other"
+    startDate: v.string(), // YYYY-MM-DD
+    endDate: v.string(), // YYYY-MM-DD
+    totalDays: v.number(), // Calculated days requested
+    reason: v.optional(v.string()),
+    status: v.string(), // "pending" | "approved" | "denied"
+    requestedAt: v.number(),
+    // Review fields
+    reviewedBy: v.optional(v.id("users")),
+    reviewedAt: v.optional(v.number()),
+    managerNotes: v.optional(v.string()),
+    // Notification tracking
+    managerNotifiedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_personnel", ["personnelId"])
+    .index("by_status", ["status"])
+    .index("by_date", ["startDate"])
+    .index("by_requested", ["requestedAt"]),
+
+  // Call-Offs (same-day absences)
+  callOffs: defineTable({
+    personnelId: v.id("personnel"),
+    date: v.string(), // YYYY-MM-DD
+    reason: v.string(),
+    reportedAt: v.number(), // When they called off
+    reportedVia: v.string(), // "app" | "phone" | "text" | "other"
+    // Acknowledgment by manager
+    acknowledgedBy: v.optional(v.id("users")),
+    acknowledgedAt: v.optional(v.number()),
+    managerNotes: v.optional(v.string()),
+    // Notification tracking
+    managerNotifiedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_personnel", ["personnelId"])
+    .index("by_date", ["date"])
+    .index("by_reported", ["reportedAt"]),
+
+  // Announcements (admin broadcasts to employees)
+  announcements: defineTable({
+    title: v.string(),
+    content: v.string(),
+    priority: v.string(), // "normal" | "urgent"
+    targetType: v.string(), // "all" | "department" | "location"
+    targetDepartments: v.optional(v.array(v.string())), // If targeting specific departments
+    targetLocationIds: v.optional(v.array(v.id("locations"))), // If targeting specific locations
+    createdBy: v.id("users"),
+    createdByName: v.string(),
+    expiresAt: v.optional(v.number()), // Auto-hide after this time
+    isPinned: v.boolean(), // Keep at top
+    isActive: v.boolean(),
+    // Push notification tracking
+    pushSent: v.boolean(),
+    pushSentAt: v.optional(v.number()),
+    // Read tracking (optional, for analytics)
+    readCount: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_active", ["isActive"])
+    .index("by_priority", ["priority"])
+    .index("by_created", ["createdAt"]),
+
+  // Announcement read receipts (track who's seen what)
+  announcementReads: defineTable({
+    announcementId: v.id("announcements"),
+    personnelId: v.id("personnel"),
+    readAt: v.number(),
+  })
+    .index("by_announcement", ["announcementId"])
+    .index("by_personnel", ["personnelId"])
+    .index("by_both", ["announcementId", "personnelId"]),
+
+  // Chat Rooms
+  chatRooms: defineTable({
+    name: v.string(),
+    type: v.string(), // "general" | "department" | "location" | "custom"
+    departmentId: v.optional(v.string()), // If department-specific
+    locationId: v.optional(v.id("locations")), // If location-specific
+    isModerated: v.boolean(), // If true, messages need approval
+    isActive: v.boolean(),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_type", ["type"])
+    .index("by_active", ["isActive"]),
+
+  // Chat Messages
+  chatMessages: defineTable({
+    roomId: v.id("chatRooms"),
+    personnelId: v.id("personnel"),
+    personnelName: v.string(), // Cached for display
+    content: v.string(),
+    // Moderation
+    status: v.string(), // "pending" | "approved" | "rejected"
+    moderatedBy: v.optional(v.id("users")),
+    moderatedAt: v.optional(v.number()),
+    moderationNotes: v.optional(v.string()),
+    // Soft delete
+    isDeleted: v.boolean(),
+    deletedBy: v.optional(v.id("users")),
+    deletedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_room", ["roomId"])
+    .index("by_room_created", ["roomId", "createdAt"])
+    .index("by_personnel", ["personnelId"])
+    .index("by_status", ["status"]),
+
+  // Pay Stubs
+  payStubs: defineTable({
+    personnelId: v.id("personnel"),
+    payPeriodStart: v.string(), // YYYY-MM-DD
+    payPeriodEnd: v.string(), // YYYY-MM-DD
+    payDate: v.string(), // YYYY-MM-DD
+    // Hours
+    regularHours: v.number(),
+    overtimeHours: v.optional(v.number()),
+    totalHours: v.number(),
+    // Pay
+    hourlyRate: v.number(),
+    grossPay: v.number(),
+    netPay: v.number(),
+    // Deductions
+    deductions: v.optional(v.array(v.object({
+      type: v.string(), // "federal_tax" | "state_tax" | "social_security" | "medicare" | "health_insurance" | "401k" | "other"
+      description: v.optional(v.string()),
+      amount: v.number(),
+    }))),
+    totalDeductions: v.number(),
+    // File attachment (PDF)
+    fileId: v.optional(v.id("_storage")),
+    fileName: v.optional(v.string()),
+    // Source
+    source: v.string(), // "manual" | "quickbooks" | "import"
+    externalId: v.optional(v.string()), // QuickBooks ID if synced
+    // Notification
+    employeeNotifiedAt: v.optional(v.number()),
+    employeeViewedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_personnel", ["personnelId"])
+    .index("by_pay_date", ["payDate"])
+    .index("by_personnel_date", ["personnelId", "payDate"]),
+
+  // Employee App Push Tokens (for notifications)
+  employeePushTokens: defineTable({
+    personnelId: v.id("personnel"),
+    token: v.string(), // Expo push token or FCM token
+    platform: v.string(), // "ios" | "android"
+    deviceId: v.optional(v.string()), // Unique device identifier
+    isActive: v.boolean(),
+    lastUsedAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_personnel", ["personnelId"])
+    .index("by_token", ["token"]),
+
+  // PTO Policies (vacation accrual by position)
+  ptoPolicies: defineTable({
+    position: v.string(), // Job position this applies to, or "default"
+    name: v.string(), // "Standard PTO", "Management PTO", etc.
+    // Eligibility
+    eligibleAfterMonths: v.number(), // Months of employment before eligible (e.g., 12 = 1 year)
+    // Annual accrual amounts (in days)
+    vacationDaysPerYear: v.number(), // e.g., 10 days
+    sickDaysPerYear: v.number(), // e.g., 5 days
+    personalDaysPerYear: v.number(), // e.g., 3 days
+    // Accrual rules
+    accrualMethod: v.string(), // "annual" (all at once) | "monthly" (spread out) | "per_pay_period"
+    // Carryover rules
+    maxCarryoverDays: v.optional(v.number()), // Max days that can roll over to next year
+    // Tenure bonuses (additional days after X years)
+    tenureBonuses: v.optional(v.array(v.object({
+      afterYears: v.number(), // e.g., 3, 5, 10
+      additionalVacationDays: v.number(),
+    }))),
+    isActive: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_position", ["position"])
+    .index("by_active", ["isActive"]),
+
+  // PTO Balances (per employee, per year)
+  ptoBalances: defineTable({
+    personnelId: v.id("personnel"),
+    year: v.number(), // e.g., 2025
+    policyId: v.optional(v.id("ptoPolicies")), // Which policy applies
+    // Vacation balance
+    vacationAccrued: v.number(), // Total accrued this year
+    vacationUsed: v.number(), // Total used this year
+    vacationPending: v.number(), // Pending requests
+    vacationCarriedOver: v.number(), // From previous year
+    // Sick balance
+    sickAccrued: v.number(),
+    sickUsed: v.number(),
+    sickPending: v.number(),
+    // Personal balance
+    personalAccrued: v.number(),
+    personalUsed: v.number(),
+    personalPending: v.number(),
+    // Eligibility date (when they became eligible for PTO)
+    eligibleDate: v.optional(v.string()), // YYYY-MM-DD
+    // Last accrual date (for monthly/per-pay-period accrual)
+    lastAccrualDate: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_personnel", ["personnelId"])
+    .index("by_year", ["year"])
+    .index("by_personnel_year", ["personnelId", "year"]),
 });

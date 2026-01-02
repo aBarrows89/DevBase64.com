@@ -5,7 +5,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 
-export type UserRole = "super_admin" | "admin" | "department_manager" | "warehouse_manager" | "member";
+export type UserRole = "super_admin" | "admin" | "department_manager" | "warehouse_manager" | "member" | "employee";
 
 export interface User {
   _id: Id<"users">;
@@ -36,6 +36,11 @@ interface AuthContextType {
   canDeleteRecords: boolean;
   // Edit personnel info (email, phone, etc.) - super_admin and admin only
   canEditPersonnelInfo: boolean;
+  // Employee portal permissions
+  canManageTimeOff: boolean; // Approve/deny time off requests
+  canManageCallOffs: boolean; // View and acknowledge call-offs
+  canManageAnnouncements: boolean; // Create/edit announcements
+  canModerateChat: boolean; // Moderate chat messages
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -186,6 +191,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user?.role === "super_admin" ||
     user?.role === "admin";
 
+  // Employee portal admin permissions
+  // Manage time off requests: super_admin, admin, department_manager, warehouse_manager
+  const canManageTimeOff =
+    user?.role === "super_admin" ||
+    user?.role === "admin" ||
+    user?.role === "department_manager" ||
+    user?.role === "warehouse_manager";
+
+  // Manage call-offs: super_admin, admin, department_manager, warehouse_manager
+  const canManageCallOffs =
+    user?.role === "super_admin" ||
+    user?.role === "admin" ||
+    user?.role === "department_manager" ||
+    user?.role === "warehouse_manager";
+
+  // Manage announcements: super_admin, admin
+  const canManageAnnouncements =
+    user?.role === "super_admin" ||
+    user?.role === "admin";
+
+  // Moderate chat: super_admin, admin, department_manager
+  const canModerateChat =
+    user?.role === "super_admin" ||
+    user?.role === "admin" ||
+    user?.role === "department_manager";
+
   return (
     <AuthContext.Provider
       value={{
@@ -202,6 +233,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         canViewShifts,
         canDeleteRecords,
         canEditPersonnelInfo,
+        canManageTimeOff,
+        canManageCallOffs,
+        canManageAnnouncements,
+        canModerateChat,
       }}
     >
       {children}
