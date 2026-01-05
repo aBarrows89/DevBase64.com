@@ -80,6 +80,33 @@ function EquipmentContent() {
     number: string;
   } | null>(null);
 
+  // Reassign modal state
+  const [showReassignModal, setShowReassignModal] = useState(false);
+  const [reassignEquipmentId, setReassignEquipmentId] = useState<Id<"scanners"> | Id<"pickers"> | null>(null);
+  const [reassignEquipmentData, setReassignEquipmentData] = useState<{
+    number: string;
+    serialNumber?: string;
+    assignedPersonName?: string | null;
+  } | null>(null);
+  const [reassignStep, setReassignStep] = useState<"condition" | "assign">("condition");
+  const [reassignChecklist, setReassignChecklist] = useState({
+    physicalCondition: true,
+    screenFunctional: true,
+    buttonsWorking: true,
+    batteryCondition: true,
+    chargingPortOk: true,
+    scannerFunctional: true,
+    cleanCondition: true,
+  });
+  const [reassignOverallCondition, setReassignOverallCondition] = useState<string>("good");
+  const [reassignDamageNotes, setReassignDamageNotes] = useState("");
+  const [reassignRepairRequired, setReassignRepairRequired] = useState(false);
+  const [reassignDeductionRequired, setReassignDeductionRequired] = useState(false);
+  const [reassignDeductionAmount, setReassignDeductionAmount] = useState<number>(0);
+  const [reassignSignOffSignature, setReassignSignOffSignature] = useState<string | null>(null);
+  const [reassignNewPersonnelId, setReassignNewPersonnelId] = useState<string>("");
+  const [reassignNewPersonnelSignature, setReassignNewPersonnelSignature] = useState<string | null>(null);
+
   // Queries
   const locations = useQuery(api.locations.listActive);
   const scanners = useQuery(api.equipment.listScanners,
@@ -106,6 +133,7 @@ function EquipmentContent() {
   const assignEquipmentWithAgreement = useMutation(api.equipment.assignEquipmentWithAgreement);
   const returnEquipmentWithCheck = useMutation(api.equipment.returnEquipmentWithCheck);
   const deleteEquipmentMutation = useMutation(api.equipment.deleteEquipment);
+  const reassignEquipmentMutation = useMutation(api.equipment.reassignEquipment);
 
   // Delete modal state (superuser only)
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -358,6 +386,98 @@ function EquipmentContent() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to return equipment");
     }
+  };
+
+  const openReassignModal = (item: NonNullable<typeof scanners>[0] | NonNullable<typeof pickers>[0]) => {
+    setReassignEquipmentId(item._id as Id<"scanners"> | Id<"pickers">);
+    setReassignEquipmentData({
+      number: String(item.number),
+      serialNumber: item.serialNumber,
+      assignedPersonName: item.assignedPersonName,
+    });
+    setReassignStep("condition");
+    setReassignChecklist({
+      physicalCondition: true,
+      screenFunctional: true,
+      buttonsWorking: true,
+      batteryCondition: true,
+      chargingPortOk: true,
+      scannerFunctional: true,
+      cleanCondition: true,
+    });
+    setReassignOverallCondition("good");
+    setReassignDamageNotes("");
+    setReassignRepairRequired(false);
+    setReassignDeductionRequired(false);
+    setReassignDeductionAmount(0);
+    setReassignSignOffSignature(null);
+    setReassignNewPersonnelId("");
+    setReassignNewPersonnelSignature(null);
+    setShowReassignModal(true);
+  };
+
+  const handleReassign = async () => {
+    if (!reassignEquipmentId || !reassignSignOffSignature || !reassignNewPersonnelId || !reassignNewPersonnelSignature || !user?._id) return;
+
+    try {
+      await reassignEquipmentMutation({
+        equipmentType: activeTab === "scanners" ? "scanner" : "picker",
+        equipmentId: reassignEquipmentId,
+        checklist: reassignChecklist,
+        overallCondition: reassignOverallCondition,
+        damageNotes: reassignDamageNotes || undefined,
+        repairRequired: reassignRepairRequired,
+        deductionRequired: reassignDeductionRequired,
+        deductionAmount: reassignDeductionRequired ? reassignDeductionAmount : undefined,
+        signOffSignature: reassignSignOffSignature,
+        newPersonnelId: reassignNewPersonnelId as Id<"personnel">,
+        newPersonnelSignature: reassignNewPersonnelSignature,
+        userId: user._id,
+        userName: user.name,
+        equipmentValue: EQUIPMENT_VALUE,
+      });
+      setShowReassignModal(false);
+      setReassignEquipmentId(null);
+      setReassignEquipmentData(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to reassign equipment");
+    }
+  };
+
+  const getReassignAgreementText = () => {
+    if (!reassignEquipmentData) return "";
+    const selectedPerson = activePersonnel?.find(p => p._id === reassignNewPersonnelId);
+    const employeeName = selectedPerson?.name || "Employee";
+    const serialDisplay = reassignEquipmentData.serialNumber ? ` (Serial: ${reassignEquipmentData.serialNumber})` : "";
+    const equipmentLabel = activeTab === "scanners" ? "Scanner" : "Picker";
+
+    return `EQUIPMENT RESPONSIBILITY AGREEMENT
+
+This Equipment Responsibility Agreement ("Agreement") is entered into between the Employee named below and IE Tires, LLC ("Company").
+
+EQUIPMENT ASSIGNED:
+${equipmentLabel} #${reassignEquipmentData.number}${serialDisplay}
+Equipment Value: $${EQUIPMENT_VALUE.toFixed(2)}
+
+EMPLOYEE: ${employeeName}
+
+TERMS AND CONDITIONS:
+
+1. SOLE RESPONSIBILITY: The undersigned Employee acknowledges receipt of the above-described Company equipment and accepts full responsibility for its care, security, and proper use.
+
+2. AUTHORIZED USE ONLY: This equipment is issued exclusively to the undersigned Employee. No other individual is authorized to access, operate, or use this equipment under any circumstances.
+
+3. ON-PREMISES ONLY: This equipment must remain on Company premises at all times. Under no circumstances shall this equipment be removed from the workplace or taken to the Employee's residence.
+
+4. DAMAGE REPORTING: The Employee shall immediately report any damage, malfunction, or defect to their supervisor. Failure to promptly report damage may result in disciplinary action and financial liability.
+
+5. FINANCIAL LIABILITY:
+   a) Failure to return equipment upon separation from employment, reassignment, or request by management will result in a deduction of up to $${EQUIPMENT_VALUE.toFixed(2)} from the Employee's final pay.
+   b) Damage resulting from intentional misconduct, gross negligence, or careless handling may result in a deduction of up to $${EQUIPMENT_VALUE.toFixed(2)} from Employee's pay to cover replacement costs.
+
+6. RETURN REQUIREMENT: Upon termination of employment, reassignment, or request by management, the Employee shall immediately return this equipment in the same condition as received, allowing for reasonable wear and tear.
+
+By signing below, the Employee acknowledges that they have read, understand, and agree to abide by all terms and conditions set forth in this Agreement.`;
   };
 
   const getAgreementText = () => {
@@ -616,12 +736,20 @@ By signing below, the Employee acknowledges that they have read, understand, and
                       </button>
                     )}
                     {item.status === "assigned" && (
-                      <button
-                        onClick={() => openReturnModal(item)}
-                        className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${isDark ? "bg-amber-500/20 text-amber-400 hover:bg-amber-500/30" : "bg-amber-50 text-amber-600 hover:bg-amber-100"}`}
-                      >
-                        Return
-                      </button>
+                      <>
+                        <button
+                          onClick={() => openReassignModal(item)}
+                          className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${isDark ? "bg-purple-500/20 text-purple-400 hover:bg-purple-500/30" : "bg-purple-50 text-purple-600 hover:bg-purple-100"}`}
+                        >
+                          Reassign
+                        </button>
+                        <button
+                          onClick={() => openReturnModal(item)}
+                          className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${isDark ? "bg-amber-500/20 text-amber-400 hover:bg-amber-500/30" : "bg-amber-50 text-amber-600 hover:bg-amber-100"}`}
+                        >
+                          Return
+                        </button>
+                      </>
                     )}
                     {item.status !== "retired" && (
                       <button
@@ -1233,6 +1361,288 @@ By signing below, the Employee acknowledges that they have read, understand, and
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Reassign Equipment Modal */}
+        {showReassignModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className={`border rounded-xl p-4 sm:p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200"}`}>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className={`text-xl font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                    Reassign {activeTab === "scanners" ? "Scanner" : "Picker"} #{reassignEquipmentData?.number}
+                  </h2>
+                  <p className={`text-sm mt-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    Step {reassignStep === "condition" ? "1" : "2"} of 2: {reassignStep === "condition" ? "Condition Check & Sign-off" : "New Assignment"}
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowReassignModal(false);
+                    setReassignEquipmentId(null);
+                    setReassignEquipmentData(null);
+                  }}
+                  className={`p-1 rounded-lg transition-colors ${isDark ? "hover:bg-slate-700" : "hover:bg-gray-100"}`}
+                >
+                  <svg className={`w-5 h-5 ${isDark ? "text-slate-400" : "text-gray-500"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Current Assignee Info */}
+              <div className={`mb-4 p-3 rounded-lg ${isDark ? "bg-purple-500/10 border border-purple-500/30" : "bg-purple-50 border border-purple-200"}`}>
+                <p className={`text-sm ${isDark ? "text-purple-400" : "text-purple-700"}`}>
+                  <span className="font-medium">Currently assigned to:</span> {reassignEquipmentData?.assignedPersonName || "Unknown"}
+                </p>
+              </div>
+
+              {reassignStep === "condition" ? (
+                <div className="space-y-6">
+                  {/* Condition Checklist */}
+                  <div>
+                    <h3 className={`text-sm font-semibold mb-3 ${isDark ? "text-white" : "text-gray-900"}`}>
+                      Condition Checklist
+                    </h3>
+                    <p className={`text-xs mb-3 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                      Verify the condition of the equipment before reassigning to a new user.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {[
+                        { key: "physicalCondition", label: "No physical damage" },
+                        { key: "screenFunctional", label: "Screen works properly" },
+                        { key: "buttonsWorking", label: "All buttons responsive" },
+                        { key: "batteryCondition", label: "Battery holds charge" },
+                        { key: "chargingPortOk", label: "Charging port undamaged" },
+                        { key: "scannerFunctional", label: "Scanning works" },
+                        { key: "cleanCondition", label: "Equipment is clean" },
+                      ].map((item) => (
+                        <label
+                          key={item.key}
+                          className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                            reassignChecklist[item.key as keyof typeof reassignChecklist]
+                              ? isDark ? "bg-green-500/10 border-green-500/30" : "bg-green-50 border-green-200"
+                              : isDark ? "bg-red-500/10 border-red-500/30" : "bg-red-50 border-red-200"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={reassignChecklist[item.key as keyof typeof reassignChecklist]}
+                            onChange={(e) => setReassignChecklist({ ...reassignChecklist, [item.key]: e.target.checked })}
+                            className="w-4 h-4 rounded"
+                          />
+                          <span className={`text-sm ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                            {item.label}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Overall Condition */}
+                  <div>
+                    <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                      Overall Condition
+                    </label>
+                    <select
+                      value={reassignOverallCondition}
+                      onChange={(e) => setReassignOverallCondition(e.target.value)}
+                      className={`w-full px-4 py-3 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                    >
+                      <option value="excellent">Excellent - Like new</option>
+                      <option value="good">Good - Normal wear</option>
+                      <option value="fair">Fair - Some issues</option>
+                      <option value="poor">Poor - Multiple issues</option>
+                      <option value="damaged">Damaged - Needs repair</option>
+                    </select>
+                  </div>
+
+                  {/* Damage Notes */}
+                  <div>
+                    <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                      Damage Notes (if any)
+                    </label>
+                    <textarea
+                      value={reassignDamageNotes}
+                      onChange={(e) => setReassignDamageNotes(e.target.value)}
+                      rows={2}
+                      className={`w-full px-4 py-3 border rounded-lg focus:outline-none resize-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                      placeholder="Describe any damage or issues found..."
+                    />
+                  </div>
+
+                  {/* Toggles */}
+                  <div className="space-y-3">
+                    <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer ${isDark ? "border-slate-600" : "border-gray-200"}`}>
+                      <input
+                        type="checkbox"
+                        checked={reassignRepairRequired}
+                        onChange={(e) => setReassignRepairRequired(e.target.checked)}
+                        className="w-4 h-4 rounded"
+                      />
+                      <span className={`text-sm ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                        Repair required (cannot reassign if checked)
+                      </span>
+                    </label>
+
+                    <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer ${isDark ? "border-slate-600" : "border-gray-200"}`}>
+                      <input
+                        type="checkbox"
+                        checked={reassignDeductionRequired}
+                        onChange={(e) => setReassignDeductionRequired(e.target.checked)}
+                        className="w-4 h-4 rounded"
+                      />
+                      <span className={`text-sm ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                        Pay deduction required for damage
+                      </span>
+                    </label>
+
+                    {reassignDeductionRequired && (
+                      <div className="ml-7">
+                        <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                          Deduction Amount
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <span className={`${isDark ? "text-slate-400" : "text-gray-500"}`}>$</span>
+                          <input
+                            type="number"
+                            value={reassignDeductionAmount}
+                            onChange={(e) => setReassignDeductionAmount(Math.min(EQUIPMENT_VALUE, Math.max(0, Number(e.target.value))))}
+                            max={EQUIPMENT_VALUE}
+                            min={0}
+                            className={`w-32 px-4 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                          />
+                          <span className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                            (max ${EQUIPMENT_VALUE})
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Manager Sign-off Signature */}
+                  <div>
+                    <h3 className={`text-sm font-semibold mb-2 ${isDark ? "text-white" : "text-gray-900"}`}>
+                      Manager Sign-off
+                    </h3>
+                    <p className={`text-xs mb-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                      Sign below to confirm the condition check of this equipment.
+                    </p>
+                    <SignaturePad
+                      onSignatureChange={setReassignSignOffSignature}
+                      width={500}
+                      height={120}
+                      label="Manager Signature"
+                    />
+                  </div>
+
+                  <div className="flex gap-3 pt-4 border-t border-slate-700/50">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowReassignModal(false);
+                        setReassignEquipmentId(null);
+                        setReassignEquipmentData(null);
+                      }}
+                      className={`flex-1 px-4 py-3 font-medium rounded-lg transition-colors ${isDark ? "bg-slate-700 text-white hover:bg-slate-600" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReassignStep("assign")}
+                      disabled={!reassignSignOffSignature || reassignRepairRequired}
+                      className={`flex-1 px-4 py-3 font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isDark ? "bg-purple-500 text-white hover:bg-purple-600" : "bg-purple-600 text-white hover:bg-purple-700"}`}
+                    >
+                      {reassignRepairRequired ? "Cannot Reassign (Repair Required)" : "Continue to Assignment"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Condition Summary */}
+                  <div className={`p-3 rounded-lg ${isDark ? "bg-slate-700/50" : "bg-gray-50"}`}>
+                    <p className={`text-sm ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                      <span className="font-medium">Condition verified:</span> {reassignOverallCondition}
+                      {reassignDamageNotes && ` - ${reassignDamageNotes}`}
+                    </p>
+                  </div>
+
+                  {/* Select New Assignee */}
+                  <div>
+                    <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                      Assign to New Employee *
+                    </label>
+                    <select
+                      value={reassignNewPersonnelId}
+                      onChange={(e) => {
+                        setReassignNewPersonnelId(e.target.value);
+                        setReassignNewPersonnelSignature(null);
+                      }}
+                      className={`w-full px-4 py-3 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                    >
+                      <option value="">Select an employee</option>
+                      {activePersonnel
+                        ?.slice()
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .map((person) => (
+                        <option key={person._id} value={person._id}>
+                          {person.name} - {person.position} ({person.department})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {reassignNewPersonnelId && (
+                    <>
+                      {/* Equipment Agreement */}
+                      <div className={`p-4 rounded-lg border max-h-48 overflow-y-auto ${isDark ? "bg-slate-900/50 border-slate-600" : "bg-gray-50 border-gray-200"}`}>
+                        <pre className={`text-xs whitespace-pre-wrap font-mono ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                          {getReassignAgreementText()}
+                        </pre>
+                      </div>
+
+                      {/* New Employee Signature */}
+                      <div>
+                        <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                          New Employee Signature *
+                        </label>
+                        <p className={`text-xs mb-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                          Have the new employee sign below to acknowledge the equipment responsibility agreement.
+                        </p>
+                        <SignaturePad
+                          onSignatureChange={setReassignNewPersonnelSignature}
+                          width={500}
+                          height={120}
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  <div className="flex gap-3 pt-4 border-t border-slate-700/50">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReassignStep("condition");
+                        setReassignNewPersonnelSignature(null);
+                      }}
+                      className={`flex-1 px-4 py-3 font-medium rounded-lg transition-colors ${isDark ? "bg-slate-700 text-white hover:bg-slate-600" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+                    >
+                      Back
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleReassign}
+                      disabled={!reassignNewPersonnelId || !reassignNewPersonnelSignature}
+                      className={`flex-1 px-4 py-3 font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isDark ? "bg-purple-500 text-white hover:bg-purple-600" : "bg-purple-600 text-white hover:bg-purple-700"}`}
+                    >
+                      Complete Reassignment
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

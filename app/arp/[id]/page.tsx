@@ -46,7 +46,9 @@ const trainingStatusColors: Record<string, string> = {
 function ARPDetailContent() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
-  const { canManagePersonnel, userId, userName } = useAuth();
+  const { canManagePersonnel, user } = useAuth();
+  const userId = user?._id;
+  const userName = user?.name ?? "";
   const params = useParams();
   const router = useRouter();
   const enrollmentId = params.id as Id<"arpEnrollments">;

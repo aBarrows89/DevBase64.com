@@ -1018,6 +1018,184 @@ export const listActivePersonnel = query({
   },
 });
 
+// Reassign equipment from one person to another with condition check
+export const reassignEquipment = mutation({
+  args: {
+    equipmentType: v.string(), // "scanner" | "picker"
+    equipmentId: v.union(v.id("scanners"), v.id("pickers")),
+    // Condition check for returning equipment
+    checklist: v.object({
+      physicalCondition: v.boolean(),
+      screenFunctional: v.boolean(),
+      buttonsWorking: v.boolean(),
+      batteryCondition: v.boolean(),
+      chargingPortOk: v.boolean(),
+      scannerFunctional: v.boolean(),
+      cleanCondition: v.boolean(),
+    }),
+    overallCondition: v.string(),
+    damageNotes: v.optional(v.string()),
+    repairRequired: v.boolean(),
+    deductionRequired: v.optional(v.boolean()),
+    deductionAmount: v.optional(v.number()),
+    signOffSignature: v.string(), // Manager signature for condition check sign-off
+    // New assignment info
+    newPersonnelId: v.id("personnel"),
+    newPersonnelSignature: v.string(), // New person's signature for equipment agreement
+    // Who is performing this
+    userId: v.id("users"),
+    userName: v.string(),
+    equipmentValue: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const equipmentValue = args.equipmentValue ?? 100;
+
+    // Get equipment
+    const equipment = await ctx.db.get(args.equipmentId);
+    if (!equipment) {
+      throw new Error(`${args.equipmentType} not found`);
+    }
+
+    if (!equipment.assignedTo) {
+      throw new Error("Equipment is not currently assigned to anyone");
+    }
+
+    if (args.repairRequired) {
+      throw new Error("Cannot reassign equipment that requires repair. Please return it first.");
+    }
+
+    const previousAssignee = equipment.assignedTo;
+
+    // Get previous assignee info
+    const prevPerson = await ctx.db.get(previousAssignee);
+    const prevPersonName = prevPerson
+      ? `${prevPerson.firstName} ${prevPerson.lastName}`
+      : "Unknown";
+
+    // Get new assignee info
+    const newPerson = await ctx.db.get(args.newPersonnelId);
+    if (!newPerson) {
+      throw new Error("New personnel not found");
+    }
+    const newPersonName = `${newPerson.firstName} ${newPerson.lastName}`;
+
+    // 1. Create condition check record with signature
+    const conditionCheckId = await ctx.db.insert("equipmentConditionChecks", {
+      equipmentType: args.equipmentType,
+      equipmentId: args.equipmentId,
+      returnedBy: previousAssignee,
+      checkedBy: args.userId,
+      checkedByName: args.userName,
+      checklist: args.checklist,
+      overallCondition: args.overallCondition,
+      damageNotes: args.damageNotes,
+      repairRequired: args.repairRequired,
+      readyForReassignment: true, // We're reassigning so it's ready
+      deductionRequired: args.deductionRequired,
+      deductionAmount: args.deductionAmount,
+      signOffSignature: args.signOffSignature,
+      signOffAt: now,
+      checkType: "reassign",
+      reassignedTo: args.newPersonnelId,
+      checkedAt: now,
+      createdAt: now,
+    });
+
+    // 2. Revoke the old agreement
+    const agreements = await ctx.db
+      .query("equipmentAgreements")
+      .withIndex("by_equipment", (q) =>
+        q.eq("equipmentType", args.equipmentType).eq("equipmentId", args.equipmentId)
+      )
+      .collect();
+
+    const activeAgreement = agreements.find(
+      (a) => a.personnelId === previousAssignee && !a.revokedAt
+    );
+
+    if (activeAgreement) {
+      await ctx.db.patch(activeAgreement._id, {
+        revokedAt: now,
+        revokedBy: args.userId,
+        revokedReason: `Reassigned to ${newPersonName}`,
+      });
+    }
+
+    // 3. Create history record for unassign
+    await ctx.db.insert("equipmentHistory", {
+      equipmentType: args.equipmentType,
+      equipmentId: args.equipmentId,
+      action: "unassigned",
+      previousStatus: equipment.status,
+      newStatus: "assigned", // Still assigned (to new person)
+      previousAssignee: previousAssignee,
+      conditionCheckId: conditionCheckId,
+      performedBy: args.userId,
+      notes: `Reassigned from ${prevPersonName} - Condition: ${args.overallCondition}`,
+      createdAt: now,
+    });
+
+    // 4. Create new equipment agreement
+    const equipmentLabel = args.equipmentType === "scanner" ? "Scanner" : "Picker";
+    const agreementText = generateAgreementText(
+      args.equipmentType,
+      equipment.number,
+      equipment.serialNumber,
+      newPersonName,
+      equipmentValue
+    );
+
+    await ctx.db.insert("equipmentAgreements", {
+      equipmentType: args.equipmentType,
+      equipmentId: args.equipmentId,
+      personnelId: args.newPersonnelId,
+      equipmentNumber: equipment.number,
+      serialNumber: equipment.serialNumber,
+      equipmentValue: equipmentValue,
+      agreementText: agreementText,
+      signatureData: args.newPersonnelSignature,
+      signedAt: now,
+      witnessedBy: args.userId,
+      witnessedByName: args.userName,
+      createdAt: now,
+    });
+
+    // 5. Update equipment with new assignee
+    const conditionNotes = args.damageNotes
+      ? `${args.overallCondition} - ${args.damageNotes}`
+      : args.overallCondition;
+
+    await ctx.db.patch(args.equipmentId, {
+      assignedTo: args.newPersonnelId,
+      assignedAt: now,
+      conditionNotes: conditionNotes,
+      updatedAt: now,
+    });
+
+    // 6. Create history record for assign
+    await ctx.db.insert("equipmentHistory", {
+      equipmentType: args.equipmentType,
+      equipmentId: args.equipmentId,
+      action: "assigned",
+      previousStatus: "assigned",
+      newStatus: "assigned",
+      previousAssignee: previousAssignee,
+      newAssignee: args.newPersonnelId,
+      performedBy: args.userId,
+      notes: `${equipmentLabel} #${equipment.number} reassigned from ${prevPersonName} to ${newPersonName}`,
+      createdAt: now,
+    });
+
+    return {
+      success: true,
+      conditionCheckId,
+      previousAssignee: prevPersonName,
+      newAssignee: newPersonName,
+    };
+  },
+});
+
 // Delete equipment (superuser only - checked on frontend)
 export const deleteEquipment = mutation({
   args: {

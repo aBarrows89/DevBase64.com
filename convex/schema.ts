@@ -604,6 +604,12 @@ export default defineSchema({
     readyForReassignment: v.boolean(), // Manager confirms ready to assign to next person
     deductionRequired: v.optional(v.boolean()), // If damage requires pay deduction
     deductionAmount: v.optional(v.number()), // Amount to deduct
+    // Manager sign-off signature
+    signOffSignature: v.optional(v.string()), // Base64 encoded signature image
+    signOffAt: v.optional(v.number()), // When manager signed off
+    // Context for this check
+    checkType: v.optional(v.string()), // "return" | "reassign" - optional for backward compatibility
+    reassignedTo: v.optional(v.id("personnel")), // If this was part of a reassignment
     checkedAt: v.number(),
     createdAt: v.number(),
   })
