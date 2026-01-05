@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState, useRef } from "react";
 import Protected from "../protected";
 import Sidebar, { MobileHeader } from "@/components/Sidebar";
 import KanbanBoard from "@/components/KanbanBoard";
@@ -12,6 +12,18 @@ import { useAuth } from "../auth-context";
 type Project = Doc<"projects">;
 type Task = Doc<"tasks">;
 type User = Doc<"users">;
+
+interface ProjectNote {
+  _id: Id<"projectNotes">;
+  projectId: Id<"projects">;
+  content: string;
+  mentions: Id<"users">[];
+  createdBy: Id<"users">;
+  createdByName: string;
+  createdAt: number;
+  updatedAt: number;
+  mentionedUsers?: { _id: Id<"users">; name: string; email: string }[];
+}
 
 const PRIORITY_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   urgent: { bg: "bg-red-500/20", text: "text-red-400", border: "border-red-500/30" },
@@ -44,6 +56,10 @@ function ProjectsContent() {
   const deleteTask = useMutation(api.tasks.remove);
   const generateTasks = useAction(api.aiTasks.generateTasks);
 
+  // Project notes mutations
+  const addNote = useMutation(api.projects.addNote);
+  const deleteNote = useMutation(api.projects.deleteNote);
+
   const [isCreating, setIsCreating] = useState(false);
   const [isGeneratingTasks, setIsGeneratingTasks] = useState(false);
   const [showAddTask, setShowAddTask] = useState(false);
@@ -67,6 +83,19 @@ function ProjectsContent() {
     api.projects.getWithTasks,
     selectedProjectId ? { projectId: selectedProjectId } : "skip"
   );
+
+  // Fetch project notes when a project is selected
+  const projectNotes = useQuery(
+    api.projects.getNotes,
+    selectedProjectId ? { projectId: selectedProjectId } : "skip"
+  ) as ProjectNote[] | undefined;
+
+  // Note input state
+  const [newNoteContent, setNewNoteContent] = useState("");
+  const [showMentionPicker, setShowMentionPicker] = useState(false);
+  const [mentionSearchQuery, setMentionSearchQuery] = useState("");
+  const [mentionCursorPos, setMentionCursorPos] = useState(0);
+  const noteInputRef = useRef<HTMLTextAreaElement>(null);
 
   const [editForm, setEditForm] = useState({
     name: "",
@@ -223,6 +252,97 @@ function ProjectsContent() {
 
   const handleDeleteTask = async (taskId: Id<"tasks">) => {
     await deleteTask({ taskId });
+  };
+
+  // Note handlers
+  const handleNoteInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    const cursorPos = e.target.selectionStart || 0;
+    setNewNoteContent(value);
+
+    // Check if we're typing an @mention
+    const textBeforeCursor = value.slice(0, cursorPos);
+    const atMatch = textBeforeCursor.match(/@(\w*)$/);
+
+    if (atMatch) {
+      setShowMentionPicker(true);
+      setMentionSearchQuery(atMatch[1]);
+      setMentionCursorPos(atMatch.index || 0);
+    } else {
+      setShowMentionPicker(false);
+      setMentionSearchQuery("");
+    }
+  };
+
+  const handleMentionSelect = (selectedUser: User) => {
+    const beforeAt = newNoteContent.slice(0, mentionCursorPos);
+    const afterSearch = newNoteContent.slice(mentionCursorPos + mentionSearchQuery.length + 1);
+    const mentionText = `@${selectedUser.name}`;
+
+    setNewNoteContent(beforeAt + mentionText + " " + afterSearch);
+    setShowMentionPicker(false);
+    setMentionSearchQuery("");
+    noteInputRef.current?.focus();
+  };
+
+  const parseMentionsFromContent = (content: string): Id<"users">[] => {
+    const mentionRegex = /@(\w+(?:\s+\w+)?)/g;
+    const mentions: Id<"users">[] = [];
+    let match;
+
+    while ((match = mentionRegex.exec(content)) !== null) {
+      const mentionName = match[1];
+      const mentionedUser = users.find(
+        (u) => u.name.toLowerCase() === mentionName.toLowerCase()
+      );
+      if (mentionedUser) {
+        mentions.push(mentionedUser._id);
+      }
+    }
+
+    return mentions;
+  };
+
+  const handleAddNote = async () => {
+    if (!selectedProjectId || !user || !newNoteContent.trim()) return;
+
+    const mentions = parseMentionsFromContent(newNoteContent);
+
+    await addNote({
+      projectId: selectedProjectId,
+      content: newNoteContent.trim(),
+      mentions,
+      createdBy: user._id,
+    });
+
+    setNewNoteContent("");
+  };
+
+  const handleDeleteNote = async (noteId: Id<"projectNotes">) => {
+    await deleteNote({ noteId });
+  };
+
+  // Filter users for mention picker
+  const filteredMentionUsers = users.filter((u) =>
+    u.name.toLowerCase().includes(mentionSearchQuery.toLowerCase())
+  );
+
+  // Format note content with highlighted mentions
+  const formatNoteContent = (content: string, mentionedUsers?: { _id: Id<"users">; name: string }[]) => {
+    if (!mentionedUsers || mentionedUsers.length === 0) {
+      return content;
+    }
+
+    let formattedContent = content;
+    mentionedUsers.forEach((mentionedUser) => {
+      const regex = new RegExp(`@${mentionedUser.name}`, "gi");
+      formattedContent = formattedContent.replace(
+        regex,
+        `<span class="text-cyan-400 font-medium">@${mentionedUser.name}</span>`
+      );
+    });
+
+    return formattedContent;
   };
 
   // Check if user is admin or above
@@ -869,7 +989,7 @@ function ProjectsContent() {
 
               {/* AI Generated Steps */}
               {projectWithTasks.aiGeneratedSteps && (
-                <div>
+                <div className="mb-6">
                   <h3 className="text-sm font-medium text-slate-400 mb-3">AI Generated Steps</h3>
                   <div className="space-y-2">
                     {JSON.parse(projectWithTasks.aiGeneratedSteps).map((step: string, index: number) => (
@@ -883,6 +1003,112 @@ function ProjectsContent() {
                   </div>
                 </div>
               )}
+
+              {/* Progress Notes Section */}
+              <div>
+                <h3 className="text-sm font-medium text-slate-400 mb-3 flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                  </svg>
+                  Progress Notes ({projectNotes?.length || 0})
+                </h3>
+
+                {/* Add Note Form */}
+                <div className="mb-4 relative">
+                  <textarea
+                    ref={noteInputRef}
+                    value={newNoteContent}
+                    onChange={handleNoteInputChange}
+                    placeholder="Add a progress note... Use @ to mention someone"
+                    className="w-full px-3 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-cyan-500 resize-none"
+                    rows={2}
+                  />
+
+                  {/* Mention Picker */}
+                  {showMentionPicker && (
+                    <div className="absolute left-0 bottom-full mb-1 w-64 max-h-48 overflow-y-auto bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-10">
+                      {filteredMentionUsers.length > 0 ? (
+                        filteredMentionUsers.slice(0, 5).map((u) => (
+                          <button
+                            key={u._id}
+                            onClick={() => handleMentionSelect(u)}
+                            className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-700/50 text-left"
+                          >
+                            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white text-xs font-medium">
+                              {u.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <p className="text-sm text-white">{u.name}</p>
+                              <p className="text-xs text-slate-400">{u.email}</p>
+                            </div>
+                          </button>
+                        ))
+                      ) : (
+                        <p className="px-3 py-2 text-slate-400 text-sm">No users found</p>
+                      )}
+                    </div>
+                  )}
+
+                  {newNoteContent.trim() && (
+                    <div className="flex justify-end mt-2">
+                      <button
+                        onClick={handleAddNote}
+                        className="px-3 py-1.5 text-xs bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors flex items-center gap-1"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        Add Note
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Notes List */}
+                {projectNotes && projectNotes.length > 0 ? (
+                  <div className="space-y-3">
+                    {projectNotes.map((note) => (
+                      <div key={note._id} className="p-3 bg-slate-900/50 border border-slate-700 rounded-lg group">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white text-xs font-medium">
+                              {note.createdByName.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-white">{note.createdByName}</p>
+                              <p className="text-xs text-slate-500">
+                                {new Date(note.createdAt).toLocaleDateString()} at{" "}
+                                {new Date(note.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                              </p>
+                            </div>
+                          </div>
+                          {note.createdBy === user?._id && (
+                            <button
+                              onClick={() => handleDeleteNote(note._id)}
+                              className="p-1 text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="Delete note"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+                        <p
+                          className="text-sm text-slate-300 whitespace-pre-wrap"
+                          dangerouslySetInnerHTML={{
+                            __html: formatNoteContent(note.content, note.mentionedUsers),
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-6 text-slate-500 text-sm">
+                    No progress notes yet. Add a note to keep track of updates.
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

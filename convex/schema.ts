@@ -61,6 +61,19 @@ export default defineSchema({
     .index("by_project", ["projectId"])
     .index("by_status", ["status"]),
 
+  // Project Progress Notes
+  projectNotes: defineTable({
+    projectId: v.id("projects"),
+    content: v.string(), // The note content (can include @mentions like @userId)
+    mentions: v.array(v.id("users")), // Users mentioned in this note
+    createdBy: v.id("users"),
+    createdByName: v.string(), // Cached for display
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_project", ["projectId"])
+    .index("by_created", ["createdAt"]),
+
   // ============ APPLICATIONS (from ietires.com) ============
   jobs: defineTable({
     title: v.string(),

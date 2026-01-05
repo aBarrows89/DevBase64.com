@@ -367,3 +367,142 @@ export const getArchived = query({
     return archived;
   },
 });
+
+// ============ PROJECT NOTES ============
+
+// Get all notes for a project
+export const getNotes = query({
+  args: { projectId: v.id("projects") },
+  handler: async (ctx, args) => {
+    const notes = await ctx.db
+      .query("projectNotes")
+      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .order("desc")
+      .collect();
+
+    // Enrich with mentioned user info
+    const enrichedNotes = await Promise.all(
+      notes.map(async (note) => {
+        const mentionedUsers = await Promise.all(
+          note.mentions.map(async (userId) => {
+            const user = await ctx.db.get(userId);
+            return user ? { _id: user._id, name: user.name, email: user.email } : null;
+          })
+        );
+        return {
+          ...note,
+          mentionedUsers: mentionedUsers.filter(Boolean),
+        };
+      })
+    );
+
+    return enrichedNotes;
+  },
+});
+
+// Add a note to a project
+export const addNote = mutation({
+  args: {
+    projectId: v.id("projects"),
+    content: v.string(),
+    mentions: v.array(v.id("users")),
+    createdBy: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const creator = await ctx.db.get(args.createdBy);
+    const project = await ctx.db.get(args.projectId);
+
+    if (!creator || !project) {
+      throw new Error("User or project not found");
+    }
+
+    // Create the note
+    const noteId = await ctx.db.insert("projectNotes", {
+      projectId: args.projectId,
+      content: args.content,
+      mentions: args.mentions,
+      createdBy: args.createdBy,
+      createdByName: creator.name,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // Create notifications for mentioned users
+    for (const userId of args.mentions) {
+      // Don't notify yourself
+      if (userId === args.createdBy) continue;
+
+      await ctx.db.insert("notifications", {
+        userId,
+        type: "project_note_mention",
+        title: `${creator.name} mentioned you`,
+        message: `You were mentioned in a note on project "${project.name}"`,
+        link: `/projects?id=${args.projectId}`,
+        relatedId: noteId,
+        isRead: false,
+        isDismissed: false,
+        createdAt: now,
+      });
+    }
+
+    return noteId;
+  },
+});
+
+// Update a note
+export const updateNote = mutation({
+  args: {
+    noteId: v.id("projectNotes"),
+    content: v.string(),
+    mentions: v.array(v.id("users")),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const note = await ctx.db.get(args.noteId);
+    if (!note) throw new Error("Note not found");
+
+    const project = await ctx.db.get(note.projectId);
+    const editor = await ctx.db.get(args.userId);
+    if (!project || !editor) throw new Error("Project or user not found");
+
+    const now = Date.now();
+
+    // Find new mentions (users mentioned now but not before)
+    const newMentions = args.mentions.filter(
+      (userId) => !note.mentions.includes(userId)
+    );
+
+    // Update the note
+    await ctx.db.patch(args.noteId, {
+      content: args.content,
+      mentions: args.mentions,
+      updatedAt: now,
+    });
+
+    // Create notifications for newly mentioned users
+    for (const userId of newMentions) {
+      if (userId === args.userId) continue;
+
+      await ctx.db.insert("notifications", {
+        userId,
+        type: "project_note_mention",
+        title: `${editor.name} mentioned you`,
+        message: `You were mentioned in a note on project "${project.name}"`,
+        link: `/projects?id=${note.projectId}`,
+        relatedId: args.noteId,
+        isRead: false,
+        isDismissed: false,
+        createdAt: now,
+      });
+    }
+  },
+});
+
+// Delete a note
+export const deleteNote = mutation({
+  args: { noteId: v.id("projectNotes") },
+  handler: async (ctx, args) => {
+    await ctx.db.delete(args.noteId);
+  },
+});

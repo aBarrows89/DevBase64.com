@@ -96,6 +96,12 @@ export default function Sidebar() {
     user?._id ? { userId: user._id } : "skip"
   );
 
+  // Get unread notification count
+  const unreadNotificationCount = useQuery(
+    api.notifications.getUnreadCount,
+    user?._id ? { userId: user._id } : "skip"
+  );
+
   // Check if any item in a group is active
   const isGroupActive = (group: NavGroup) => {
     return group.items.some((item) => pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href)));
@@ -179,7 +185,9 @@ export default function Sidebar() {
           {filteredNavItems.map((item) => {
             const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
             const isMessages = item.href === "/messages";
-            const showBadge = isMessages && unreadCount && unreadCount > 0;
+            const isNotifications = item.href === "/notifications";
+            const showMessageBadge = isMessages && unreadCount && unreadCount > 0;
+            const showNotificationBadge = isNotifications && unreadNotificationCount && unreadNotificationCount > 0;
 
             return (
               <Link
@@ -210,9 +218,14 @@ export default function Sidebar() {
                   />
                 </svg>
                 <span className="font-medium text-sm sm:text-base truncate flex-1">{item.label}</span>
-                {showBadge && (
+                {showMessageBadge && (
                   <span className="min-w-[20px] h-[20px] px-1.5 text-[11px] font-bold flex items-center justify-center rounded-full bg-red-500 text-white">
                     {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
+                {showNotificationBadge && (
+                  <span className="min-w-[20px] h-[20px] px-1.5 text-[11px] font-bold flex items-center justify-center rounded-full bg-red-500 text-white">
+                    {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
                   </span>
                 )}
               </Link>
@@ -393,7 +406,14 @@ export default function Sidebar() {
 export function MobileHeader() {
   const { theme } = useTheme();
   const { toggle } = useSidebar();
+  const { user } = useAuth();
   const isDark = theme === "dark";
+
+  // Get unread notification count
+  const unreadNotificationCount = useQuery(
+    api.notifications.getUnreadCount,
+    user?._id ? { userId: user._id } : "skip"
+  );
 
   return (
     <div className={`lg:hidden sticky top-0 z-30 flex items-center gap-3 px-4 py-3 border-b ${isDark ? "bg-slate-900/95 backdrop-blur-sm border-slate-700" : "bg-white/95 backdrop-blur-sm border-gray-200"}`}>
@@ -415,6 +435,21 @@ export function MobileHeader() {
           className="h-7 w-auto"
         />
       </div>
+      {/* Notification bell for mobile */}
+      <Link
+        href="/notifications"
+        className={`relative p-2 rounded-lg transition-colors ${isDark ? "text-slate-400 hover:text-white hover:bg-slate-700" : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"}`}
+        aria-label="Notifications"
+      >
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+        </svg>
+        {unreadNotificationCount && unreadNotificationCount > 0 && (
+          <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 text-[10px] font-bold flex items-center justify-center rounded-full bg-red-500 text-white">
+            {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
+          </span>
+        )}
+      </Link>
       {/* Search button for mobile */}
       <button
         onClick={() => {
