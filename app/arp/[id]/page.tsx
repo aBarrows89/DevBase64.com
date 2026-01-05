@@ -10,9 +10,11 @@ import { Id } from "@/convex/_generated/dataModel";
 import { useTheme } from "../../theme-context";
 import { useAuth } from "../../auth-context";
 import Link from "next/link";
+import SignaturePad from "@/components/SignaturePad";
 
 const TABS = [
   { id: "overview", label: "Overview" },
+  { id: "agreement", label: "Agreement" },
   { id: "meetings", label: "Meetings" },
   { id: "root-cause", label: "Root Cause" },
   { id: "training", label: "Training" },
@@ -44,7 +46,7 @@ const trainingStatusColors: Record<string, string> = {
 function ARPDetailContent() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
-  const { canManagePersonnel } = useAuth();
+  const { canManagePersonnel, userId, userName } = useAuth();
   const params = useParams();
   const router = useRouter();
   const enrollmentId = params.id as Id<"arpEnrollments">;
@@ -60,6 +62,9 @@ function ARPDetailContent() {
   const completeTrainingMutation = useMutation(api.arp.completeTraining);
   const failEnrollmentMutation = useMutation(api.arp.failEnrollment);
   const completeEnrollmentMutation = useMutation(api.arp.completeEnrollment);
+  const signAsAdminMutation = useMutation(api.arp.signAsAdmin);
+  const signAsCoachMutation = useMutation(api.arp.signAsCoach);
+  const signAsEmployeeMutation = useMutation(api.arp.signAsEmployee);
 
   const [activeTab, setActiveTab] = useState("overview");
   const [showMeetingModal, setShowMeetingModal] = useState(false);
@@ -239,6 +244,49 @@ function ARPDetailContent() {
     setIsProcessing(false);
   };
 
+  const handleSignAsAdmin = async (signature: string) => {
+    if (!userId) return;
+    setIsProcessing(true);
+    try {
+      await signAsAdminMutation({
+        enrollmentId,
+        adminId: userId as Id<"users">,
+        adminName: userName || "Unknown Admin",
+        adminTitle: "Human Resources", // TODO: Get from user profile
+        signature,
+      });
+    } catch (error) {
+      console.error("Failed to sign as admin:", error);
+    }
+    setIsProcessing(false);
+  };
+
+  const handleSignAsCoach = async (signature: string) => {
+    setIsProcessing(true);
+    try {
+      await signAsCoachMutation({
+        enrollmentId,
+        signature,
+      });
+    } catch (error) {
+      console.error("Failed to sign as coach:", error);
+    }
+    setIsProcessing(false);
+  };
+
+  const handleSignAsEmployee = async (signature: string) => {
+    setIsProcessing(true);
+    try {
+      await signAsEmployeeMutation({
+        enrollmentId,
+        signature,
+      });
+    } catch (error) {
+      console.error("Failed to sign as employee:", error);
+    }
+    setIsProcessing(false);
+  };
+
   const handleCompleteEnrollment = async () => {
     if (!confirm("Complete this ARP enrollment? This will clear all attendance write-ups for this employee.")) return;
     setIsProcessing(true);
@@ -413,6 +461,191 @@ function ARPDetailContent() {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Agreement Tab */}
+          {activeTab === "agreement" && (
+            <div className="space-y-4">
+              {/* Agreement Status */}
+              <div className={`rounded-lg p-4 ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200"}`}>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                    Agreement Status
+                  </h3>
+                  {enrollment.agreement?.status === "fully_signed" ? (
+                    <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-500/20 text-green-400 border border-green-500/30">
+                      Fully Signed
+                    </span>
+                  ) : enrollment.agreement?.status === "partially_signed" ? (
+                    <span className="px-3 py-1 rounded-full text-xs font-medium bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                      Partially Signed
+                    </span>
+                  ) : (
+                    <span className="px-3 py-1 rounded-full text-xs font-medium bg-red-500/20 text-red-400 border border-red-500/30">
+                      Pending Signatures
+                    </span>
+                  )}
+                </div>
+                <div className={`grid grid-cols-3 gap-4 text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                  <div className="flex items-center gap-2">
+                    {enrollment.agreement?.adminSignature ? (
+                      <span className="w-2 h-2 rounded-full bg-green-400"></span>
+                    ) : (
+                      <span className="w-2 h-2 rounded-full bg-slate-500"></span>
+                    )}
+                    <span>Admin/HR</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {enrollment.agreement?.coachSignature ? (
+                      <span className="w-2 h-2 rounded-full bg-green-400"></span>
+                    ) : (
+                      <span className="w-2 h-2 rounded-full bg-slate-500"></span>
+                    )}
+                    <span>Coach</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {enrollment.agreement?.employeeSignature ? (
+                      <span className="w-2 h-2 rounded-full bg-green-400"></span>
+                    ) : (
+                      <span className="w-2 h-2 rounded-full bg-slate-500"></span>
+                    )}
+                    <span>Employee</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Agreement Document */}
+              <div className={`rounded-lg p-4 ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200"}`}>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                    Enrollment Agreement
+                  </h3>
+                  <button
+                    onClick={() => window.print()}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      isDark
+                        ? "bg-slate-600 text-slate-200 hover:bg-slate-500"
+                        : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                    }`}
+                  >
+                    Print
+                  </button>
+                </div>
+
+                {/* Agreement Text */}
+                <div className={`whitespace-pre-wrap text-sm p-4 rounded-lg mb-6 ${isDark ? "bg-slate-900/50 text-slate-300" : "bg-gray-50 text-gray-700"}`}>
+{`ATTENDANCE RECOVERY PROGRAM (ARP) ENROLLMENT AGREEMENT
+
+I, ${enrollment.personnel?.name || "Unknown"}, acknowledge that I am being enrolled in the Attendance Recovery Program (ARP) at IE Tire Services, Inc. By signing this agreement, I understand and agree to the following terms:
+
+PROGRAM OVERVIEW:
+• Tier ${enrollment.programTier} Enrollment
+• Program Duration: ${enrollment.programDurationDays} days
+• Required Meetings: ${enrollment.meetings.length} sessions with assigned Coach
+• Assigned Coach: ${enrollment.coach?.name || "Unknown"}
+
+PROGRAM REQUIREMENTS:
+1. I will attend ALL scheduled meetings with my assigned Coach
+2. I will complete all assigned training modules
+3. I will maintain ZERO attendance infractions for the entire program duration
+4. I understand that this program is designed to help me succeed
+
+CONSEQUENCES:
+• SUCCESS: Upon successful completion, all prior attendance write-ups will be cleared from my record. I will receive a Certificate of Completion.
+• FAILURE: If I receive ANY write-up (attendance, safety, conduct, or other) during the program, OR if I miss any scheduled Coach meetings:
+  - My enrollment will be immediately terminated
+  - I may be subject to disciplinary action up to and including termination
+  - I will be ineligible to re-enroll in ARP for 90 days
+
+I have read and understand the terms of this agreement. I am committed to successfully completing the Attendance Recovery Program and improving my attendance record.`}
+                </div>
+
+                {/* Signature Section */}
+                <div className={`border-t pt-6 ${isDark ? "border-slate-700" : "border-gray-200"}`}>
+                  <h4 className={`font-medium mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
+                    Signatures
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {/* Admin/HR Signature */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className={`text-sm font-medium ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                          Admin/HR Representative
+                        </span>
+                        {enrollment.agreement?.adminSignedAt && (
+                          <span className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                            {new Date(enrollment.agreement.adminSignedAt).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                      {enrollment.agreement?.adminName && (
+                        <p className={`text-xs mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                          {enrollment.agreement.adminName}, {enrollment.agreement.adminTitle}
+                        </p>
+                      )}
+                      <SignaturePad
+                        isDark={isDark}
+                        savedSignature={enrollment.agreement?.adminSignature}
+                        disabled={!!enrollment.agreement?.adminSignature || enrollment.status !== "active"}
+                        onSave={handleSignAsAdmin}
+                        width={300}
+                        height={100}
+                      />
+                    </div>
+
+                    {/* Coach Signature */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className={`text-sm font-medium ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                          Coach
+                        </span>
+                        {enrollment.agreement?.coachSignedAt && (
+                          <span className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                            {new Date(enrollment.agreement.coachSignedAt).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                      <p className={`text-xs mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                        {enrollment.coach?.name || "Unknown Coach"}
+                      </p>
+                      <SignaturePad
+                        isDark={isDark}
+                        savedSignature={enrollment.agreement?.coachSignature}
+                        disabled={!!enrollment.agreement?.coachSignature || enrollment.status !== "active"}
+                        onSave={handleSignAsCoach}
+                        width={300}
+                        height={100}
+                      />
+                    </div>
+
+                    {/* Employee Signature */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className={`text-sm font-medium ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                          Employee
+                        </span>
+                        {enrollment.agreement?.employeeSignedAt && (
+                          <span className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                            {new Date(enrollment.agreement.employeeSignedAt).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                      <p className={`text-xs mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                        {enrollment.personnel?.name || "Unknown Employee"}
+                      </p>
+                      <SignaturePad
+                        isDark={isDark}
+                        savedSignature={enrollment.agreement?.employeeSignature}
+                        disabled={!!enrollment.agreement?.employeeSignature || enrollment.status !== "active"}
+                        onSave={handleSignAsEmployee}
+                        width={300}
+                        height={100}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -883,6 +1116,7 @@ function ARPDetailContent() {
           </div>
         </div>
       )}
+
     </div>
   );
 }

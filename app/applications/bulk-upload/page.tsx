@@ -12,10 +12,13 @@ interface FileStatus {
   error?: string;
   manualText?: string;
   result?: {
+    type?: "new_application" | "personnel_update";
     candidateName?: string;
     matchedJob?: string;
     overallScore?: number;
     applicationId?: string;
+    personnelId?: string;
+    currentPosition?: string;
   };
 }
 
@@ -153,10 +156,13 @@ export default function BulkUploadPage() {
               ...updated[index],
               status: "success",
               result: {
+                type: result.type,
                 candidateName: result.candidateName,
                 matchedJob: result.matchedJob,
                 overallScore: result.overallScore,
                 applicationId: result.applicationId,
+                personnelId: result.personnelId,
+                currentPosition: result.currentPosition,
               },
             };
           }
@@ -226,6 +232,8 @@ export default function BulkUploadPage() {
 
   const pendingCount = files.filter((f) => f.status === "pending").length;
   const successCount = files.filter((f) => f.status === "success").length;
+  const newApplicationCount = files.filter((f) => f.status === "success" && f.result?.type === "new_application").length;
+  const personnelUpdateCount = files.filter((f) => f.status === "success" && f.result?.type === "personnel_update").length;
   const errorCount = files.filter((f) => f.status === "error").length;
   const processingCount = files.filter((f) => f.status === "extracting" || f.status === "processing").length;
 
@@ -419,13 +427,35 @@ export default function BulkUploadPage() {
                             {fileStatus.status === "processing" && "AI analyzing resume..."}
                             {fileStatus.status === "success" && fileStatus.result && (
                               <>
-                                <span className="text-green-400">{fileStatus.result.candidateName}</span>
-                                {" → "}
-                                <span className="text-cyan-400">{fileStatus.result.matchedJob}</span>
-                                {fileStatus.result.overallScore && (
-                                  <span className="ml-2 text-yellow-400">
-                                    Score: {fileStatus.result.overallScore}
-                                  </span>
+                                {fileStatus.result.type === "personnel_update" ? (
+                                  <>
+                                    <span className="px-1.5 py-0.5 bg-purple-500/20 text-purple-400 text-xs rounded mr-2">
+                                      Employee
+                                    </span>
+                                    <span className="text-green-400">{fileStatus.result.candidateName}</span>
+                                    <span className="text-slate-500 mx-1">•</span>
+                                    <span className="text-slate-400">Current: {fileStatus.result.currentPosition}</span>
+                                    {fileStatus.result.matchedJob && (
+                                      <>
+                                        <span className="text-slate-500 mx-1">→</span>
+                                        <span className="text-cyan-400">Best Match: {fileStatus.result.matchedJob}</span>
+                                      </>
+                                    )}
+                                  </>
+                                ) : (
+                                  <>
+                                    <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-400 text-xs rounded mr-2">
+                                      New
+                                    </span>
+                                    <span className="text-green-400">{fileStatus.result.candidateName}</span>
+                                    {" → "}
+                                    <span className="text-cyan-400">{fileStatus.result.matchedJob}</span>
+                                    {fileStatus.result.overallScore && (
+                                      <span className="ml-2 text-yellow-400">
+                                        Score: {fileStatus.result.overallScore}
+                                      </span>
+                                    )}
+                                  </>
                                 )}
                               </>
                             )}
@@ -437,12 +467,20 @@ export default function BulkUploadPage() {
                       </div>
 
                       <div className="flex items-center gap-2">
-                        {fileStatus.status === "success" && fileStatus.result?.applicationId && (
+                        {fileStatus.status === "success" && fileStatus.result?.type === "personnel_update" && fileStatus.result?.personnelId && (
+                          <button
+                            onClick={() => router.push(`/personnel/${fileStatus.result?.personnelId}`)}
+                            className="px-3 py-1 text-sm bg-purple-600/20 text-purple-400 hover:bg-purple-600/30 border border-purple-600/30 rounded transition-colors"
+                          >
+                            View Employee
+                          </button>
+                        )}
+                        {fileStatus.status === "success" && fileStatus.result?.type === "new_application" && fileStatus.result?.applicationId && (
                           <button
                             onClick={() => router.push(`/applications/${fileStatus.result?.applicationId}`)}
                             className="px-3 py-1 text-sm bg-slate-700 hover:bg-slate-600 rounded transition-colors"
                           >
-                            View
+                            View Application
                           </button>
                         )}
                         {(fileStatus.status === "pending" || fileStatus.status === "error") && (
@@ -469,16 +507,41 @@ export default function BulkUploadPage() {
               <h3 className="text-lg font-medium text-green-400 mb-2">
                 Processing Complete
               </h3>
-              <p className="text-slate-300">
-                Successfully created {successCount} application{successCount !== 1 ? "s" : ""}.
-                {errorCount > 0 && ` ${errorCount} file${errorCount !== 1 ? "s" : ""} failed.`}
-              </p>
-              <button
-                onClick={() => router.push("/applications")}
-                className="mt-4 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-medium transition-colors"
-              >
-                View All Applications
-              </button>
+              <div className="text-slate-300 space-y-1">
+                {newApplicationCount > 0 && (
+                  <p>
+                    <span className="text-blue-400">{newApplicationCount}</span> new application{newApplicationCount !== 1 ? "s" : ""} created
+                  </p>
+                )}
+                {personnelUpdateCount > 0 && (
+                  <p>
+                    <span className="text-purple-400">{personnelUpdateCount}</span> employee record{personnelUpdateCount !== 1 ? "s" : ""} updated with resume
+                  </p>
+                )}
+                {errorCount > 0 && (
+                  <p>
+                    <span className="text-red-400">{errorCount}</span> file{errorCount !== 1 ? "s" : ""} failed
+                  </p>
+                )}
+              </div>
+              <div className="mt-4 flex gap-3">
+                {newApplicationCount > 0 && (
+                  <button
+                    onClick={() => router.push("/applications")}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors"
+                  >
+                    View Applications
+                  </button>
+                )}
+                {personnelUpdateCount > 0 && (
+                  <button
+                    onClick={() => router.push("/personnel")}
+                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg font-medium transition-colors"
+                  >
+                    View Personnel
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>

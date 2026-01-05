@@ -170,6 +170,12 @@ export const getEnrollment = query({
       ? await ctx.db.get(enrollment.failureWriteUpId)
       : null;
 
+    // Get agreement
+    const agreement = await ctx.db
+      .query("arpAgreements")
+      .withIndex("by_enrollment", (q) => q.eq("enrollmentId", args.enrollmentId))
+      .first();
+
     // Calculate progress
     const completedMeetings = meetings.filter((m) => m.status === "completed").length;
     const completedTraining = training.filter((t) => t.status === "completed").length;
@@ -205,6 +211,7 @@ export const getEnrollment = query({
       rootCause,
       training,
       failureWriteUp,
+      agreement,
       progress: {
         daysRemaining,
         daysElapsed,
@@ -571,6 +578,26 @@ export const enroll = mutation({
       createdAt: now,
     });
 
+    // Get coach info for agreement
+    const coach = await ctx.db.get(args.coachId);
+    const coachName = coach ? `${coach.firstName} ${coach.lastName}` : "Unknown Coach";
+    const employeeName = `${personnel.firstName} ${personnel.lastName}`;
+
+    // Create enrollment agreement (pending all signatures)
+    await ctx.db.insert("arpAgreements", {
+      enrollmentId,
+      personnelId: args.personnelId,
+      agreementVersion: "1.0",
+      programTier: tier,
+      programDurationDays: tierConfig.durationDays,
+      meetingCount: tierConfig.meetingCount,
+      coachName,
+      coachId: args.coachId,
+      employeeName,
+      status: "pending",
+      createdAt: now,
+    });
+
     return enrollmentId;
   },
 });
@@ -918,5 +945,290 @@ export const getAvailableTrainingModules = query({
     const assignedCodes = assigned.map((t) => t.moduleCode);
 
     return ARP_TRAINING_MODULES.filter((m) => !assignedCodes.includes(m.code));
+  },
+});
+
+// ============ AGREEMENT FUNCTIONS ============
+
+// Agreement text template
+export const ARP_AGREEMENT_TEXT = `
+ATTENDANCE RECOVERY PROGRAM (ARP) ENROLLMENT AGREEMENT
+
+I, {employeeName}, acknowledge that I am being enrolled in the Attendance Recovery Program (ARP)
+at IE Tire Services, Inc. By signing this agreement, I understand and agree to the following terms:
+
+PROGRAM OVERVIEW:
+• I am enrolling in Tier {programTier} of the ARP program
+• Program duration: {programDurationDays} days
+• Required meetings with my assigned Coach: {meetingCount} meetings
+• My assigned Coach: {coachName}
+
+PROGRAM REQUIREMENTS:
+1. I will attend ALL scheduled meetings with my assigned Coach
+2. I will complete all assigned training modules
+3. I will maintain ZERO attendance infractions for the entire program duration
+4. I understand that this program is designed to help me succeed
+
+CONSEQUENCES:
+• SUCCESS: Upon successful completion of this program, all prior attendance write-ups will be
+  cleared from my record. I will receive a Certificate of Completion.
+• FAILURE: If I receive ANY write-up (attendance, safety, conduct, or other) during the program,
+  OR if I miss any scheduled Coach meetings, I understand that:
+  - My enrollment will be immediately terminated
+  - I may be subject to disciplinary action up to and including termination
+  - I will be ineligible to re-enroll in ARP for 90 days
+
+I have read and understand the terms of this agreement. I am committed to successfully completing
+the Attendance Recovery Program and improving my attendance record.
+
+Employee Signature: _______________________________  Date: _______________
+
+Witness (HR/Manager): _____________________________  Date: _______________
+`;
+
+// Get agreement for an enrollment
+export const getAgreement = query({
+  args: {
+    enrollmentId: v.id("arpEnrollments"),
+  },
+  handler: async (ctx, args) => {
+    const agreement = await ctx.db
+      .query("arpAgreements")
+      .withIndex("by_enrollment", (q) => q.eq("enrollmentId", args.enrollmentId))
+      .first();
+
+    return agreement;
+  },
+});
+
+// Get agreement by personnel (for employee portal)
+export const getAgreementByPersonnel = query({
+  args: {
+    personnelId: v.id("personnel"),
+    status: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    let agreements = await ctx.db
+      .query("arpAgreements")
+      .withIndex("by_personnel", (q) => q.eq("personnelId", args.personnelId))
+      .collect();
+
+    if (args.status) {
+      agreements = agreements.filter((a) => a.status === args.status);
+    }
+
+    return agreements;
+  },
+});
+
+// Create agreement (called automatically during enrollment)
+export const createAgreement = mutation({
+  args: {
+    enrollmentId: v.id("arpEnrollments"),
+    personnelId: v.id("personnel"),
+    programTier: v.number(),
+    programDurationDays: v.number(),
+    meetingCount: v.number(),
+    coachName: v.string(),
+    coachId: v.optional(v.id("personnel")),
+    employeeName: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+
+    const agreementId = await ctx.db.insert("arpAgreements", {
+      enrollmentId: args.enrollmentId,
+      personnelId: args.personnelId,
+      agreementVersion: "1.0",
+      programTier: args.programTier,
+      programDurationDays: args.programDurationDays,
+      meetingCount: args.meetingCount,
+      coachName: args.coachName,
+      coachId: args.coachId,
+      employeeName: args.employeeName,
+      status: "pending",
+      createdAt: now,
+    });
+
+    return agreementId;
+  },
+});
+
+// Helper to determine agreement status based on signatures
+function getAgreementStatus(agreement: {
+  adminSignature?: string;
+  coachSignature?: string;
+  employeeSignature?: string;
+}): string {
+  const hasAdmin = !!agreement.adminSignature;
+  const hasCoach = !!agreement.coachSignature;
+  const hasEmployee = !!agreement.employeeSignature;
+
+  if (hasAdmin && hasCoach && hasEmployee) {
+    return "fully_signed";
+  } else if (hasAdmin || hasCoach || hasEmployee) {
+    return "partially_signed";
+  }
+  return "pending";
+}
+
+// Sign agreement - Admin/HR signature (auto-signed)
+export const signAsAdmin = mutation({
+  args: {
+    enrollmentId: v.id("arpEnrollments"),
+    adminId: v.id("users"),
+    adminName: v.string(),
+    adminTitle: v.string(),
+    signature: v.string(), // Base64 signature image
+  },
+  handler: async (ctx, args) => {
+    const agreement = await ctx.db
+      .query("arpAgreements")
+      .withIndex("by_enrollment", (q) => q.eq("enrollmentId", args.enrollmentId))
+      .first();
+
+    if (!agreement) throw new Error("Agreement not found");
+
+    const now = Date.now();
+
+    const updates = {
+      adminSignature: args.signature,
+      adminName: args.adminName,
+      adminTitle: args.adminTitle,
+      adminSignedAt: now,
+      adminUserId: args.adminId,
+    };
+
+    const newStatus = getAgreementStatus({
+      ...agreement,
+      adminSignature: args.signature,
+    });
+
+    await ctx.db.patch(agreement._id, {
+      ...updates,
+      status: newStatus,
+    });
+
+    return { success: true };
+  },
+});
+
+// Sign agreement - Coach signature
+export const signAsCoach = mutation({
+  args: {
+    enrollmentId: v.id("arpEnrollments"),
+    signature: v.string(), // Base64 signature image
+  },
+  handler: async (ctx, args) => {
+    const agreement = await ctx.db
+      .query("arpAgreements")
+      .withIndex("by_enrollment", (q) => q.eq("enrollmentId", args.enrollmentId))
+      .first();
+
+    if (!agreement) throw new Error("Agreement not found");
+
+    const now = Date.now();
+
+    const newStatus = getAgreementStatus({
+      ...agreement,
+      coachSignature: args.signature,
+    });
+
+    await ctx.db.patch(agreement._id, {
+      coachSignature: args.signature,
+      coachSignedAt: now,
+      status: newStatus,
+    });
+
+    return { success: true };
+  },
+});
+
+// Sign agreement - Employee signature
+export const signAsEmployee = mutation({
+  args: {
+    enrollmentId: v.id("arpEnrollments"),
+    signature: v.string(), // Base64 signature image
+  },
+  handler: async (ctx, args) => {
+    const agreement = await ctx.db
+      .query("arpAgreements")
+      .withIndex("by_enrollment", (q) => q.eq("enrollmentId", args.enrollmentId))
+      .first();
+
+    if (!agreement) throw new Error("Agreement not found");
+
+    const now = Date.now();
+
+    const newStatus = getAgreementStatus({
+      ...agreement,
+      employeeSignature: args.signature,
+    });
+
+    await ctx.db.patch(agreement._id, {
+      employeeSignature: args.signature,
+      employeeSignedAt: now,
+      status: newStatus,
+    });
+
+    return { success: true };
+  },
+});
+
+// Legacy: Sign agreement (in-person signing by admin) - kept for compatibility
+export const signAgreementInPerson = mutation({
+  args: {
+    enrollmentId: v.id("arpEnrollments"),
+    adminId: v.id("users"),
+    adminName: v.string(),
+    signatureData: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const agreement = await ctx.db
+      .query("arpAgreements")
+      .withIndex("by_enrollment", (q) => q.eq("enrollmentId", args.enrollmentId))
+      .first();
+
+    if (!agreement) throw new Error("Agreement not found");
+
+    const now = Date.now();
+
+    await ctx.db.patch(agreement._id, {
+      adminSignature: args.signatureData,
+      adminName: args.adminName,
+      adminSignedAt: now,
+      adminUserId: args.adminId,
+      status: "partially_signed",
+    });
+
+    return { success: true };
+  },
+});
+
+// Get formatted agreement text for display/printing
+export const getFormattedAgreementText = query({
+  args: {
+    enrollmentId: v.id("arpEnrollments"),
+  },
+  handler: async (ctx, args) => {
+    const agreement = await ctx.db
+      .query("arpAgreements")
+      .withIndex("by_enrollment", (q) => q.eq("enrollmentId", args.enrollmentId))
+      .first();
+
+    if (!agreement) return null;
+
+    // Replace placeholders with actual values
+    let text = ARP_AGREEMENT_TEXT
+      .replace("{employeeName}", agreement.employeeName)
+      .replace("{programTier}", agreement.programTier.toString())
+      .replace("{programDurationDays}", agreement.programDurationDays.toString())
+      .replace("{meetingCount}", agreement.meetingCount.toString())
+      .replace("{coachName}", agreement.coachName);
+
+    return {
+      text,
+      agreement,
+    };
   },
 });

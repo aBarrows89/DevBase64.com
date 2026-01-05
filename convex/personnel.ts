@@ -779,3 +779,69 @@ export const remove = mutation({
     return args.personnelId;
   },
 });
+
+// ============ RESUME & JOB MATCHING ============
+
+// Search for personnel by email or name (used by bulk upload to find matches)
+export const searchByEmailOrName = query({
+  args: {
+    email: v.optional(v.string()),
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    // First try email match (exact)
+    if (args.email) {
+      const byEmail = await ctx.db
+        .query("personnel")
+        .withIndex("by_email", (q) => q.eq("email", args.email!.toLowerCase()))
+        .first();
+      if (byEmail) return byEmail;
+    }
+
+    // If no email match, try name match
+    if (args.firstName && args.lastName) {
+      const allPersonnel = await ctx.db.query("personnel").collect();
+      const nameMatch = allPersonnel.find(
+        (p) =>
+          p.firstName.toLowerCase() === args.firstName!.toLowerCase() &&
+          p.lastName.toLowerCase() === args.lastName!.toLowerCase()
+      );
+      if (nameMatch) return nameMatch;
+    }
+
+    return null;
+  },
+});
+
+// Update personnel resume text and AI analysis
+export const updateResumeAndAnalysis = mutation({
+  args: {
+    personnelId: v.id("personnel"),
+    resumeText: v.string(),
+    jobMatchAnalysis: v.optional(v.object({
+      suggestedPositions: v.array(v.object({
+        jobId: v.optional(v.id("jobs")),
+        jobTitle: v.string(),
+        score: v.number(),
+        matchedKeywords: v.array(v.string()),
+        reasoning: v.string(),
+      })),
+      extractedSkills: v.array(v.string()),
+      summary: v.string(),
+      analyzedAt: v.number(),
+    })),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+
+    await ctx.db.patch(args.personnelId, {
+      resumeText: args.resumeText,
+      resumeUpdatedAt: now,
+      jobMatchAnalysis: args.jobMatchAnalysis,
+      updatedAt: now,
+    });
+
+    return args.personnelId;
+  },
+});

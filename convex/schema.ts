@@ -315,6 +315,22 @@ export default defineSchema({
       completedByName: v.string(), // Name of who conducted it (for display)
       notes: v.optional(v.string()), // Any notes from the check-in
     }))),
+    // Resume text for AI job matching
+    resumeText: v.optional(v.string()),
+    resumeUpdatedAt: v.optional(v.number()),
+    // AI job match analysis for current employees (what positions they'd be good for)
+    jobMatchAnalysis: v.optional(v.object({
+      suggestedPositions: v.array(v.object({
+        jobId: v.optional(v.id("jobs")),
+        jobTitle: v.string(),
+        score: v.number(),
+        matchedKeywords: v.array(v.string()),
+        reasoning: v.string(),
+      })),
+      extractedSkills: v.array(v.string()),
+      summary: v.string(),
+      analyzedAt: v.number(),
+    })),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -1063,5 +1079,42 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_enrollment", ["enrollmentId"])
+    .index("by_status", ["status"]),
+
+  // ARP Enrollment Agreements
+  arpAgreements: defineTable({
+    enrollmentId: v.id("arpEnrollments"),
+    personnelId: v.id("personnel"),
+    agreementVersion: v.string(), // e.g., "1.0"
+    programTier: v.number(), // 1, 2, or 3
+    programDurationDays: v.number(),
+    meetingCount: v.number(),
+    coachName: v.string(),
+    coachId: v.optional(v.id("personnel")), // Optional for backward compatibility
+    employeeName: v.string(),
+    // Admin/HR signature (auto-signed when creating)
+    adminSignature: v.optional(v.string()), // Base64 signature image
+    adminName: v.optional(v.string()),
+    adminTitle: v.optional(v.string()),
+    adminSignedAt: v.optional(v.number()),
+    adminUserId: v.optional(v.id("users")),
+    // Coach signature
+    coachSignature: v.optional(v.string()), // Base64 signature image
+    coachSignedAt: v.optional(v.number()),
+    // Employee signature
+    employeeSignature: v.optional(v.string()), // Base64 signature image
+    employeeSignedAt: v.optional(v.number()),
+    // Legacy fields (for backward compatibility with old records)
+    signatureData: v.optional(v.string()),
+    signatureMethod: v.optional(v.string()),
+    signedAt: v.optional(v.number()),
+    signedByAdmin: v.optional(v.id("users")),
+    signedByAdminName: v.optional(v.string()),
+    // Overall status
+    status: v.string(), // "pending" | "partially_signed" | "fully_signed"
+    createdAt: v.number(),
+  })
+    .index("by_enrollment", ["enrollmentId"])
+    .index("by_personnel", ["personnelId"])
     .index("by_status", ["status"]),
 });
