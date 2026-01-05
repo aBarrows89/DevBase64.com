@@ -273,3 +273,107 @@ export const searchLinkableItems = query({
     return results.slice(0, 10);
   },
 });
+
+// ============ MESSAGE REACTIONS ============
+
+// Add a reaction to a message
+export const addReaction = mutation({
+  args: {
+    messageId: v.id("messages"),
+    userId: v.id("users"),
+    emoji: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const message = await ctx.db.get(args.messageId);
+    if (!message) {
+      throw new Error("Message not found");
+    }
+
+    const reactions = message.reactions || [];
+
+    // Check if user already reacted with this emoji
+    const existingReaction = reactions.find(
+      (r) => r.userId === args.userId && r.emoji === args.emoji
+    );
+
+    if (existingReaction) {
+      // Already reacted with this emoji, no need to add again
+      return;
+    }
+
+    // Add the new reaction
+    reactions.push({
+      emoji: args.emoji,
+      userId: args.userId,
+      createdAt: Date.now(),
+    });
+
+    await ctx.db.patch(args.messageId, {
+      reactions,
+    });
+  },
+});
+
+// Remove a reaction from a message
+export const removeReaction = mutation({
+  args: {
+    messageId: v.id("messages"),
+    userId: v.id("users"),
+    emoji: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const message = await ctx.db.get(args.messageId);
+    if (!message) {
+      throw new Error("Message not found");
+    }
+
+    const reactions = message.reactions || [];
+
+    // Remove the reaction
+    const updatedReactions = reactions.filter(
+      (r) => !(r.userId === args.userId && r.emoji === args.emoji)
+    );
+
+    await ctx.db.patch(args.messageId, {
+      reactions: updatedReactions,
+    });
+  },
+});
+
+// Toggle a reaction (add if not present, remove if present)
+export const toggleReaction = mutation({
+  args: {
+    messageId: v.id("messages"),
+    userId: v.id("users"),
+    emoji: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const message = await ctx.db.get(args.messageId);
+    if (!message) {
+      throw new Error("Message not found");
+    }
+
+    const reactions = message.reactions || [];
+
+    // Check if user already reacted with this emoji
+    const existingIndex = reactions.findIndex(
+      (r) => r.userId === args.userId && r.emoji === args.emoji
+    );
+
+    if (existingIndex >= 0) {
+      // Remove the reaction
+      reactions.splice(existingIndex, 1);
+    } else {
+      // Add the reaction
+      reactions.push({
+        emoji: args.emoji,
+        userId: args.userId,
+        createdAt: Date.now(),
+      });
+    }
+
+    await ctx.db.patch(args.messageId, {
+      reactions,
+    });
+  },
+});

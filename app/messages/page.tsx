@@ -36,6 +36,12 @@ interface EnrichedConversation {
   unreadCount: number;
 }
 
+interface MessageReaction {
+  emoji: string;
+  userId: Id<"users">;
+  createdAt: number;
+}
+
 interface EnrichedMessage {
   _id: Id<"messages">;
   conversationId: Id<"conversations">;
@@ -45,6 +51,7 @@ interface EnrichedMessage {
   readBy: Id<"users">[];
   createdAt: number;
   sender: User | null;
+  reactions?: MessageReaction[];
 }
 
 function MessagesContent() {
@@ -98,6 +105,9 @@ function MessagesContent() {
       if (gifPickerRef.current && !gifPickerRef.current.contains(event.target as Node)) {
         setShowGifPicker(false);
       }
+      if (reactionPickerRef.current && !reactionPickerRef.current.contains(event.target as Node)) {
+        setReactionPickerMessageId(null);
+      }
     };
 
     document.addEventListener("mousedown", handleClickOutside);
@@ -115,10 +125,40 @@ function MessagesContent() {
     [gifSearchQuery]
   );
 
-  // Handle emoji selection
+  // Handle emoji selection for new message
   const handleEmojiClick = (emojiData: { emoji: string }) => {
     setNewMessage((prev) => prev + emojiData.emoji);
     setShowEmojiPicker(false);
+  };
+
+  // Handle adding reaction to a message
+  const handleReactionClick = async (messageId: Id<"messages">, emoji: string) => {
+    if (!user) return;
+    await toggleReaction({
+      messageId,
+      userId: user._id,
+      emoji,
+    });
+    setReactionPickerMessageId(null);
+  };
+
+  // Quick reaction emojis
+  const quickReactions = ["👍", "❤️", "😂", "😮", "😢", "🎉"];
+
+  // Group reactions by emoji
+  const groupReactions = (reactions: MessageReaction[] | undefined) => {
+    if (!reactions) return [];
+    const grouped: { emoji: string; count: number; userIds: Id<"users">[] }[] = [];
+    reactions.forEach((r) => {
+      const existing = grouped.find((g) => g.emoji === r.emoji);
+      if (existing) {
+        existing.count++;
+        existing.userIds.push(r.userId);
+      } else {
+        grouped.push({ emoji: r.emoji, count: 1, userIds: [r.userId] });
+      }
+    });
+    return grouped;
   };
 
   // Handle GIF selection
@@ -259,6 +299,11 @@ function MessagesContent() {
   const sendMessage = useMutation(api.messages.sendMessage);
   const createConversation = useMutation(api.messages.createConversation);
   const markAsRead = useMutation(api.messages.markAsRead);
+  const toggleReaction = useMutation(api.messages.toggleReaction);
+
+  // State for message reactions
+  const [reactionPickerMessageId, setReactionPickerMessageId] = useState<Id<"messages"> | null>(null);
+  const reactionPickerRef = useRef<HTMLDivElement>(null);
 
   // Initialize audio on client side
   useEffect(() => {
@@ -548,10 +593,13 @@ function MessagesContent() {
               <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 sm:space-y-4">
                 {messages?.map((msg) => {
                   const isOwn = msg.senderId === user?._id;
+                  const groupedReactions = groupReactions(msg.reactions);
+                  const hasReactions = groupedReactions.length > 0;
+
                   return (
                     <div
                       key={msg._id}
-                      className={`flex ${isOwn ? "justify-end" : "justify-start"}`}
+                      className={`flex ${isOwn ? "justify-end" : "justify-start"} group`}
                     >
                       <div
                         className={`max-w-[85%] sm:max-w-[70%] ${
@@ -563,19 +611,77 @@ function MessagesContent() {
                             {msg.sender?.name || "Unknown"}
                           </p>
                         )}
-                        <div
-                          className={`rounded-2xl overflow-hidden ${
-                            isGifMessage(msg.content)
-                              ? ""
-                              : `px-3 sm:px-4 py-2 ${
-                                  isOwn
-                                    ? "bg-cyan-500 text-white"
-                                    : "bg-slate-800 text-white"
-                                }`
-                          }`}
-                        >
-                          {renderMessageContent(msg.content)}
+                        <div className="relative">
+                          <div
+                            className={`rounded-2xl overflow-hidden ${
+                              isGifMessage(msg.content)
+                                ? ""
+                                : `px-3 sm:px-4 py-2 ${
+                                    isOwn
+                                      ? "bg-cyan-500 text-white"
+                                      : "bg-slate-800 text-white"
+                                  }`
+                            }`}
+                          >
+                            {renderMessageContent(msg.content)}
+                          </div>
+
+                          {/* Reaction button - shows on hover */}
+                          <button
+                            onClick={() => setReactionPickerMessageId(
+                              reactionPickerMessageId === msg._id ? null : msg._id
+                            )}
+                            className={`absolute ${isOwn ? "-left-8" : "-right-8"} top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-slate-700 hover:bg-slate-600 text-slate-400 hover:text-white transition-all opacity-0 group-hover:opacity-100`}
+                            title="Add reaction"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </button>
+
+                          {/* Quick reaction picker */}
+                          {reactionPickerMessageId === msg._id && (
+                            <div
+                              ref={reactionPickerRef}
+                              className={`absolute ${isOwn ? "right-0" : "left-0"} top-full mt-1 z-50 bg-slate-800 border border-slate-700 rounded-full px-2 py-1 flex items-center gap-1 shadow-xl`}
+                            >
+                              {quickReactions.map((emoji) => (
+                                <button
+                                  key={emoji}
+                                  onClick={() => handleReactionClick(msg._id, emoji)}
+                                  className="p-1.5 hover:bg-slate-700 rounded-full transition-colors text-lg"
+                                >
+                                  {emoji}
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
+
+                        {/* Reactions display */}
+                        {hasReactions && (
+                          <div className={`flex flex-wrap gap-1 mt-1 ${isOwn ? "justify-end mr-1" : "ml-1"}`}>
+                            {groupedReactions.map((reaction) => {
+                              const hasUserReacted = user && reaction.userIds.includes(user._id);
+                              return (
+                                <button
+                                  key={reaction.emoji}
+                                  onClick={() => handleReactionClick(msg._id, reaction.emoji)}
+                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs transition-colors ${
+                                    hasUserReacted
+                                      ? "bg-cyan-500/30 border border-cyan-500 text-cyan-300"
+                                      : "bg-slate-700/50 border border-slate-600 text-slate-300 hover:bg-slate-700"
+                                  }`}
+                                  title={`${reaction.count} reaction${reaction.count > 1 ? "s" : ""}`}
+                                >
+                                  <span>{reaction.emoji}</span>
+                                  {reaction.count > 1 && <span>{reaction.count}</span>}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+
                         <p
                           className={`text-[10px] sm:text-xs text-slate-500 mt-1 ${
                             isOwn ? "text-right mr-1" : "ml-1"

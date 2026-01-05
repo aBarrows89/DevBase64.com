@@ -216,6 +216,12 @@ export default defineSchema({
     content: v.string(),
     mentions: v.array(v.id("users")),
     readBy: v.array(v.id("users")),
+    // Emoji reactions: array of { emoji, userId }
+    reactions: v.optional(v.array(v.object({
+      emoji: v.string(), // The emoji character (e.g., "👍", "❤️", "😂")
+      userId: v.id("users"),
+      createdAt: v.number(),
+    }))),
     createdAt: v.number(),
   })
     .index("by_conversation", ["conversationId"])
