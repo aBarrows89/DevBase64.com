@@ -669,6 +669,7 @@ export default defineSchema({
       responseType: v.optional(v.string()), // "yes_no" | "yes_no_na" | "condition_report" - defaults to "yes_no"
       requiresDetailsOn: v.optional(v.string()), // "yes" | "no" | "na" | "always" | "never" - when to require details
       detailsPrompt: v.optional(v.string()), // Custom prompt for details (e.g., "Describe the damage observed")
+      expectedAnswer: v.optional(v.string()), // "yes" | "no" - the expected passing answer (defaults to "yes")
     })),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -692,6 +693,7 @@ export default defineSchema({
       responseType: v.optional(v.string()), // "yes_no" | "yes_no_na" | "condition_report"
       requiresDetailsOn: v.optional(v.string()), // "yes" | "no" | "na" | "always" | "never"
       detailsPrompt: v.optional(v.string()),
+      expectedAnswer: v.optional(v.string()), // "yes" | "no" - the expected passing answer (defaults to "yes")
     }))), // Extra questions for this specific equipment
     personnelOverrides: v.optional(v.array(v.object({
       personnelId: v.id("personnel"),
@@ -702,6 +704,7 @@ export default defineSchema({
         responseType: v.optional(v.string()),
         requiresDetailsOn: v.optional(v.string()),
         detailsPrompt: v.optional(v.string()),
+        expectedAnswer: v.optional(v.string()), // "yes" | "no" - the expected passing answer (defaults to "yes")
       })),
     }))), // Extra questions for specific people on this equipment
     createdAt: v.number(),

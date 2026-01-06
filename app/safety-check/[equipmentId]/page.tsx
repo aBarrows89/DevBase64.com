@@ -18,6 +18,7 @@ type ChecklistItem = {
   responseType?: string; // "yes_no" | "yes_no_na" | "condition_report"
   requiresDetailsOn?: string; // "yes" | "no" | "na" | "always" | "never"
   detailsPrompt?: string;
+  expectedAnswer?: string; // "yes" | "no" - the expected passing answer (defaults to "yes")
 };
 
 type Response = {
@@ -123,9 +124,12 @@ function SafetyCheckContent() {
       return; // Don't proceed yet, wait for details
     }
 
-    // Determine if passed based on response
-    const passed = responseValue === "yes";
-    const damageReported = responseValue === "no" || (needsDetails && currentDamageDetails.trim() !== "");
+    // Determine if passed based on response and expectedAnswer
+    // For N/A responses, we consider it as "passed" (not a failure)
+    const typedItem = currentItem as ChecklistItem;
+    const expectedAnswer = typedItem.expectedAnswer || "yes"; // Default to "yes" if not specified
+    const passed = responseValue === "na" || responseValue === expectedAnswer;
+    const damageReported = (responseValue !== "na" && responseValue !== expectedAnswer) || (needsDetails && currentDamageDetails.trim() !== "");
 
     const response: Response = {
       itemId: currentItem.id,

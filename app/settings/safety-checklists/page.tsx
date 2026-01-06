@@ -18,6 +18,7 @@ interface ChecklistItem {
   responseType?: string; // "yes_no" | "yes_no_na" | "condition_report"
   requiresDetailsOn?: string; // "yes" | "no" | "na" | "always" | "never"
   detailsPrompt?: string;
+  expectedAnswer?: string; // "yes" | "no" - the expected passing answer (defaults to "yes")
 }
 
 interface Template {
@@ -57,6 +58,7 @@ function SafetyChecklistsContent() {
     responseType: "yes_no" as string,
     requiresDetailsOn: "never" as string,
     detailsPrompt: "",
+    expectedAnswer: "yes" as string, // "yes" | "no" - expected passing answer
   });
 
   // Queries
@@ -119,6 +121,7 @@ function SafetyChecklistsContent() {
       responseType: newItem.responseType,
       requiresDetailsOn: newItem.requiresDetailsOn,
       detailsPrompt: newItem.detailsPrompt.trim() || undefined,
+      expectedAnswer: newItem.expectedAnswer,
     };
 
     setTemplateForm({
@@ -133,6 +136,7 @@ function SafetyChecklistsContent() {
       responseType: "yes_no",
       requiresDetailsOn: "never",
       detailsPrompt: "",
+      expectedAnswer: "yes",
     });
   };
 
@@ -509,7 +513,7 @@ function SafetyChecklistsContent() {
                           </div>
 
                           {/* Response type and damage reporting options */}
-                          <div className={`mt-3 pt-3 border-t grid grid-cols-1 md:grid-cols-3 gap-3 ${isDark ? "border-slate-600" : "border-gray-200"}`}>
+                          <div className={`mt-3 pt-3 border-t grid grid-cols-1 md:grid-cols-4 gap-3 ${isDark ? "border-slate-600" : "border-gray-200"}`}>
                             <div>
                               <label className={`block text-xs font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                                 Response Type
@@ -522,6 +526,19 @@ function SafetyChecklistsContent() {
                                 <option value="yes_no">Yes / No</option>
                                 <option value="yes_no_na">Yes / No / N/A</option>
                                 <option value="condition_report">Condition Report</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className={`block text-xs font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                                Expected Answer
+                              </label>
+                              <select
+                                value={item.expectedAnswer || "yes"}
+                                onChange={(e) => handleUpdateItem(item.id, "expectedAnswer", e.target.value)}
+                                className={`w-full px-2 py-1.5 text-xs border rounded focus:outline-none ${isDark ? "bg-slate-800 border-slate-600 text-white" : "bg-white border-gray-200 text-gray-900"}`}
+                              >
+                                <option value="yes">Yes = Pass</option>
+                                <option value="no">No = Pass</option>
                               </select>
                             </div>
                             <div>
@@ -580,7 +597,7 @@ function SafetyChecklistsContent() {
                     </div>
 
                     {/* Response type and damage options for new item */}
-                    <div className={`grid grid-cols-1 md:grid-cols-3 gap-3 mt-3 pt-3 border-t ${isDark ? "border-slate-600" : "border-gray-200"}`}>
+                    <div className={`grid grid-cols-1 md:grid-cols-4 gap-3 mt-3 pt-3 border-t ${isDark ? "border-slate-600" : "border-gray-200"}`}>
                       <div>
                         <label className={`block text-xs font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                           Response Type
@@ -593,6 +610,19 @@ function SafetyChecklistsContent() {
                           <option value="yes_no">Yes / No</option>
                           <option value="yes_no_na">Yes / No / N/A</option>
                           <option value="condition_report">Condition Report</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className={`block text-xs font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                          Expected Answer
+                        </label>
+                        <select
+                          value={newItem.expectedAnswer}
+                          onChange={(e) => setNewItem({ ...newItem, expectedAnswer: e.target.value })}
+                          className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                        >
+                          <option value="yes">Yes = Pass</option>
+                          <option value="no">No = Pass</option>
                         </select>
                       </div>
                       <div>

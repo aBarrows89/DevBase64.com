@@ -397,6 +397,7 @@ export const upsertTemplate = mutation({
       responseType: v.optional(v.string()), // "yes_no" | "yes_no_na" | "condition_report"
       requiresDetailsOn: v.optional(v.string()), // "yes" | "no" | "na" | "always" | "never"
       detailsPrompt: v.optional(v.string()),
+      expectedAnswer: v.optional(v.string()), // "yes" | "no" - expected passing answer (defaults to "yes")
     })),
     userId: v.id("users"),
   },
@@ -478,6 +479,7 @@ export const configureEquipmentChecklist = mutation({
       responseType: v.optional(v.string()),
       requiresDetailsOn: v.optional(v.string()),
       detailsPrompt: v.optional(v.string()),
+      expectedAnswer: v.optional(v.string()), // "yes" | "no" - expected passing answer (defaults to "yes")
     }))),
   },
   handler: async (ctx, args) => {
@@ -528,6 +530,7 @@ export const addPersonnelOverride = mutation({
       responseType: v.optional(v.string()),
       requiresDetailsOn: v.optional(v.string()),
       detailsPrompt: v.optional(v.string()),
+      expectedAnswer: v.optional(v.string()), // "yes" | "no" - expected passing answer (defaults to "yes")
     })),
   },
   handler: async (ctx, args) => {
