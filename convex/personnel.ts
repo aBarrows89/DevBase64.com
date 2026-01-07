@@ -454,6 +454,35 @@ export const terminate = mutation({
       updatedAt: now,
     });
 
+    // Check if this person has a user account (department_manager) and deactivate it
+    const userAccount = await ctx.db
+      .query("users")
+      .withIndex("by_email", (q) => q.eq("email", existing.email.toLowerCase()))
+      .first();
+
+    if (userAccount && userAccount.role === "department_manager") {
+      await ctx.db.patch(userAccount._id, {
+        isActive: false,
+      });
+
+      // Log the user deactivation
+      if (args.userId) {
+        const adminUser = await ctx.db.get(args.userId);
+        if (adminUser) {
+          await ctx.db.insert("auditLogs", {
+            action: "Deactivated department manager account",
+            actionType: "update",
+            resourceType: "user",
+            resourceId: userAccount._id,
+            userId: args.userId,
+            userEmail: adminUser.email,
+            details: `Auto-deactivated user account for ${existing.firstName} ${existing.lastName} due to termination`,
+            timestamp: now,
+          });
+        }
+      }
+    }
+
     // Log the termination
     if (args.userId) {
       const user = await ctx.db.get(args.userId);
