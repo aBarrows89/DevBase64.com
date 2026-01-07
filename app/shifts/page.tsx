@@ -100,11 +100,16 @@ function ShiftsContent() {
     return locations.filter(l => accessible.includes(l._id));
   }, [locations, getAccessibleLocationIds]);
 
-  // Get all personnel not yet assigned to any shift today
+  // Get all personnel not yet assigned to any shift today (includes leads)
   const unassignedPersonnel = useMemo(() => {
     const assignedIds = new Set<string>();
     shifts.forEach(shift => {
+      // Add all assigned personnel
       shift.assignedPersonnel.forEach(id => assignedIds.add(id));
+      // Also add the lead if there is one
+      if (shift.leadId) {
+        assignedIds.add(shift.leadId);
+      }
     });
     return activePersonnel.filter(p => !assignedIds.has(p._id));
   }, [shifts, activePersonnel]);
