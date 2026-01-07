@@ -332,9 +332,11 @@ export const updateUser = mutation({
     email: v.optional(v.string()),
     role: v.optional(v.string()),
     isActive: v.optional(v.boolean()),
+    managedLocationIds: v.optional(v.array(v.id("locations"))),
+    managedDepartments: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
-    const { userId, ...updates } = args;
+    const { userId, managedLocationIds, managedDepartments, ...updates } = args;
 
     // If email is being updated, check for duplicates
     if (updates.email) {
@@ -349,12 +351,14 @@ export const updateUser = mutation({
       updates.email = updates.email.toLowerCase();
     }
 
-    // Filter out undefined values
-    const cleanUpdates: Record<string, string | boolean> = {};
+    // Build updates object
+    const cleanUpdates: Record<string, unknown> = {};
     if (updates.name !== undefined) cleanUpdates.name = updates.name;
     if (updates.email !== undefined) cleanUpdates.email = updates.email;
     if (updates.role !== undefined) cleanUpdates.role = updates.role;
     if (updates.isActive !== undefined) cleanUpdates.isActive = updates.isActive;
+    if (managedLocationIds !== undefined) cleanUpdates.managedLocationIds = managedLocationIds;
+    if (managedDepartments !== undefined) cleanUpdates.managedDepartments = managedDepartments;
 
     await ctx.db.patch(userId, cleanUpdates);
     return { success: true };

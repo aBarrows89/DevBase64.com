@@ -17,11 +17,14 @@ interface User {
   forcePasswordChange: boolean;
   createdAt: number;
   lastLoginAt?: number;
+  managedLocationIds?: Id<"locations">[];
+  managedDepartments?: string[];
 }
 
 function UsersContent() {
   const { user: currentUser } = useAuth();
   const users = useQuery(api.auth.getAllUsers);
+  const locations = useQuery(api.locations.list);
   const createUser = useMutation(api.auth.createUser);
   const updateUser = useMutation(api.auth.updateUser);
   const resetPassword = useMutation(api.auth.resetUserPassword);
@@ -49,6 +52,7 @@ function UsersContent() {
     email: "",
     role: "",
     isActive: true,
+    managedLocationIds: [] as Id<"locations">[],
   });
 
   // Form state for password reset
@@ -92,6 +96,7 @@ function UsersContent() {
       email: editForm.email,
       role: editForm.role,
       isActive: editForm.isActive,
+      managedLocationIds: editForm.role === "warehouse_manager" ? editForm.managedLocationIds : undefined,
     });
 
     if (result.success) {
@@ -154,8 +159,18 @@ function UsersContent() {
       email: user.email,
       role: user.role,
       isActive: user.isActive,
+      managedLocationIds: user.managedLocationIds || [],
     });
     setShowEditModal(true);
+  };
+
+  const toggleLocationAssignment = (locationId: Id<"locations">) => {
+    setEditForm(prev => ({
+      ...prev,
+      managedLocationIds: prev.managedLocationIds.includes(locationId)
+        ? prev.managedLocationIds.filter(id => id !== locationId)
+        : [...prev.managedLocationIds, locationId],
+    }));
   };
 
   const openResetModal = (user: User) => {
@@ -175,6 +190,8 @@ function UsersContent() {
         return "bg-red-500/20 text-red-400";
       case "admin":
         return "bg-purple-500/20 text-purple-400";
+      case "warehouse_director":
+        return "bg-emerald-500/20 text-emerald-400";
       case "department_manager":
         return "bg-blue-500/20 text-blue-400";
       case "warehouse_manager":
@@ -196,11 +213,21 @@ function UsersContent() {
         return "Department Manager";
       case "warehouse_manager":
         return "Warehouse Manager";
+      case "warehouse_director":
+        return "Warehouse Director";
       case "member":
         return "Member";
       default:
         return role;
     }
+  };
+
+  const getLocationNames = (locationIds?: Id<"locations">[]) => {
+    if (!locationIds || locationIds.length === 0 || !locations) return null;
+    return locationIds
+      .map(id => locations.find(l => l._id === id)?.name)
+      .filter(Boolean)
+      .join(", ");
   };
 
   return (
@@ -275,9 +302,16 @@ function UsersContent() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${getRoleBadgeColor(user.role)}`}>
-                        {getRoleDisplayName(user.role)}
-                      </span>
+                      <div>
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getRoleBadgeColor(user.role)}`}>
+                          {getRoleDisplayName(user.role)}
+                        </span>
+                        {user.role === "warehouse_manager" && (
+                          <div className="text-xs text-slate-500 mt-1">
+                            {getLocationNames(user.managedLocationIds as Id<"locations">[] | undefined) || "No locations assigned"}
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <span className={`px-2 py-1 text-xs font-medium rounded-full ${
@@ -394,7 +428,7 @@ function UsersContent() {
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 mb-3">
+                <div className="flex flex-wrap items-center gap-2 mb-2">
                   <span className={`px-2 py-1 text-xs font-medium rounded-full ${getRoleBadgeColor(user.role)}`}>
                     {getRoleDisplayName(user.role)}
                   </span>
@@ -411,6 +445,11 @@ function UsersContent() {
                     </span>
                   )}
                 </div>
+                {user.role === "warehouse_manager" && (
+                  <div className="text-xs text-slate-500 mb-3">
+                    Locations: {getLocationNames(user.managedLocationIds as Id<"locations">[] | undefined) || "None assigned"}
+                  </div>
+                )}
 
                 <div className="text-slate-400 text-xs">
                   Last login: {user.lastLoginAt
@@ -482,8 +521,9 @@ function UsersContent() {
                 >
                   <option value="super_admin">Super Admin</option>
                   <option value="admin">Admin</option>
-                  <option value="department_manager">Department Manager</option>
+                  <option value="warehouse_director">Warehouse Director</option>
                   <option value="warehouse_manager">Warehouse Manager</option>
+                  <option value="department_manager">Department Manager</option>
                   <option value="member">Member</option>
                 </select>
               </div>
@@ -542,8 +582,9 @@ function UsersContent() {
                 >
                   <option value="super_admin">Super Admin</option>
                   <option value="admin">Admin</option>
-                  <option value="department_manager">Department Manager</option>
+                  <option value="warehouse_director">Warehouse Director</option>
                   <option value="warehouse_manager">Warehouse Manager</option>
+                  <option value="department_manager">Department Manager</option>
                   <option value="member">Member</option>
                 </select>
               </div>
@@ -558,6 +599,48 @@ function UsersContent() {
                   <span className="text-sm text-slate-400">Active</span>
                 </label>
               </div>
+
+              {/* Location Assignment for Warehouse Managers */}
+              {editForm.role === "warehouse_manager" && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-2">
+                    Assigned Locations
+                  </label>
+                  <p className="text-xs text-slate-500 mb-3">
+                    Select which locations this warehouse manager can access
+                  </p>
+                  <div className="space-y-2 max-h-48 overflow-y-auto bg-slate-900/50 rounded-lg p-3 border border-slate-700">
+                    {locations?.filter(loc => loc.isActive).map((location) => (
+                      <label
+                        key={location._id}
+                        className="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-slate-800 transition-colors"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={editForm.managedLocationIds.includes(location._id)}
+                          onChange={() => toggleLocationAssignment(location._id)}
+                          className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-cyan-500"
+                        />
+                        <span className="text-white">{location.name}</span>
+                        {location.warehouseManagerName && (
+                          <span className="text-xs text-slate-500">
+                            (Manager: {location.warehouseManagerName})
+                          </span>
+                        )}
+                      </label>
+                    ))}
+                    {(!locations || locations.filter(loc => loc.isActive).length === 0) && (
+                      <p className="text-slate-500 text-sm text-center py-4">No locations available</p>
+                    )}
+                  </div>
+                  {editForm.managedLocationIds.length === 0 && (
+                    <p className="text-amber-400 text-xs mt-2">
+                      No locations selected. This user won&apos;t be able to access shift planning.
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div className="flex gap-3 pt-4">
                 <button
                   type="button"
