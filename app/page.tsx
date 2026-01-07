@@ -32,22 +32,28 @@ function DashboardContent() {
 
   // Redirect department managers to their portal
   const isDepartmentManager = user?.role === "department_manager";
+  // Redirect employees to their portal
+  const isEmployee = user?.role === "employee";
+
   useEffect(() => {
     if (isDepartmentManager) {
       router.replace("/department-portal");
+    } else if (isEmployee) {
+      router.replace("/portal");
     }
-  }, [isDepartmentManager, router]);
+  }, [isDepartmentManager, isEmployee, router]);
 
-  const projects = useQuery(api.projects.getAll, isDepartmentManager ? "skip" : {});
-  const applications = useQuery(api.applications.getRecent, isDepartmentManager ? "skip" : undefined);
-  const upcomingInterviews = useQuery(api.applications.getUpcomingInterviews, isDepartmentManager ? "skip" : undefined);
-  const hiringAnalytics = useQuery(api.applications.getHiringAnalytics, isDepartmentManager ? "skip" : undefined);
-  const contactMessages = useQuery(api.contactMessages.getRecent, isDepartmentManager ? "skip" : undefined);
-  const dealerInquiries = useQuery(api.dealerInquiries.getRecent, isDepartmentManager ? "skip" : undefined);
-  const pendingTenureCheckIns = useQuery(api.personnel.getPendingTenureCheckIns, isDepartmentManager ? "skip" : undefined);
+  const shouldSkipQueries = isDepartmentManager || isEmployee;
+  const projects = useQuery(api.projects.getAll, shouldSkipQueries ? "skip" : {});
+  const applications = useQuery(api.applications.getRecent, shouldSkipQueries ? "skip" : undefined);
+  const upcomingInterviews = useQuery(api.applications.getUpcomingInterviews, shouldSkipQueries ? "skip" : undefined);
+  const hiringAnalytics = useQuery(api.applications.getHiringAnalytics, shouldSkipQueries ? "skip" : undefined);
+  const contactMessages = useQuery(api.contactMessages.getRecent, shouldSkipQueries ? "skip" : undefined);
+  const dealerInquiries = useQuery(api.dealerInquiries.getRecent, shouldSkipQueries ? "skip" : undefined);
+  const pendingTenureCheckIns = useQuery(api.personnel.getPendingTenureCheckIns, shouldSkipQueries ? "skip" : undefined);
 
   // Show loading while redirecting
-  if (isDepartmentManager) {
+  if (isDepartmentManager || isEmployee) {
     return (
       <div className={`flex h-screen items-center justify-center ${isDark ? "bg-slate-900" : "bg-[#f2f2f7]"}`}>
         <div className="text-center">
