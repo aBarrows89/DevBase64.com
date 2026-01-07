@@ -94,6 +94,9 @@ export default function Sidebar() {
   // Check if user is department manager (restricted view)
   const isDepartmentManager = user?.role === "department_manager";
 
+  // Check if user is warehouse manager (limited view)
+  const isWarehouseManager = user?.role === "warehouse_manager";
+
   // Get unread message count
   const unreadCount = useQuery(
     api.messages.getUnreadCount,
@@ -113,6 +116,8 @@ export default function Sidebar() {
 
   // Filter nav items based on permissions
   const filteredNavItems = NAV_ITEMS.filter((item) => {
+    // Warehouse manager shouldn't see Users
+    if (isWarehouseManager && item.href === "/users") return false;
     if (!item.requiresPermission) return true;
     if (item.requiresPermission === "viewPersonnel") return canViewPersonnel;
     if (item.requiresPermission === "viewShifts") return canViewShifts;
@@ -123,11 +128,30 @@ export default function Sidebar() {
 
   // Filter nav groups based on permissions
   const filteredNavGroups = NAV_GROUPS.filter((group) => {
+    // Warehouse manager shouldn't see Equipment group or Employee Portal group
+    if (isWarehouseManager && (group.id === "equipment" || group.id === "employee-portal")) return false;
     if (!group.requiresPermission) return true;
     if (group.requiresPermission === "viewPersonnel") return canViewPersonnel;
     if (group.requiresPermission === "viewShifts") return canViewShifts;
     if (group.requiresPermission === "manageTimeOff") return canManageTimeOff;
     if (group.requiresPermission === "departmentPortal") return canAccessDepartmentPortal;
+    return true;
+  }).map((group) => {
+    // For warehouse manager, filter out Job Listings and Applications from People group
+    if (isWarehouseManager && group.id === "people") {
+      return {
+        ...group,
+        items: group.items.filter((item) =>
+          item.href !== "/jobs" && item.href !== "/applications"
+        ),
+      };
+    }
+    return group;
+  });
+
+  // Filter bottom nav items for warehouse manager (hide Reports and Audit Log)
+  const filteredBottomNavItems = BOTTOM_NAV_ITEMS.filter((item) => {
+    if (isWarehouseManager && (item.href === "/reports" || item.href === "/audit-log")) return false;
     return true;
   });
 
@@ -431,7 +455,7 @@ export default function Sidebar() {
         {/* Bottom Navigation - Hide for department managers */}
         {!isDepartmentManager && (
         <div className={`p-3 sm:p-4 border-t space-y-1 ${isDark ? "border-slate-700" : "border-gray-200"}`}>
-          {BOTTOM_NAV_ITEMS.map((item) => {
+          {filteredBottomNavItems.map((item) => {
             const isActive = pathname === item.href;
             return (
               <Link
