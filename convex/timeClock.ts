@@ -716,6 +716,96 @@ export const reviewCorrection = mutation({
   },
 });
 
+// Get clock status for all personnel (efficient batch query for dashboards)
+export const getAllClockStatuses = query({
+  handler: async (ctx) => {
+    const today = new Date().toISOString().split("T")[0];
+
+    // Get all entries for today
+    const allEntries = await ctx.db
+      .query("timeEntries")
+      .withIndex("by_date", (q) => q.eq("date", today))
+      .collect();
+
+    // Group by personnel and determine status
+    const statusMap: Record<string, {
+      status: "clocked_in" | "on_break" | "clocked_out" | "not_clocked_in";
+      clockInTime?: number;
+      hoursWorked?: number;
+    }> = {};
+
+    const byPersonnel = new Map<string, typeof allEntries>();
+    for (const entry of allEntries) {
+      const key = entry.personnelId;
+      if (!byPersonnel.has(key)) {
+        byPersonnel.set(key, []);
+      }
+      byPersonnel.get(key)!.push(entry);
+    }
+
+    for (const [personnelId, entries] of byPersonnel) {
+      const sorted = entries.sort((a, b) => a.timestamp - b.timestamp);
+      const lastEntry = sorted[sorted.length - 1];
+
+      let status: "clocked_in" | "on_break" | "clocked_out" | "not_clocked_in";
+      switch (lastEntry.type) {
+        case "clock_in":
+          status = "clocked_in";
+          break;
+        case "break_start":
+          status = "on_break";
+          break;
+        case "break_end":
+          status = "clocked_in";
+          break;
+        case "clock_out":
+          status = "clocked_out";
+          break;
+        default:
+          status = "not_clocked_in";
+      }
+
+      // Calculate hours worked
+      let totalMinutes = 0;
+      let breakMinutes = 0;
+      let clockInTime: number | undefined;
+      let breakStartTime: number | null = null;
+
+      for (const entry of sorted) {
+        if (entry.type === "clock_in" && !clockInTime) {
+          clockInTime = entry.timestamp;
+        } else if (entry.type === "break_start") {
+          breakStartTime = entry.timestamp;
+        } else if (entry.type === "break_end" && breakStartTime) {
+          breakMinutes += (entry.timestamp - breakStartTime) / (1000 * 60);
+          breakStartTime = null;
+        } else if (entry.type === "clock_out" && clockInTime) {
+          totalMinutes += (entry.timestamp - clockInTime) / (1000 * 60);
+        }
+      }
+
+      // If still clocked in, add time up to now
+      if (clockInTime && status !== "clocked_out") {
+        const now = Date.now();
+        if (breakStartTime) {
+          breakMinutes += (now - breakStartTime) / (1000 * 60);
+        }
+        totalMinutes = (now - clockInTime) / (1000 * 60);
+      }
+
+      const hoursWorked = Math.round(((totalMinutes - breakMinutes) / 60) * 100) / 100;
+
+      statusMap[personnelId] = {
+        status,
+        clockInTime,
+        hoursWorked: hoursWorked > 0 ? hoursWorked : undefined,
+      };
+    }
+
+    return statusMap;
+  },
+});
+
 // Force clock out (manager action for employee who forgot)
 export const forceClockOut = mutation({
   args: {

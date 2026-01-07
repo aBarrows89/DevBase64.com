@@ -29,6 +29,22 @@ function PersonnelContent() {
   const { canViewPersonnel, canManagePersonnel } = useAuth();
   const personnel = useQuery(api.personnel.list, {}) || [];
   const departments = useQuery(api.personnel.getDepartments) || [];
+  const clockStatuses = useQuery(api.timeClock.getAllClockStatuses) || {};
+
+  // Helper to get clock status indicator
+  const getClockStatusIndicator = (personnelId: string) => {
+    const status = clockStatuses[personnelId];
+    if (!status || status.status === "not_clocked_in") {
+      return { color: "bg-red-500", label: "Not clocked in", dotColor: "bg-red-500" };
+    } else if (status.status === "clocked_in") {
+      return { color: "bg-green-500", label: `Clocked in${status.hoursWorked ? ` (${status.hoursWorked}h)` : ""}`, dotColor: "bg-green-500" };
+    } else if (status.status === "on_break") {
+      return { color: "bg-amber-500", label: "On break", dotColor: "bg-amber-500" };
+    } else if (status.status === "clocked_out") {
+      return { color: "bg-slate-500", label: `Clocked out${status.hoursWorked ? ` (${status.hoursWorked}h)` : ""}`, dotColor: "bg-slate-500" };
+    }
+    return { color: "bg-red-500", label: "Not clocked in", dotColor: "bg-red-500" };
+  };
 
   const [filterDepartment, setFilterDepartment] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("active"); // Default to active only
@@ -201,6 +217,9 @@ function PersonnelContent() {
                     <th className={`text-left px-6 py-4 text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                       Status
                     </th>
+                    <th className={`text-center px-6 py-4 text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                      Clock
+                    </th>
                     <th className={`text-left px-6 py-4 text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                       Hire Date
                     </th>
@@ -241,6 +260,18 @@ function PersonnelContent() {
                         >
                           {STATUS_OPTIONS.find((s) => s.value === person.status)?.label || person.status}
                         </span>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        {person.status === "active" && (
+                          <div className="flex items-center justify-center" title={getClockStatusIndicator(person._id).label}>
+                            <div className="relative">
+                              <span className={`inline-block w-3 h-3 rounded-full ${getClockStatusIndicator(person._id).dotColor}`}></span>
+                              {(clockStatuses[person._id]?.status === "clocked_in" || clockStatuses[person._id]?.status === "on_break") && (
+                                <span className={`absolute inset-0 rounded-full animate-ping opacity-75 ${getClockStatusIndicator(person._id).dotColor}`}></span>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </td>
                       <td className={`px-6 py-4 text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                         {new Date(person.hireDate).toLocaleDateString()}
