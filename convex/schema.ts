@@ -7,15 +7,18 @@ export default defineSchema({
     email: v.string(),
     passwordHash: v.string(),
     name: v.string(),
-    role: v.string(), // "super_admin" | "admin" | "warehouse_director" | "warehouse_manager" | "department_manager" | "member"
+    role: v.string(), // "super_admin" | "admin" | "warehouse_director" | "warehouse_manager" | "department_manager" | "employee" | "member"
     isActive: v.boolean(),
     forcePasswordChange: v.boolean(),
     // Role-specific fields
     managedDepartments: v.optional(v.array(v.string())), // For department_manager - which departments they manage
     managedLocationIds: v.optional(v.array(v.id("locations"))), // For warehouse_manager - which locations they manage
+    personnelId: v.optional(v.id("personnel")), // For employee role - links to their personnel record
     createdAt: v.number(),
     lastLoginAt: v.optional(v.number()),
-  }).index("by_email", ["email"]),
+  })
+    .index("by_email", ["email"])
+    .index("by_personnel", ["personnelId"]),
 
   // ============ PROJECT MANAGEMENT ============
   projects: defineTable({

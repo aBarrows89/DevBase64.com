@@ -16,6 +16,7 @@ export interface User {
   forcePasswordChange: boolean;
   managedDepartments?: string[];
   managedLocationIds?: Id<"locations">[];
+  personnelId?: Id<"personnel">; // For employee role - links to their personnel record
 }
 
 interface AuthContextType {
@@ -46,6 +47,9 @@ interface AuthContextType {
   // Shift planning role-based permissions
   canViewAllShifts: boolean; // Can see all locations (warehouse_director and above)
   canAccessDepartmentPortal: boolean; // Department manager portal access
+  // Employee portal access
+  isEmployee: boolean; // Is the user an employee (not admin/manager)
+  canAccessEmployeePortal: boolean; // Employee portal access
   // Helper to get accessible location IDs for warehouse_manager
   getAccessibleLocationIds: () => Id<"locations">[] | "all";
 }
@@ -142,36 +146,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         forcePasswordChange: userData.forcePasswordChange,
         managedDepartments: userData.managedDepartments,
         managedLocationIds: userData.managedLocationIds,
+        personnelId: userData.personnelId,
       }
     : null;
 
-  // Super Admin & Admin have full edit access
+  // Super Admin, Admin & Warehouse Director have full edit access
   const canEdit =
     user?.role === "super_admin" ||
     user?.role === "admin" ||
+    user?.role === "warehouse_director" ||
     user?.role === "department_manager" ||
     user?.role === "member";
 
-  // Only Super Admin can manage other admins, Admin can manage non-admin users
+  // Super Admin, Admin & Warehouse Director can manage users
   const canManageUsers =
     user?.role === "super_admin" ||
-    user?.role === "admin";
+    user?.role === "admin" ||
+    user?.role === "warehouse_director";
 
   // Super Admin can create/edit admin users
   const canManageAdmins = user?.role === "super_admin";
 
   // Personnel management permissions
-  // View personnel: super_admin, admin, department_manager, warehouse_manager
+  // View personnel: super_admin, admin, warehouse_director, department_manager, warehouse_manager
   const canViewPersonnel =
     user?.role === "super_admin" ||
     user?.role === "admin" ||
+    user?.role === "warehouse_director" ||
     user?.role === "department_manager" ||
     user?.role === "warehouse_manager";
 
-  // Manage personnel (add, edit, delete records): super_admin, admin, department_manager, warehouse_manager
+  // Manage personnel (add, edit, delete records): super_admin, admin, warehouse_director, department_manager, warehouse_manager
   const canManagePersonnel =
     user?.role === "super_admin" ||
     user?.role === "admin" ||
+    user?.role === "warehouse_director" ||
     user?.role === "department_manager" ||
     user?.role === "warehouse_manager";
 
@@ -200,6 +209,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const canAccessDepartmentPortal =
     user?.role === "department_manager";
 
+  // Employee portal access
+  const isEmployee = user?.role === "employee";
+  const canAccessEmployeePortal = user?.role === "employee";
+
   // Helper to get accessible location IDs for warehouse_manager
   const getAccessibleLocationIds = (): Id<"locations">[] | "all" => {
     if (canViewAllShifts) {
@@ -211,40 +224,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return [];
   };
 
-  // Super admin and warehouse manager - can delete write-ups and attendance records
+  // Super admin, warehouse director and warehouse manager - can delete write-ups and attendance records
   const canDeleteRecords =
     user?.role === "super_admin" ||
+    user?.role === "warehouse_director" ||
     user?.role === "warehouse_manager";
 
-  // Edit personnel info (email, phone, etc.) - super_admin and admin only
+  // Edit personnel info (email, phone, etc.) - super_admin, admin, warehouse_director
   const canEditPersonnelInfo =
     user?.role === "super_admin" ||
-    user?.role === "admin";
+    user?.role === "admin" ||
+    user?.role === "warehouse_director";
 
   // Employee portal admin permissions
-  // Manage time off requests: super_admin, admin, department_manager, warehouse_manager
+  // Manage time off requests: super_admin, admin, warehouse_director, department_manager, warehouse_manager
   const canManageTimeOff =
     user?.role === "super_admin" ||
     user?.role === "admin" ||
+    user?.role === "warehouse_director" ||
     user?.role === "department_manager" ||
     user?.role === "warehouse_manager";
 
-  // Manage call-offs: super_admin, admin, department_manager, warehouse_manager
+  // Manage call-offs: super_admin, admin, warehouse_director, department_manager, warehouse_manager
   const canManageCallOffs =
     user?.role === "super_admin" ||
     user?.role === "admin" ||
+    user?.role === "warehouse_director" ||
     user?.role === "department_manager" ||
     user?.role === "warehouse_manager";
 
-  // Manage announcements: super_admin, admin
+  // Manage announcements: super_admin, admin, warehouse_director
   const canManageAnnouncements =
     user?.role === "super_admin" ||
-    user?.role === "admin";
+    user?.role === "admin" ||
+    user?.role === "warehouse_director";
 
-  // Moderate chat: super_admin, admin, department_manager
+  // Moderate chat: super_admin, admin, warehouse_director, department_manager
   const canModerateChat =
     user?.role === "super_admin" ||
     user?.role === "admin" ||
+    user?.role === "warehouse_director" ||
     user?.role === "department_manager";
 
   return (
@@ -269,6 +288,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         canModerateChat,
         canViewAllShifts,
         canAccessDepartmentPortal,
+        isEmployee,
+        canAccessEmployeePortal,
         getAccessibleLocationIds,
       }}
     >
