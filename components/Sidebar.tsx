@@ -91,6 +91,9 @@ export default function Sidebar() {
 
   const isDark = theme === "dark";
 
+  // Check if user is department manager (restricted view)
+  const isDepartmentManager = user?.role === "department_manager";
+
   // Get unread message count
   const unreadCount = useQuery(
     api.messages.getUnreadCount,
@@ -184,21 +187,15 @@ export default function Sidebar() {
 
         {/* Navigation */}
         <nav className="flex-1 p-3 sm:p-4 space-y-1 overflow-y-auto">
-          {/* Top-level nav items */}
-          {filteredNavItems.map((item) => {
-            const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
-            const isMessages = item.href === "/messages";
-            const isNotifications = item.href === "/notifications";
-            const showMessageBadge = isMessages && unreadCount && unreadCount > 0;
-            const showNotificationBadge = isNotifications && unreadNotificationCount && unreadNotificationCount > 0;
-
-            return (
+          {/* Department Manager: Simplified navigation */}
+          {isDepartmentManager ? (
+            <>
+              {/* Department Portal - Main link */}
               <Link
-                key={item.href}
-                href={item.href}
+                href="/department-portal"
                 onClick={handleNavClick}
                 className={`flex items-center gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg transition-all ${
-                  isActive
+                  pathname === "/department-portal"
                     ? isDark
                       ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
                       : "bg-blue-50 text-blue-600 border border-blue-200"
@@ -207,35 +204,137 @@ export default function Sidebar() {
                       : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
                 }`}
               >
-                <svg
-                  className="w-5 h-5 flex-shrink-0"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d={item.icon}
-                  />
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                 </svg>
-                <span className="font-medium text-sm sm:text-base truncate flex-1">{item.label}</span>
-                {showMessageBadge && (
+                <span className="font-medium text-sm sm:text-base">My Department</span>
+              </Link>
+
+              {/* Messages */}
+              <Link
+                href="/messages"
+                onClick={handleNavClick}
+                className={`flex items-center gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg transition-all ${
+                  pathname === "/messages"
+                    ? isDark
+                      ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
+                      : "bg-blue-50 text-blue-600 border border-blue-200"
+                    : isDark
+                      ? "text-slate-400 hover:bg-slate-700/50 hover:text-white"
+                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                }`}
+              >
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+                <span className="font-medium text-sm sm:text-base truncate flex-1">Messages</span>
+                {unreadCount && unreadCount > 0 && (
                   <span className="min-w-[20px] h-[20px] px-1.5 text-[11px] font-bold flex items-center justify-center rounded-full bg-red-500 text-white">
                     {unreadCount > 99 ? "99+" : unreadCount}
                   </span>
                 )}
-                {showNotificationBadge && (
+              </Link>
+
+              {/* Notifications */}
+              <Link
+                href="/notifications"
+                onClick={handleNavClick}
+                className={`flex items-center gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg transition-all ${
+                  pathname === "/notifications"
+                    ? isDark
+                      ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
+                      : "bg-blue-50 text-blue-600 border border-blue-200"
+                    : isDark
+                      ? "text-slate-400 hover:bg-slate-700/50 hover:text-white"
+                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                }`}
+              >
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                </svg>
+                <span className="font-medium text-sm sm:text-base truncate flex-1">Notifications</span>
+                {unreadNotificationCount && unreadNotificationCount > 0 && (
                   <span className="min-w-[20px] h-[20px] px-1.5 text-[11px] font-bold flex items-center justify-center rounded-full bg-red-500 text-white">
                     {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
                   </span>
                 )}
               </Link>
-            );
-          })}
 
-          {/* Collapsible nav groups */}
+              {/* Announcements */}
+              <Link
+                href="/announcements"
+                onClick={handleNavClick}
+                className={`flex items-center gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg transition-all ${
+                  pathname === "/announcements"
+                    ? isDark
+                      ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
+                      : "bg-blue-50 text-blue-600 border border-blue-200"
+                    : isDark
+                      ? "text-slate-400 hover:bg-slate-700/50 hover:text-white"
+                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                }`}
+              >
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+                </svg>
+                <span className="font-medium text-sm sm:text-base">Announcements</span>
+              </Link>
+            </>
+          ) : (
+            <>
+              {/* Full navigation for other roles */}
+              {/* Top-level nav items */}
+              {filteredNavItems.map((item) => {
+                const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
+                const isMessages = item.href === "/messages";
+                const isNotifications = item.href === "/notifications";
+                const showMessageBadge = isMessages && unreadCount && unreadCount > 0;
+                const showNotificationBadge = isNotifications && unreadNotificationCount && unreadNotificationCount > 0;
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={handleNavClick}
+                    className={`flex items-center gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg transition-all ${
+                      isActive
+                        ? isDark
+                          ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
+                          : "bg-blue-50 text-blue-600 border border-blue-200"
+                        : isDark
+                          ? "text-slate-400 hover:bg-slate-700/50 hover:text-white"
+                          : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                    }`}
+                  >
+                    <svg
+                      className="w-5 h-5 flex-shrink-0"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d={item.icon}
+                      />
+                    </svg>
+                    <span className="font-medium text-sm sm:text-base truncate flex-1">{item.label}</span>
+                    {showMessageBadge && (
+                      <span className="min-w-[20px] h-[20px] px-1.5 text-[11px] font-bold flex items-center justify-center rounded-full bg-red-500 text-white">
+                        {unreadCount > 99 ? "99+" : unreadCount}
+                      </span>
+                    )}
+                    {showNotificationBadge && (
+                      <span className="min-w-[20px] h-[20px] px-1.5 text-[11px] font-bold flex items-center justify-center rounded-full bg-red-500 text-white">
+                        {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+
+              {/* Collapsible nav groups */}
           {filteredNavGroups.map((group) => {
             const isOpen = openGroups.includes(group.id);
             const groupActive = isGroupActive(group);
@@ -325,9 +424,12 @@ export default function Sidebar() {
               </div>
             );
           })}
+            </>
+          )}
         </nav>
 
-        {/* Bottom Navigation */}
+        {/* Bottom Navigation - Hide for department managers */}
+        {!isDepartmentManager && (
         <div className={`p-3 sm:p-4 border-t space-y-1 ${isDark ? "border-slate-700" : "border-gray-200"}`}>
           {BOTTOM_NAV_ITEMS.map((item) => {
             const isActive = pathname === item.href;
@@ -364,6 +466,7 @@ export default function Sidebar() {
             );
           })}
         </div>
+        )}
 
         {/* User Info */}
         <div className={`p-3 sm:p-4 border-t ${isDark ? "border-slate-700" : "border-gray-200"}`}>

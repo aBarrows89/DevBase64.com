@@ -53,7 +53,11 @@ function UsersContent() {
     role: "",
     isActive: true,
     managedLocationIds: [] as Id<"locations">[],
+    managedDepartments: [] as string[],
   });
+
+  // Get departments for department_manager assignment
+  const departments = useQuery(api.personnel.getDepartments) || [];
 
   // Form state for password reset
   const [newPassword, setNewPassword] = useState("");
@@ -97,6 +101,7 @@ function UsersContent() {
       role: editForm.role,
       isActive: editForm.isActive,
       managedLocationIds: editForm.role === "warehouse_manager" ? editForm.managedLocationIds : undefined,
+      managedDepartments: editForm.role === "department_manager" ? editForm.managedDepartments : undefined,
     });
 
     if (result.success) {
@@ -160,6 +165,7 @@ function UsersContent() {
       role: user.role,
       isActive: user.isActive,
       managedLocationIds: user.managedLocationIds || [],
+      managedDepartments: user.managedDepartments || [],
     });
     setShowEditModal(true);
   };
@@ -170,6 +176,15 @@ function UsersContent() {
       managedLocationIds: prev.managedLocationIds.includes(locationId)
         ? prev.managedLocationIds.filter(id => id !== locationId)
         : [...prev.managedLocationIds, locationId],
+    }));
+  };
+
+  const toggleDepartmentAssignment = (department: string) => {
+    setEditForm(prev => ({
+      ...prev,
+      managedDepartments: prev.managedDepartments.includes(department)
+        ? prev.managedDepartments.filter(d => d !== department)
+        : [...prev.managedDepartments, department],
     }));
   };
 
@@ -228,6 +243,11 @@ function UsersContent() {
       .map(id => locations.find(l => l._id === id)?.name)
       .filter(Boolean)
       .join(", ");
+  };
+
+  const getDepartmentNames = (depts?: string[]) => {
+    if (!depts || depts.length === 0) return null;
+    return depts.join(", ");
   };
 
   return (
@@ -309,6 +329,11 @@ function UsersContent() {
                         {user.role === "warehouse_manager" && (
                           <div className="text-xs text-slate-500 mt-1">
                             {getLocationNames(user.managedLocationIds as Id<"locations">[] | undefined) || "No locations assigned"}
+                          </div>
+                        )}
+                        {user.role === "department_manager" && (
+                          <div className="text-xs text-slate-500 mt-1">
+                            {getDepartmentNames(user.managedDepartments as string[] | undefined) || "No departments assigned"}
                           </div>
                         )}
                       </div>
@@ -448,6 +473,11 @@ function UsersContent() {
                 {user.role === "warehouse_manager" && (
                   <div className="text-xs text-slate-500 mb-3">
                     Locations: {getLocationNames(user.managedLocationIds as Id<"locations">[] | undefined) || "None assigned"}
+                  </div>
+                )}
+                {user.role === "department_manager" && (
+                  <div className="text-xs text-slate-500 mb-3">
+                    Departments: {getDepartmentNames(user.managedDepartments as string[] | undefined) || "None assigned"}
                   </div>
                 )}
 
@@ -636,6 +666,43 @@ function UsersContent() {
                   {editForm.managedLocationIds.length === 0 && (
                     <p className="text-amber-400 text-xs mt-2">
                       No locations selected. This user won&apos;t be able to access shift planning.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Department Assignment for Department Managers */}
+              {editForm.role === "department_manager" && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-2">
+                    Assigned Departments
+                  </label>
+                  <p className="text-xs text-slate-500 mb-3">
+                    Select which departments this manager is responsible for
+                  </p>
+                  <div className="space-y-2 max-h-48 overflow-y-auto bg-slate-900/50 rounded-lg p-3 border border-slate-700">
+                    {departments.length > 0 ? (
+                      departments.map((department) => (
+                        <label
+                          key={department}
+                          className="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-slate-800 transition-colors"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={editForm.managedDepartments.includes(department)}
+                            onChange={() => toggleDepartmentAssignment(department)}
+                            className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-cyan-500"
+                          />
+                          <span className="text-white">{department}</span>
+                        </label>
+                      ))
+                    ) : (
+                      <p className="text-slate-500 text-sm text-center py-4">No departments available. Add personnel first.</p>
+                    )}
+                  </div>
+                  {editForm.managedDepartments.length === 0 && departments.length > 0 && (
+                    <p className="text-amber-400 text-xs mt-2">
+                      No departments selected. This user won&apos;t see any shifts in the department portal.
                     </p>
                   )}
                 </div>

@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Protected from "./protected";
 import Sidebar, { MobileHeader } from "@/components/Sidebar";
@@ -25,14 +27,36 @@ interface WebsiteMessage {
 function DashboardContent() {
   const { user } = useAuth();
   const { theme } = useTheme();
+  const router = useRouter();
   const isDark = theme === "dark";
-  const projects = useQuery(api.projects.getAll, {});
-  const applications = useQuery(api.applications.getRecent);
-  const upcomingInterviews = useQuery(api.applications.getUpcomingInterviews);
-  const hiringAnalytics = useQuery(api.applications.getHiringAnalytics);
-  const contactMessages = useQuery(api.contactMessages.getRecent);
-  const dealerInquiries = useQuery(api.dealerInquiries.getRecent);
-  const pendingTenureCheckIns = useQuery(api.personnel.getPendingTenureCheckIns);
+
+  // Redirect department managers to their portal
+  const isDepartmentManager = user?.role === "department_manager";
+  useEffect(() => {
+    if (isDepartmentManager) {
+      router.replace("/department-portal");
+    }
+  }, [isDepartmentManager, router]);
+
+  const projects = useQuery(api.projects.getAll, isDepartmentManager ? "skip" : {});
+  const applications = useQuery(api.applications.getRecent, isDepartmentManager ? "skip" : undefined);
+  const upcomingInterviews = useQuery(api.applications.getUpcomingInterviews, isDepartmentManager ? "skip" : undefined);
+  const hiringAnalytics = useQuery(api.applications.getHiringAnalytics, isDepartmentManager ? "skip" : undefined);
+  const contactMessages = useQuery(api.contactMessages.getRecent, isDepartmentManager ? "skip" : undefined);
+  const dealerInquiries = useQuery(api.dealerInquiries.getRecent, isDepartmentManager ? "skip" : undefined);
+  const pendingTenureCheckIns = useQuery(api.personnel.getPendingTenureCheckIns, isDepartmentManager ? "skip" : undefined);
+
+  // Show loading while redirecting
+  if (isDepartmentManager) {
+    return (
+      <div className={`flex h-screen items-center justify-center ${isDark ? "bg-slate-900" : "bg-[#f2f2f7]"}`}>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500 mx-auto mb-4"></div>
+          <p className={isDark ? "text-slate-400" : "text-gray-500"}>Redirecting to your portal...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Combine and sort website messages
   const websiteMessages: WebsiteMessage[] = [
