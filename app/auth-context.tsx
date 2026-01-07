@@ -5,7 +5,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 
-export type UserRole = "super_admin" | "admin" | "department_manager" | "warehouse_manager" | "member" | "employee";
+export type UserRole = "super_admin" | "admin" | "warehouse_director" | "warehouse_manager" | "department_manager" | "member" | "employee";
 
 export interface User {
   _id: Id<"users">;
@@ -14,6 +14,8 @@ export interface User {
   role: UserRole;
   isActive: boolean;
   forcePasswordChange: boolean;
+  managedDepartments?: string[];
+  managedLocationIds?: Id<"locations">[];
 }
 
 interface AuthContextType {
@@ -41,6 +43,11 @@ interface AuthContextType {
   canManageCallOffs: boolean; // View and acknowledge call-offs
   canManageAnnouncements: boolean; // Create/edit announcements
   canModerateChat: boolean; // Moderate chat messages
+  // Shift planning role-based permissions
+  canViewAllShifts: boolean; // Can see all locations (warehouse_director and above)
+  canAccessDepartmentPortal: boolean; // Department manager portal access
+  // Helper to get accessible location IDs for warehouse_manager
+  getAccessibleLocationIds: () => Id<"locations">[] | "all";
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -133,6 +140,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         role: userData.role as UserRole,
         isActive: userData.isActive,
         forcePasswordChange: userData.forcePasswordChange,
+        managedDepartments: userData.managedDepartments,
+        managedLocationIds: userData.managedLocationIds,
       }
     : null;
 
@@ -166,20 +175,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user?.role === "department_manager" ||
     user?.role === "warehouse_manager";
 
-  // Edit shifts: super_admin, admin, department_manager, warehouse_manager
+  // Edit shifts: super_admin, admin, warehouse_director, warehouse_manager
   const canEditShifts =
     user?.role === "super_admin" ||
     user?.role === "admin" ||
-    user?.role === "department_manager" ||
+    user?.role === "warehouse_director" ||
     user?.role === "warehouse_manager";
 
-  // View shifts: everyone except viewer
+  // View shifts: everyone except viewer (department_manager uses portal)
   const canViewShifts =
     user?.role === "super_admin" ||
     user?.role === "admin" ||
-    user?.role === "department_manager" ||
+    user?.role === "warehouse_director" ||
     user?.role === "warehouse_manager" ||
     user?.role === "member";
+
+  // Can view ALL locations (warehouse_director and above)
+  const canViewAllShifts =
+    user?.role === "super_admin" ||
+    user?.role === "admin" ||
+    user?.role === "warehouse_director";
+
+  // Department manager portal access (read-only view of their department)
+  const canAccessDepartmentPortal =
+    user?.role === "department_manager";
+
+  // Helper to get accessible location IDs for warehouse_manager
+  const getAccessibleLocationIds = (): Id<"locations">[] | "all" => {
+    if (canViewAllShifts) {
+      return "all";
+    }
+    if (user?.role === "warehouse_manager") {
+      return user.managedLocationIds || [];
+    }
+    return [];
+  };
 
   // Super admin and warehouse manager - can delete write-ups and attendance records
   const canDeleteRecords =
@@ -237,6 +267,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         canManageCallOffs,
         canManageAnnouncements,
         canModerateChat,
+        canViewAllShifts,
+        canAccessDepartmentPortal,
+        getAccessibleLocationIds,
       }}
     >
       {children}

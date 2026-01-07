@@ -12,12 +12,14 @@ function SettingsContent() {
   const { user, canManageUsers } = useAuth();
   const { theme, setTheme } = useTheme();
   const users = useQuery(api.auth.getAllUsers);
+  const locations = useQuery(api.locations.list);
   const changePassword = useMutation(api.auth.changePassword);
   const createUser = useMutation(api.auth.createUser);
+  const updateLocation = useMutation(api.locations.update);
 
   const isDark = theme === "dark";
 
-  const [activeTab, setActiveTab] = useState<"profile" | "users" | "security">(
+  const [activeTab, setActiveTab] = useState<"profile" | "users" | "security" | "locations">(
     "profile"
   );
 
@@ -39,6 +41,16 @@ function SettingsContent() {
     role: "member",
   });
   const [newUserError, setNewUserError] = useState("");
+
+  // Location editing state
+  const [editingLocationId, setEditingLocationId] = useState<string | null>(null);
+  const [locationForm, setLocationForm] = useState({
+    warehouseManagerName: "",
+    warehouseManagerPhone: "",
+    warehouseManagerEmail: "",
+  });
+  const [locationSaving, setLocationSaving] = useState(false);
+  const [locationSuccess, setLocationSuccess] = useState<string | null>(null);
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,6 +119,46 @@ function SettingsContent() {
     }
   };
 
+  const handleEditLocation = (location: { _id: string; warehouseManagerName?: string; warehouseManagerPhone?: string; warehouseManagerEmail?: string }) => {
+    setEditingLocationId(location._id);
+    setLocationForm({
+      warehouseManagerName: location.warehouseManagerName || "",
+      warehouseManagerPhone: location.warehouseManagerPhone || "",
+      warehouseManagerEmail: location.warehouseManagerEmail || "",
+    });
+    setLocationSuccess(null);
+  };
+
+  const handleSaveLocation = async () => {
+    if (!editingLocationId) return;
+    setLocationSaving(true);
+    setLocationSuccess(null);
+
+    try {
+      await updateLocation({
+        id: editingLocationId as Parameters<typeof updateLocation>[0]["id"],
+        warehouseManagerName: locationForm.warehouseManagerName || undefined,
+        warehouseManagerPhone: locationForm.warehouseManagerPhone || undefined,
+        warehouseManagerEmail: locationForm.warehouseManagerEmail || undefined,
+      });
+      setLocationSuccess(editingLocationId);
+      setEditingLocationId(null);
+    } catch (error) {
+      console.error("Failed to update location:", error);
+    } finally {
+      setLocationSaving(false);
+    }
+  };
+
+  const handleCancelEditLocation = () => {
+    setEditingLocationId(null);
+    setLocationForm({
+      warehouseManagerName: "",
+      warehouseManagerPhone: "",
+      warehouseManagerEmail: "",
+    });
+  };
+
   return (
     <div className={`flex h-screen ${isDark ? "bg-slate-900" : "bg-gray-50"}`}>
       <Sidebar />
@@ -152,20 +204,36 @@ function SettingsContent() {
               Security
             </button>
             {canManageUsers && (
-              <button
-                onClick={() => setActiveTab("users")}
-                className={`px-4 py-2 font-medium rounded-lg transition-colors ${
-                  activeTab === "users"
-                    ? isDark
-                      ? "bg-cyan-500/20 text-cyan-400"
-                      : "bg-blue-50 text-blue-600"
-                    : isDark
-                      ? "text-slate-400 hover:text-white"
-                      : "text-gray-500 hover:text-gray-900"
-                }`}
-              >
-                Users
-              </button>
+              <>
+                <button
+                  onClick={() => setActiveTab("users")}
+                  className={`px-4 py-2 font-medium rounded-lg transition-colors ${
+                    activeTab === "users"
+                      ? isDark
+                        ? "bg-cyan-500/20 text-cyan-400"
+                        : "bg-blue-50 text-blue-600"
+                      : isDark
+                        ? "text-slate-400 hover:text-white"
+                        : "text-gray-500 hover:text-gray-900"
+                  }`}
+                >
+                  Users
+                </button>
+                <button
+                  onClick={() => setActiveTab("locations")}
+                  className={`px-4 py-2 font-medium rounded-lg transition-colors ${
+                    activeTab === "locations"
+                      ? isDark
+                        ? "bg-cyan-500/20 text-cyan-400"
+                        : "bg-blue-50 text-blue-600"
+                      : isDark
+                        ? "text-slate-400 hover:text-white"
+                        : "text-gray-500 hover:text-gray-900"
+                  }`}
+                >
+                  Locations
+                </button>
+              </>
             )}
           </div>
 
@@ -619,6 +687,201 @@ function SettingsContent() {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Locations Tab */}
+          {activeTab === "locations" && canManageUsers && (
+            <div className="max-w-4xl">
+              <div className="flex items-center justify-between gap-4 mb-6">
+                <div>
+                  <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                    Location Settings
+                  </h2>
+                  <p className={`text-sm mt-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    Configure warehouse manager contact info for each location
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                {locations?.map((location) => (
+                  <div
+                    key={location._id}
+                    className={`border rounded-xl p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}
+                  >
+                    <div className="flex items-start justify-between gap-4 mb-4">
+                      <div>
+                        <h3 className={`font-semibold text-lg ${isDark ? "text-white" : "text-gray-900"}`}>
+                          {location.name}
+                        </h3>
+                        {location.address && (
+                          <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                            {location.address}
+                            {location.city && `, ${location.city}`}
+                            {location.state && `, ${location.state}`}
+                            {location.zipCode && ` ${location.zipCode}`}
+                          </p>
+                        )}
+                      </div>
+                      <span
+                        className={`px-2 py-1 text-xs font-medium rounded ${
+                          location.isActive
+                            ? "bg-green-500/20 text-green-400"
+                            : "bg-red-500/20 text-red-400"
+                        }`}
+                      >
+                        {location.isActive ? "Active" : "Inactive"}
+                      </span>
+                    </div>
+
+                    {/* Success message */}
+                    {locationSuccess === location._id && (
+                      <div className="mb-4 bg-green-500/10 border border-green-500/30 text-green-400 px-4 py-3 rounded-lg text-sm">
+                        Warehouse manager info saved successfully
+                      </div>
+                    )}
+
+                    {editingLocationId === location._id ? (
+                      /* Edit Mode */
+                      <div className="space-y-4">
+                        <div className={`p-4 rounded-lg ${isDark ? "bg-slate-700/50" : "bg-gray-50"}`}>
+                          <h4 className={`text-sm font-medium mb-4 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                            Warehouse Manager
+                          </h4>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                              <label className={`block text-xs font-medium mb-1.5 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                                Name
+                              </label>
+                              <input
+                                type="text"
+                                value={locationForm.warehouseManagerName}
+                                onChange={(e) =>
+                                  setLocationForm({ ...locationForm, warehouseManagerName: e.target.value })
+                                }
+                                placeholder="John Smith"
+                                className={`w-full px-3 py-2 border rounded-lg focus:outline-none text-sm ${
+                                  isDark
+                                    ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500 placeholder-slate-500"
+                                    : "bg-white border-gray-300 text-gray-900 focus:border-blue-500 placeholder-gray-400"
+                                }`}
+                              />
+                            </div>
+                            <div>
+                              <label className={`block text-xs font-medium mb-1.5 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                                Phone
+                              </label>
+                              <input
+                                type="tel"
+                                value={locationForm.warehouseManagerPhone}
+                                onChange={(e) =>
+                                  setLocationForm({ ...locationForm, warehouseManagerPhone: e.target.value })
+                                }
+                                placeholder="(555) 123-4567"
+                                className={`w-full px-3 py-2 border rounded-lg focus:outline-none text-sm ${
+                                  isDark
+                                    ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500 placeholder-slate-500"
+                                    : "bg-white border-gray-300 text-gray-900 focus:border-blue-500 placeholder-gray-400"
+                                }`}
+                              />
+                            </div>
+                            <div>
+                              <label className={`block text-xs font-medium mb-1.5 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                                Email
+                              </label>
+                              <input
+                                type="email"
+                                value={locationForm.warehouseManagerEmail}
+                                onChange={(e) =>
+                                  setLocationForm({ ...locationForm, warehouseManagerEmail: e.target.value })
+                                }
+                                placeholder="jsmith@company.com"
+                                className={`w-full px-3 py-2 border rounded-lg focus:outline-none text-sm ${
+                                  isDark
+                                    ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500 placeholder-slate-500"
+                                    : "bg-white border-gray-300 text-gray-900 focus:border-blue-500 placeholder-gray-400"
+                                }`}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex gap-3">
+                          <button
+                            onClick={handleCancelEditLocation}
+                            className={`px-4 py-2 font-medium rounded-lg transition-colors text-sm ${
+                              isDark
+                                ? "bg-slate-700 text-white hover:bg-slate-600"
+                                : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                            }`}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={handleSaveLocation}
+                            disabled={locationSaving}
+                            className={`px-4 py-2 font-medium rounded-lg transition-colors text-sm disabled:opacity-50 ${
+                              isDark
+                                ? "bg-cyan-500 text-white hover:bg-cyan-600"
+                                : "bg-blue-600 text-white hover:bg-blue-700"
+                            }`}
+                          >
+                            {locationSaving ? "Saving..." : "Save Changes"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* View Mode */
+                      <div>
+                        <div className={`p-4 rounded-lg ${isDark ? "bg-slate-700/50" : "bg-gray-50"}`}>
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className={`text-sm font-medium ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                              Warehouse Manager
+                            </h4>
+                            <button
+                              onClick={() => handleEditLocation(location)}
+                              className={`text-sm font-medium transition-colors ${
+                                isDark ? "text-cyan-400 hover:text-cyan-300" : "text-blue-600 hover:text-blue-700"
+                              }`}
+                            >
+                              Edit
+                            </button>
+                          </div>
+                          {location.warehouseManagerName ? (
+                            <div className="space-y-1">
+                              <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                                {location.warehouseManagerName}
+                              </p>
+                              <div className="flex flex-wrap gap-4 text-sm">
+                                {location.warehouseManagerPhone && (
+                                  <span className={isDark ? "text-slate-400" : "text-gray-500"}>
+                                    Phone: {location.warehouseManagerPhone}
+                                  </span>
+                                )}
+                                {location.warehouseManagerEmail && (
+                                  <span className={isDark ? "text-slate-400" : "text-gray-500"}>
+                                    Email: {location.warehouseManagerEmail}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            <p className={`text-sm italic ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                              No warehouse manager assigned
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {(!locations || locations.length === 0) && (
+                  <div className={`text-center py-12 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                    <p>No locations found</p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

@@ -237,9 +237,31 @@ export const updateScanner = mutation({
     purchaseDate: v.optional(v.string()),
     notes: v.optional(v.string()),
     conditionNotes: v.optional(v.string()),
+    userId: v.optional(v.id("users")), // Who made the change (for PIN tracking)
   },
   handler: async (ctx, args) => {
-    const { id, ...updates } = args;
+    const { id, userId, ...updates } = args;
+    const now = Date.now();
+
+    // Get current scanner to check for PIN change
+    const currentScanner = await ctx.db.get(id);
+    if (!currentScanner) {
+      throw new Error("Scanner not found");
+    }
+
+    // Check if PIN is being changed and log it
+    if (updates.pin !== undefined && updates.pin !== currentScanner.pin && userId) {
+      await ctx.db.insert("equipmentHistory", {
+        equipmentType: "scanner",
+        equipmentId: id,
+        action: "pin_change",
+        previousStatus: currentScanner.status,
+        newStatus: currentScanner.status,
+        performedBy: userId,
+        notes: `PIN changed from "${currentScanner.pin || "(none)"}" to "${updates.pin || "(none)"}"`,
+        createdAt: now,
+      });
+    }
 
     // Filter out undefined values
     const cleanUpdates: Record<string, unknown> = {};
@@ -251,7 +273,7 @@ export const updateScanner = mutation({
 
     return await ctx.db.patch(id, {
       ...cleanUpdates,
-      updatedAt: Date.now(),
+      updatedAt: now,
     });
   },
 });
@@ -406,9 +428,31 @@ export const updatePicker = mutation({
     purchaseDate: v.optional(v.string()),
     notes: v.optional(v.string()),
     conditionNotes: v.optional(v.string()),
+    userId: v.optional(v.id("users")), // Who made the change (for PIN tracking)
   },
   handler: async (ctx, args) => {
-    const { id, ...updates } = args;
+    const { id, userId, ...updates } = args;
+    const now = Date.now();
+
+    // Get current picker to check for PIN change
+    const currentPicker = await ctx.db.get(id);
+    if (!currentPicker) {
+      throw new Error("Picker not found");
+    }
+
+    // Check if PIN is being changed and log it
+    if (updates.pin !== undefined && updates.pin !== currentPicker.pin && userId) {
+      await ctx.db.insert("equipmentHistory", {
+        equipmentType: "picker",
+        equipmentId: id,
+        action: "pin_change",
+        previousStatus: currentPicker.status,
+        newStatus: currentPicker.status,
+        performedBy: userId,
+        notes: `PIN changed from "${currentPicker.pin || "(none)"}" to "${updates.pin || "(none)"}"`,
+        createdAt: now,
+      });
+    }
 
     // Filter out undefined values
     const cleanUpdates: Record<string, unknown> = {};
@@ -420,7 +464,7 @@ export const updatePicker = mutation({
 
     return await ctx.db.patch(id, {
       ...cleanUpdates,
-      updatedAt: Date.now(),
+      updatedAt: now,
     });
   },
 });

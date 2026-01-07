@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import Protected from "../protected";
 import Sidebar, { MobileHeader } from "@/components/Sidebar";
 import { useQuery, useMutation } from "convex/react";
@@ -8,6 +8,11 @@ import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { useTheme } from "../theme-context";
 import { useAuth } from "../auth-context";
+
+// Generate unique ID for tasks
+function generateId(): string {
+  return Math.random().toString(36).substring(2, 15);
+}
 
 function formatDate(date: Date): string {
   return date.toISOString().split("T")[0];
@@ -34,7 +39,7 @@ interface DepartmentShift {
 function ShiftsContent() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
-  const { user, canViewShifts, canEditShifts } = useAuth();
+  const { user, canViewShifts, canEditShifts, canViewAllShifts, getAccessibleLocationIds } = useAuth();
 
   const [selectedDate, setSelectedDate] = useState(() => formatDate(new Date()));
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -42,7 +47,25 @@ function ShiftsContent() {
   const [selectedDepartment, setSelectedDepartment] = useState<DepartmentShift | null>(null);
   const [newDepartmentName, setNewDepartmentName] = useState("");
   const [isPrintMode, setIsPrintMode] = useState(false);
+  const [printDepartment, setPrintDepartment] = useState<string | null>(null); // null = all departments
   const [draggedPerson, setDraggedPerson] = useState<{ personnelId: Id<"personnel">; name: string; fromDepartment: string; isLead?: boolean } | null>(null);
+
+  // Template states
+  const [showTemplateDropdown, setShowTemplateDropdown] = useState(false);
+  const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false);
+  const [newTemplateName, setNewTemplateName] = useState("");
+  const [newTemplateDescription, setNewTemplateDescription] = useState("");
+  const [showPrintDropdown, setShowPrintDropdown] = useState(false);
+
+  // Daily task states
+  const [newTaskTexts, setNewTaskTexts] = useState<Record<string, string>>({});
+
+  // Location state
+  const [selectedLocationId, setSelectedLocationId] = useState<Id<"locations"> | null>(null);
+
+  // Refs for click outside
+  const templateDropdownRef = useRef<HTMLDivElement>(null);
+  const printDropdownRef = useRef<HTMLDivElement>(null);
 
   // Default departments
   const DEFAULT_DEPARTMENTS = [
@@ -60,6 +83,22 @@ function ShiftsContent() {
   // Queries
   const shifts = useQuery(api.shifts.listByDate, { date: selectedDate }) || [];
   const activePersonnel = useQuery(api.personnel.list, { status: "active" }) || [];
+  const locations = useQuery(api.locations.list) || [];
+  const templates = useQuery(api.shiftTemplates.list, selectedLocationId ? { locationId: selectedLocationId } : {}) || [];
+  const dailyTasks = useQuery(api.shifts.getDailyTasksByDate, { date: selectedDate }) || {};
+
+  // Get the selected location's warehouse manager info
+  const selectedLocation = useMemo(() => {
+    if (!selectedLocationId) return null;
+    return locations.find(l => l._id === selectedLocationId) || null;
+  }, [locations, selectedLocationId]);
+
+  // Filter locations based on user role
+  const accessibleLocations = useMemo(() => {
+    const accessible = getAccessibleLocationIds();
+    if (accessible === "all") return locations;
+    return locations.filter(l => accessible.includes(l._id));
+  }, [locations, getAccessibleLocationIds]);
 
   // Get all personnel not yet assigned to any shift today
   const unassignedPersonnel = useMemo(() => {
@@ -79,6 +118,16 @@ function ShiftsContent() {
   const setLead = useMutation(api.shifts.setLead);
   const removeLead = useMutation(api.shifts.removeLead);
 
+  // Template mutations
+  const saveTemplate = useMutation(api.shiftTemplates.saveFromDate);
+  const applyTemplate = useMutation(api.shiftTemplates.applyToDate);
+  const deleteTemplate = useMutation(api.shiftTemplates.remove);
+
+  // Daily task mutations
+  const addDailyTask = useMutation(api.shifts.addDailyTask);
+  const removeDailyTask = useMutation(api.shifts.removeDailyTask);
+  const toggleDailyTask = useMutation(api.shifts.toggleDailyTaskComplete);
+
   // Navigate dates
   const goToPreviousDay = () => {
     const newDate = new Date(currentDate);
@@ -94,6 +143,110 @@ function ShiftsContent() {
 
   const goToToday = () => {
     setSelectedDate(formatDate(new Date()));
+  };
+
+  // Template handlers
+  const handleSaveAsTemplate = async () => {
+    if (!user || !newTemplateName.trim()) return;
+    try {
+      await saveTemplate({
+        name: newTemplateName.trim(),
+        description: newTemplateDescription.trim() || undefined,
+        date: selectedDate,
+        locationId: selectedLocationId || undefined,
+        userId: user._id as Id<"users">,
+      });
+      setShowSaveTemplateModal(false);
+      setNewTemplateName("");
+      setNewTemplateDescription("");
+    } catch (error) {
+      console.error("Failed to save template:", error);
+      alert("Failed to save template. Make sure there are shifts for today.");
+    }
+  };
+
+  const handleApplyTemplate = async (templateId: Id<"shiftTemplates">) => {
+    if (!user) return;
+    const clearExisting = shifts.length > 0 ? confirm("Replace existing shifts for this day?") : true;
+    if (!clearExisting && shifts.length > 0) return;
+
+    try {
+      await applyTemplate({
+        templateId,
+        targetDate: selectedDate,
+        userId: user._id as Id<"users">,
+        clearExisting: true,
+      });
+      setShowTemplateDropdown(false);
+    } catch (error) {
+      console.error("Failed to apply template:", error);
+      alert("Failed to apply template");
+    }
+  };
+
+  const handleDeleteTemplate = async (templateId: Id<"shiftTemplates">) => {
+    if (!confirm("Delete this template?")) return;
+    try {
+      await deleteTemplate({ templateId });
+    } catch (error) {
+      console.error("Failed to delete template:", error);
+    }
+  };
+
+  // Daily task handlers
+  const handleAddTask = async (department: string) => {
+    if (!user) return;
+    const text = newTaskTexts[department]?.trim();
+    if (!text) return;
+
+    try {
+      await addDailyTask({
+        date: selectedDate,
+        department,
+        taskText: text,
+        locationId: selectedLocationId || undefined,
+        userId: user._id as Id<"users">,
+      });
+      setNewTaskTexts(prev => ({ ...prev, [department]: "" }));
+    } catch (error) {
+      console.error("Failed to add task:", error);
+    }
+  };
+
+  const handleRemoveTask = async (department: string, taskId: string) => {
+    try {
+      await removeDailyTask({
+        date: selectedDate,
+        department,
+        taskId,
+      });
+    } catch (error) {
+      console.error("Failed to remove task:", error);
+    }
+  };
+
+  const handleToggleTask = async (department: string, taskId: string) => {
+    try {
+      await toggleDailyTask({
+        date: selectedDate,
+        department,
+        taskId,
+      });
+    } catch (error) {
+      console.error("Failed to toggle task:", error);
+    }
+  };
+
+  // Print handler for specific department
+  const handlePrintDepartment = (department: string | null) => {
+    setPrintDepartment(department);
+    setIsPrintMode(true);
+    setShowPrintDropdown(false);
+    setTimeout(() => {
+      window.print();
+      setIsPrintMode(false);
+      setPrintDepartment(null);
+    }, 100);
   };
 
   // Handlers
@@ -263,14 +416,6 @@ function ShiftsContent() {
     }
   };
 
-  const handlePrint = () => {
-    setIsPrintMode(true);
-    setTimeout(() => {
-      window.print();
-      setIsPrintMode(false);
-    }, 100);
-  };
-
   // Permission check
   if (!canViewShifts) {
     return (
@@ -290,6 +435,11 @@ function ShiftsContent() {
     );
   }
 
+  // Get shifts to print (all or single department)
+  const shiftsToPrint = printDepartment
+    ? shifts.filter(s => s.department === printDepartment)
+    : shifts;
+
   // Print mode layout
   if (isPrintMode) {
     return (
@@ -300,34 +450,85 @@ function ShiftsContent() {
             .no-print { display: none !important; }
           }
         `}</style>
-        <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Daily Shift Schedule</h1>
+        {/* Header with warehouse manager info */}
+        <div className="text-center mb-6 border-b-2 border-gray-300 pb-4">
+          <h1 className="text-2xl font-bold text-gray-900">
+            {printDepartment ? `${printDepartment} Department` : "Daily Shift Schedule"}
+          </h1>
           <p className="text-lg text-gray-600">{formatDisplayDate(currentDate)}</p>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          {shifts.map((shift) => (
-            <div key={shift._id} className="border border-gray-300 rounded-lg p-4">
-              <h3 className="font-bold text-lg border-b border-gray-300 pb-2 mb-3">
-                {shift.name || shift.department || "Unnamed Department"}
-              </h3>
-              {shift.leadName && (
-                <div className="mb-2 pb-2 border-b border-gray-200">
-                  <span className="text-xs font-medium text-gray-500 uppercase">Lead:</span>
-                  <p className="font-semibold text-gray-800">{shift.leadName}</p>
-                </div>
+          {selectedLocation && (
+            <div className="mt-3 text-sm text-gray-700">
+              {selectedLocation.warehouseManagerName && (
+                <p className="font-medium">
+                  Warehouse Manager: {selectedLocation.warehouseManagerName}
+                </p>
               )}
-              <ul className="space-y-1">
-                {shift.assignedNames.map((name, idx) => (
-                  <li key={idx} className="text-gray-700">
-                    {name}
-                  </li>
-                ))}
-                {shift.assignedNames.length === 0 && !shift.leadName && (
-                  <li className="text-gray-400 italic">No staff assigned</li>
+              <div className="flex justify-center gap-4 mt-1">
+                {selectedLocation.warehouseManagerPhone && (
+                  <span>Phone: {selectedLocation.warehouseManagerPhone}</span>
                 )}
-              </ul>
+                {selectedLocation.warehouseManagerEmail && (
+                  <span>Email: {selectedLocation.warehouseManagerEmail}</span>
+                )}
+              </div>
             </div>
-          ))}
+          )}
+        </div>
+
+        {/* Departments grid or single department */}
+        <div className={printDepartment ? "" : "grid grid-cols-2 md:grid-cols-3 gap-4"}>
+          {shiftsToPrint.map((shift) => {
+            const deptTasks = dailyTasks[shift.department] || [];
+            return (
+              <div key={shift._id} className={`border border-gray-300 rounded-lg p-4 ${printDepartment ? "max-w-lg mx-auto" : ""}`}>
+                <h3 className="font-bold text-lg border-b border-gray-300 pb-2 mb-3">
+                  {shift.name || shift.department || "Unnamed Department"}
+                </h3>
+
+                {/* Lead */}
+                {shift.leadName && (
+                  <div className="mb-3 pb-2 border-b border-gray-200">
+                    <span className="text-xs font-medium text-gray-500 uppercase">Lead:</span>
+                    <p className="font-semibold text-gray-800 flex items-center gap-1">
+                      <span className="text-amber-500">★</span> {shift.leadName}
+                    </p>
+                  </div>
+                )}
+
+                {/* Daily Tasks/Goals */}
+                {deptTasks.length > 0 && (
+                  <div className="mb-3 pb-2 border-b border-gray-200">
+                    <span className="text-xs font-medium text-gray-500 uppercase">Daily Goals:</span>
+                    <ul className="mt-1 space-y-1">
+                      {deptTasks.map((task: { id: string; text: string; completed?: boolean }) => (
+                        <li key={task.id} className="flex items-start gap-2 text-sm text-gray-700">
+                          <span className="text-gray-400">{task.completed ? "☑" : "☐"}</span>
+                          <span className={task.completed ? "line-through text-gray-400" : ""}>
+                            {task.text}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Crew list */}
+                <div>
+                  <span className="text-xs font-medium text-gray-500 uppercase">Crew:</span>
+                  <ul className="mt-1 space-y-1">
+                    {shift.assignedNames.map((name, idx) => (
+                      <li key={idx} className="text-gray-700">
+                        {name}
+                      </li>
+                    ))}
+                    {shift.assignedNames.length === 0 && !shift.leadName && (
+                      <li className="text-gray-400 italic">No staff assigned</li>
+                    )}
+                  </ul>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     );
@@ -351,19 +552,147 @@ function ShiftsContent() {
               </p>
             </div>
             <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-              <button
-                onClick={handlePrint}
-                className={`p-2 sm:px-4 sm:py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
-                  isDark
-                    ? "bg-slate-700 hover:bg-slate-600 text-white"
-                    : "bg-gray-100 hover:bg-gray-200 text-gray-900"
-                }`}
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                </svg>
-                <span className="hidden sm:inline">Print</span>
-              </button>
+              {/* Template Dropdown */}
+              {canEditShifts && (
+                <div className="relative" ref={templateDropdownRef}>
+                  <button
+                    onClick={() => setShowTemplateDropdown(!showTemplateDropdown)}
+                    className={`p-2 sm:px-4 sm:py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+                      isDark
+                        ? "bg-slate-700 hover:bg-slate-600 text-white"
+                        : "bg-gray-100 hover:bg-gray-200 text-gray-900"
+                    }`}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span className="hidden sm:inline">Templates</span>
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {showTemplateDropdown && (
+                    <div className={`absolute right-0 mt-2 w-64 rounded-lg shadow-lg border z-50 ${
+                      isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200"
+                    }`}>
+                      <div className={`p-2 border-b ${isDark ? "border-slate-700" : "border-gray-100"}`}>
+                        <p className={`text-xs font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                          Load Template
+                        </p>
+                      </div>
+                      <div className="max-h-48 overflow-y-auto">
+                        {templates.length === 0 ? (
+                          <p className={`p-3 text-sm ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                            No templates saved
+                          </p>
+                        ) : (
+                          templates.map((template) => (
+                            <div
+                              key={template._id}
+                              className={`flex items-center justify-between p-2 ${
+                                isDark ? "hover:bg-slate-700" : "hover:bg-gray-50"
+                              }`}
+                            >
+                              <button
+                                onClick={() => handleApplyTemplate(template._id)}
+                                className={`flex-1 text-left text-sm ${isDark ? "text-white" : "text-gray-900"}`}
+                              >
+                                {template.name}
+                                {template.description && (
+                                  <span className={`block text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                                    {template.description}
+                                  </span>
+                                )}
+                              </button>
+                              <button
+                                onClick={() => handleDeleteTemplate(template._id)}
+                                className={`p-1 rounded ${isDark ? "hover:bg-red-500/20 text-slate-500 hover:text-red-400" : "hover:bg-red-50 text-gray-400 hover:text-red-500"}`}
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                      <div className={`p-2 border-t ${isDark ? "border-slate-700" : "border-gray-100"}`}>
+                        <button
+                          onClick={() => {
+                            setShowTemplateDropdown(false);
+                            setShowSaveTemplateModal(true);
+                          }}
+                          disabled={shifts.length === 0}
+                          className={`w-full text-left p-2 rounded text-sm font-medium transition-colors disabled:opacity-50 ${
+                            isDark
+                              ? "text-cyan-400 hover:bg-slate-700"
+                              : "text-blue-600 hover:bg-blue-50"
+                          }`}
+                        >
+                          + Save Current as Template
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Print Dropdown */}
+              <div className="relative" ref={printDropdownRef}>
+                <button
+                  onClick={() => setShowPrintDropdown(!showPrintDropdown)}
+                  className={`p-2 sm:px-4 sm:py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+                    isDark
+                      ? "bg-slate-700 hover:bg-slate-600 text-white"
+                      : "bg-gray-100 hover:bg-gray-200 text-gray-900"
+                  }`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                  </svg>
+                  <span className="hidden sm:inline">Print</span>
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {showPrintDropdown && (
+                  <div className={`absolute right-0 mt-2 w-48 rounded-lg shadow-lg border z-50 ${
+                    isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200"
+                  }`}>
+                    <button
+                      onClick={() => handlePrintDepartment(null)}
+                      className={`w-full text-left p-3 text-sm font-medium border-b ${
+                        isDark
+                          ? "text-white hover:bg-slate-700 border-slate-700"
+                          : "text-gray-900 hover:bg-gray-50 border-gray-100"
+                      }`}
+                    >
+                      Print All Departments
+                    </button>
+                    {shifts.length > 0 && (
+                      <div className={`border-t ${isDark ? "border-slate-700" : "border-gray-100"}`}>
+                        <p className={`px-3 py-2 text-xs font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                          Print Single Department
+                        </p>
+                        {shifts.map((shift) => (
+                          <button
+                            key={shift._id}
+                            onClick={() => handlePrintDepartment(shift.department)}
+                            className={`w-full text-left px-3 py-2 text-sm ${
+                              isDark
+                                ? "text-slate-300 hover:bg-slate-700"
+                                : "text-gray-700 hover:bg-gray-50"
+                            }`}
+                          >
+                            {shift.department}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {canEditShifts && (
                 <>
                   <button
@@ -450,6 +779,26 @@ function ShiftsContent() {
               <span className={`hidden sm:inline px-2 py-1 text-xs rounded-full ${isDark ? "bg-cyan-500/20 text-cyan-400" : "bg-blue-100 text-blue-600"}`}>
                 Today
               </span>
+            )}
+
+            {/* Location Selector */}
+            {accessibleLocations.length > 0 && (
+              <select
+                value={selectedLocationId || ""}
+                onChange={(e) => setSelectedLocationId(e.target.value ? e.target.value as Id<"locations"> : null)}
+                className={`ml-2 px-3 py-1.5 sm:py-2 rounded-lg text-sm focus:outline-none ${
+                  isDark
+                    ? "bg-slate-800 border border-slate-700 text-white"
+                    : "bg-white border border-gray-200 text-gray-900"
+                }`}
+              >
+                <option value="">All Locations</option>
+                {accessibleLocations.map((loc) => (
+                  <option key={loc._id} value={loc._id}>
+                    {loc.name}
+                  </option>
+                ))}
+              </select>
             )}
           </div>
 
@@ -556,6 +905,102 @@ function ShiftsContent() {
                       </div>
                     )}
                   </div>
+
+                  {/* Daily Tasks Section */}
+                  {(() => {
+                    const deptTasks = dailyTasks[shift.department] || [];
+                    return (
+                      <div className={`p-3 border-b ${isDark ? "border-slate-700" : "border-gray-200"}`}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <svg className={`w-4 h-4 ${isDark ? "text-green-400" : "text-green-500"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                          </svg>
+                          <span className={`text-xs font-medium ${isDark ? "text-green-400" : "text-green-600"}`}>
+                            Daily Goals
+                          </span>
+                        </div>
+
+                        {/* Task list */}
+                        <div className="space-y-1 mb-2">
+                          {deptTasks.map((task: { id: string; text: string; completed?: boolean }) => (
+                            <div
+                              key={task.id}
+                              className={`flex items-center gap-2 p-2 rounded-lg ${
+                                isDark ? "bg-slate-700/30" : "bg-gray-50"
+                              }`}
+                            >
+                              <button
+                                onClick={() => handleToggleTask(shift.department, task.id)}
+                                className={`flex-shrink-0 w-5 h-5 rounded border flex items-center justify-center ${
+                                  task.completed
+                                    ? isDark ? "bg-green-500 border-green-500" : "bg-green-500 border-green-500"
+                                    : isDark ? "border-slate-500" : "border-gray-300"
+                                }`}
+                              >
+                                {task.completed && (
+                                  <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                )}
+                              </button>
+                              <span className={`flex-1 text-sm ${
+                                task.completed
+                                  ? isDark ? "text-slate-500 line-through" : "text-gray-400 line-through"
+                                  : isDark ? "text-white" : "text-gray-900"
+                              }`}>
+                                {task.text}
+                              </span>
+                              {canEditShifts && (
+                                <button
+                                  onClick={() => handleRemoveTask(shift.department, task.id)}
+                                  className={`p-1 rounded hover:bg-red-500/20 ${isDark ? "text-slate-500 hover:text-red-400" : "text-gray-400 hover:text-red-500"}`}
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Add task input */}
+                        {canEditShifts && (
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={newTaskTexts[shift.department] || ""}
+                              onChange={(e) => setNewTaskTexts(prev => ({ ...prev, [shift.department]: e.target.value }))}
+                              onKeyDown={(e) => e.key === "Enter" && handleAddTask(shift.department)}
+                              placeholder="Add a task..."
+                              className={`flex-1 px-3 py-1.5 rounded-lg text-sm ${
+                                isDark
+                                  ? "bg-slate-700/50 border-slate-600 text-white placeholder-slate-500"
+                                  : "bg-white border-gray-200 text-gray-900 placeholder-gray-400"
+                              } border focus:outline-none focus:ring-1 focus:ring-green-500`}
+                            />
+                            <button
+                              onClick={() => handleAddTask(shift.department)}
+                              disabled={!newTaskTexts[shift.department]?.trim()}
+                              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
+                                isDark
+                                  ? "bg-green-500/20 text-green-400 hover:bg-green-500/30"
+                                  : "bg-green-50 text-green-600 hover:bg-green-100"
+                              }`}
+                            >
+                              +
+                            </button>
+                          </div>
+                        )}
+
+                        {deptTasks.length === 0 && !canEditShifts && (
+                          <p className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                            No tasks for today
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Personnel List */}
                   <div
@@ -807,6 +1252,83 @@ function ShiftsContent() {
                   className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-slate-700 hover:bg-slate-600 text-white" : "bg-gray-100 hover:bg-gray-200 text-gray-900"}`}
                 >
                   Done
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Save Template Modal */}
+        {showSaveTemplateModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className={`w-full max-w-md rounded-xl p-4 sm:p-6 ${isDark ? "bg-slate-800 border border-slate-700" : "bg-white border border-gray-200 shadow-xl"}`}>
+              <h2 className={`text-base sm:text-lg font-semibold mb-3 sm:mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
+                Save as Template
+              </h2>
+              <p className={`text-xs sm:text-sm mb-4 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                Save today&apos;s shift plan ({shifts.length} departments) as a reusable template
+              </p>
+              <div className="space-y-4">
+                <div>
+                  <label className={`block text-xs sm:text-sm font-medium mb-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    Template Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={newTemplateName}
+                    onChange={(e) => setNewTemplateName(e.target.value)}
+                    placeholder="e.g., Monday Standard, Weekend Crew"
+                    autoFocus
+                    onKeyDown={(e) => e.key === "Enter" && handleSaveAsTemplate()}
+                    className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg text-sm sm:text-base ${
+                      isDark
+                        ? "bg-slate-700 border-slate-600 text-white placeholder-slate-500"
+                        : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400"
+                    } border focus:outline-none focus:ring-2 focus:ring-cyan-500`}
+                  />
+                </div>
+                <div>
+                  <label className={`block text-xs sm:text-sm font-medium mb-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    Description (optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={newTemplateDescription}
+                    onChange={(e) => setNewTemplateDescription(e.target.value)}
+                    placeholder="e.g., Standard Monday schedule with full crew"
+                    className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg text-sm sm:text-base ${
+                      isDark
+                        ? "bg-slate-700 border-slate-600 text-white placeholder-slate-500"
+                        : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400"
+                    } border focus:outline-none focus:ring-2 focus:ring-cyan-500`}
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2 sm:gap-3 mt-4 sm:mt-6">
+                <button
+                  onClick={() => {
+                    setShowSaveTemplateModal(false);
+                    setNewTemplateName("");
+                    setNewTemplateDescription("");
+                  }}
+                  className={`flex-1 px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors text-sm sm:text-base ${
+                    isDark
+                      ? "bg-slate-700 hover:bg-slate-600 text-white"
+                      : "bg-gray-100 hover:bg-gray-200 text-gray-900"
+                  }`}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveAsTemplate}
+                  disabled={!newTemplateName.trim()}
+                  className={`flex-1 px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 text-sm sm:text-base ${
+                    isDark
+                      ? "bg-cyan-500 hover:bg-cyan-400 text-white"
+                      : "bg-blue-600 hover:bg-blue-700 text-white"
+                  }`}
+                >
+                  Save Template
                 </button>
               </div>
             </div>

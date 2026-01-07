@@ -7,9 +7,12 @@ export default defineSchema({
     email: v.string(),
     passwordHash: v.string(),
     name: v.string(),
-    role: v.string(), // "super_admin" | "admin" | "department_manager" | "warehouse_manager" | "member"
+    role: v.string(), // "super_admin" | "admin" | "warehouse_director" | "warehouse_manager" | "department_manager" | "member"
     isActive: v.boolean(),
     forcePasswordChange: v.boolean(),
+    // Role-specific fields
+    managedDepartments: v.optional(v.array(v.string())), // For department_manager - which departments they manage
+    managedLocationIds: v.optional(v.array(v.id("locations"))), // For warehouse_manager - which locations they manage
     createdAt: v.number(),
     lastLoginAt: v.optional(v.number()),
   }).index("by_email", ["email"]),
@@ -444,6 +447,44 @@ export default defineSchema({
     .index("by_department", ["department"])
     .index("by_date_department", ["date", "department"]),
 
+  // Shift Templates (save full day plans for reuse)
+  shiftTemplates: defineTable({
+    name: v.string(), // "Monday Standard", "Weekend Skeleton", etc.
+    description: v.optional(v.string()),
+    locationId: v.optional(v.id("locations")), // Optional location-specific template
+    departments: v.array(v.object({
+      name: v.string(), // "Shipping", "Receiving", etc.
+      position: v.string(),
+      startTime: v.string(),
+      endTime: v.string(),
+      requiredCount: v.number(),
+      assignedPersonnel: v.array(v.id("personnel")), // Full personnel saved in template
+      leadId: v.optional(v.id("personnel")),
+    })),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_location", ["locationId"])
+    .index("by_name", ["name"]),
+
+  // Daily Department Tasks (goals/tasks for each day - non-persistent)
+  shiftDailyTasks: defineTable({
+    date: v.string(), // YYYY-MM-DD
+    department: v.string(), // Department name
+    locationId: v.optional(v.id("locations")),
+    tasks: v.array(v.object({
+      id: v.string(), // UUID for each task
+      text: v.string(), // The task/goal text
+      completed: v.optional(v.boolean()), // Optional completion tracking
+    })),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_date", ["date"])
+    .index("by_date_department", ["date", "department"]),
+
   // Performance Reviews
   performanceReviews: defineTable({
     personnelId: v.id("personnel"),
@@ -520,6 +561,10 @@ export default defineSchema({
     zipCode: v.optional(v.string()),
     isActive: v.boolean(),
     managerId: v.optional(v.id("users")), // Manager responsible for this location
+    // Warehouse manager contact info (displayed on shift prints)
+    warehouseManagerName: v.optional(v.string()),
+    warehouseManagerPhone: v.optional(v.string()),
+    warehouseManagerEmail: v.optional(v.string()),
     notes: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),

@@ -94,6 +94,9 @@ export const update = mutation({
     zipCode: v.optional(v.string()),
     notes: v.optional(v.string()),
     isActive: v.optional(v.boolean()),
+    warehouseManagerName: v.optional(v.string()),
+    warehouseManagerPhone: v.optional(v.string()),
+    warehouseManagerEmail: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { id, ...updates } = args;

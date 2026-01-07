@@ -191,6 +191,7 @@ function EquipmentContent() {
             purchaseDate: formData.purchaseDate || undefined,
             notes: formData.notes || undefined,
             conditionNotes: formData.conditionNotes || undefined,
+            userId: user?._id, // For PIN change tracking
           });
         } else {
           await updatePicker({
@@ -203,6 +204,7 @@ function EquipmentContent() {
             purchaseDate: formData.purchaseDate || undefined,
             notes: formData.notes || undefined,
             conditionNotes: formData.conditionNotes || undefined,
+            userId: user?._id, // For PIN change tracking
           });
         }
       } else {

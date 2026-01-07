@@ -429,3 +429,218 @@ export const removeByDate = mutation({
     return shifts.length;
   },
 });
+
+// ============ DAILY TASKS ============
+
+// Get daily tasks for a date (optionally filter by department)
+export const getDailyTasks = query({
+  args: {
+    date: v.string(),
+    department: v.optional(v.string()),
+    locationId: v.optional(v.id("locations")),
+  },
+  handler: async (ctx, args) => {
+    if (args.department) {
+      // Get tasks for specific department
+      const tasks = await ctx.db
+        .query("shiftDailyTasks")
+        .withIndex("by_date_department", (q) =>
+          q.eq("date", args.date).eq("department", args.department!)
+        )
+        .first();
+      return tasks ? [tasks] : [];
+    } else {
+      // Get all tasks for the date
+      const tasks = await ctx.db
+        .query("shiftDailyTasks")
+        .withIndex("by_date", (q) => q.eq("date", args.date))
+        .collect();
+      return tasks;
+    }
+  },
+});
+
+// Get all daily tasks grouped by department for a date
+export const getDailyTasksByDate = query({
+  args: {
+    date: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const tasks = await ctx.db
+      .query("shiftDailyTasks")
+      .withIndex("by_date", (q) => q.eq("date", args.date))
+      .collect();
+
+    // Return as a map of department -> tasks
+    const tasksByDept: Record<string, { id: string; text: string; completed?: boolean }[]> = {};
+    for (const task of tasks) {
+      tasksByDept[task.department] = task.tasks;
+    }
+    return tasksByDept;
+  },
+});
+
+// Add a single task to a department for a date
+export const addDailyTask = mutation({
+  args: {
+    date: v.string(),
+    department: v.string(),
+    taskText: v.string(),
+    locationId: v.optional(v.id("locations")),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const taskId = `task_${now}_${Math.random().toString(36).substr(2, 9)}`;
+
+    // Check if record exists for this date/department
+    const existing = await ctx.db
+      .query("shiftDailyTasks")
+      .withIndex("by_date_department", (q) =>
+        q.eq("date", args.date).eq("department", args.department)
+      )
+      .first();
+
+    if (existing) {
+      // Add to existing tasks
+      await ctx.db.patch(existing._id, {
+        tasks: [...existing.tasks, { id: taskId, text: args.taskText }],
+        updatedAt: now,
+      });
+      return existing._id;
+    } else {
+      // Create new record
+      return await ctx.db.insert("shiftDailyTasks", {
+        date: args.date,
+        department: args.department,
+        locationId: args.locationId,
+        tasks: [{ id: taskId, text: args.taskText }],
+        createdBy: args.userId,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+  },
+});
+
+// Remove a task from a department
+export const removeDailyTask = mutation({
+  args: {
+    date: v.string(),
+    department: v.string(),
+    taskId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("shiftDailyTasks")
+      .withIndex("by_date_department", (q) =>
+        q.eq("date", args.date).eq("department", args.department)
+      )
+      .first();
+
+    if (!existing) {
+      throw new Error("No tasks found for this date/department");
+    }
+
+    const updatedTasks = existing.tasks.filter((t) => t.id !== args.taskId);
+
+    if (updatedTasks.length === 0) {
+      // Delete the entire record if no tasks left
+      await ctx.db.delete(existing._id);
+    } else {
+      await ctx.db.patch(existing._id, {
+        tasks: updatedTasks,
+        updatedAt: Date.now(),
+      });
+    }
+
+    return { success: true };
+  },
+});
+
+// Toggle task completion status
+export const toggleDailyTaskComplete = mutation({
+  args: {
+    date: v.string(),
+    department: v.string(),
+    taskId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("shiftDailyTasks")
+      .withIndex("by_date_department", (q) =>
+        q.eq("date", args.date).eq("department", args.department)
+      )
+      .first();
+
+    if (!existing) {
+      throw new Error("No tasks found for this date/department");
+    }
+
+    const updatedTasks = existing.tasks.map((t) => {
+      if (t.id === args.taskId) {
+        return { ...t, completed: !t.completed };
+      }
+      return t;
+    });
+
+    await ctx.db.patch(existing._id, {
+      tasks: updatedTasks,
+      updatedAt: Date.now(),
+    });
+
+    return { success: true };
+  },
+});
+
+// Set all tasks for a department (replace)
+export const setDailyTasks = mutation({
+  args: {
+    date: v.string(),
+    department: v.string(),
+    tasks: v.array(
+      v.object({
+        id: v.string(),
+        text: v.string(),
+        completed: v.optional(v.boolean()),
+      })
+    ),
+    locationId: v.optional(v.id("locations")),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+
+    const existing = await ctx.db
+      .query("shiftDailyTasks")
+      .withIndex("by_date_department", (q) =>
+        q.eq("date", args.date).eq("department", args.department)
+      )
+      .first();
+
+    if (existing) {
+      if (args.tasks.length === 0) {
+        // Delete if no tasks
+        await ctx.db.delete(existing._id);
+        return null;
+      }
+      await ctx.db.patch(existing._id, {
+        tasks: args.tasks,
+        updatedAt: now,
+      });
+      return existing._id;
+    } else if (args.tasks.length > 0) {
+      return await ctx.db.insert("shiftDailyTasks", {
+        date: args.date,
+        department: args.department,
+        locationId: args.locationId,
+        tasks: args.tasks,
+        createdBy: args.userId,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    return null;
+  },
+});
