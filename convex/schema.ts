@@ -438,6 +438,7 @@ export default defineSchema({
     endTime: v.string(), // HH:MM
     position: v.string(), // "Receiving", "Shipping", "Inventory", etc.
     department: v.string(),
+    locationId: v.optional(v.id("locations")), // Which location this shift is for
     requiredCount: v.number(), // How many people needed
     assignedPersonnel: v.array(v.id("personnel")),
     leadId: v.optional(v.id("personnel")), // Department lead for this shift
@@ -448,7 +449,9 @@ export default defineSchema({
   })
     .index("by_date", ["date"])
     .index("by_department", ["department"])
-    .index("by_date_department", ["date", "department"]),
+    .index("by_date_department", ["date", "department"])
+    .index("by_location", ["locationId"])
+    .index("by_date_location", ["date", "locationId"]),
 
   // Shift Templates (save full day plans for reuse)
   shiftTemplates: defineTable({

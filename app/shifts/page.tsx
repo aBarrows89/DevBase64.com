@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import Protected from "../protected";
 import Sidebar, { MobileHeader } from "@/components/Sidebar";
 import { useQuery, useMutation } from "convex/react";
@@ -80,8 +80,13 @@ function ShiftsContent() {
   const currentDate = useMemo(() => new Date(selectedDate + "T12:00:00"), [selectedDate]);
   const isToday = formatDate(new Date()) === selectedDate;
 
-  // Queries
-  const shifts = useQuery(api.shifts.listByDate, { date: selectedDate }) || [];
+  // Queries - filter shifts by selected location
+  const shifts = useQuery(
+    api.shifts.listByDate,
+    selectedLocationId
+      ? { date: selectedDate, locationId: selectedLocationId }
+      : { date: selectedDate }
+  ) || [];
   const activePersonnel = useQuery(api.personnel.list, { status: "active" }) || [];
   const locations = useQuery(api.locations.list) || [];
   const templates = useQuery(api.shiftTemplates.list, selectedLocationId ? { locationId: selectedLocationId } : {}) || [];
@@ -264,6 +269,7 @@ function ShiftsContent() {
       endTime: "23:59",
       position: "Staff",
       department: newDepartmentName.trim(),
+      locationId: selectedLocationId || undefined,
       requiredCount: 99,
       assignedPersonnel: [],
       createdBy: user._id as Id<"users">,
@@ -414,12 +420,20 @@ function ShiftsContent() {
         endTime: "23:59",
         position: "Staff",
         department: dept,
+        locationId: selectedLocationId || undefined,
         requiredCount: 99,
         assignedPersonnel: [],
         createdBy: user._id as Id<"users">,
       });
     }
   };
+
+  // Auto-select location for warehouse_manager with only one assigned location
+  useEffect(() => {
+    if (user?.role === "warehouse_manager" && accessibleLocations.length === 1 && !selectedLocationId) {
+      setSelectedLocationId(accessibleLocations[0]._id);
+    }
+  }, [user?.role, accessibleLocations, selectedLocationId]);
 
   // Permission check
   if (!canViewShifts) {
@@ -649,6 +663,26 @@ function ShiftsContent() {
               </p>
             </div>
             <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+              {/* Location Selector */}
+              {accessibleLocations.length > 0 && (
+                <select
+                  value={selectedLocationId || ""}
+                  onChange={(e) => setSelectedLocationId(e.target.value ? e.target.value as Id<"locations"> : null)}
+                  className={`px-3 py-2 rounded-lg font-medium text-sm transition-colors ${
+                    isDark
+                      ? "bg-slate-700 text-white border-slate-600"
+                      : "bg-gray-100 text-gray-900 border-gray-200"
+                  } border`}
+                >
+                  <option value="">All Locations</option>
+                  {accessibleLocations.map((loc) => (
+                    <option key={loc._id} value={loc._id}>
+                      {loc.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+
               {/* Template Dropdown */}
               {canEditShifts && (
                 <div className="relative" ref={templateDropdownRef}>

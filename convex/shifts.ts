@@ -4,14 +4,30 @@ import { Id } from "./_generated/dataModel";
 
 // ============ QUERIES ============
 
-// Get shifts for a specific date
+// Get shifts for a specific date, optionally filtered by location
 export const listByDate = query({
-  args: { date: v.string() },
+  args: {
+    date: v.string(),
+    locationId: v.optional(v.id("locations")),
+  },
   handler: async (ctx, args) => {
-    const shifts = await ctx.db
-      .query("shifts")
-      .withIndex("by_date", (q) => q.eq("date", args.date))
-      .collect();
+    let shifts;
+
+    if (args.locationId) {
+      // Filter by date and location
+      shifts = await ctx.db
+        .query("shifts")
+        .withIndex("by_date_location", (q) =>
+          q.eq("date", args.date).eq("locationId", args.locationId)
+        )
+        .collect();
+    } else {
+      // Get all shifts for the date
+      shifts = await ctx.db
+        .query("shifts")
+        .withIndex("by_date", (q) => q.eq("date", args.date))
+        .collect();
+    }
 
     // Enrich with personnel names and lead info
     const enriched = await Promise.all(
@@ -232,6 +248,7 @@ export const create = mutation({
     endTime: v.string(),
     position: v.string(),
     department: v.string(),
+    locationId: v.optional(v.id("locations")),
     requiredCount: v.number(),
     assignedPersonnel: v.array(v.id("personnel")),
     notes: v.optional(v.string()),
@@ -247,6 +264,7 @@ export const create = mutation({
       endTime: args.endTime,
       position: args.position,
       department: args.department,
+      locationId: args.locationId,
       requiredCount: args.requiredCount,
       assignedPersonnel: args.assignedPersonnel,
       notes: args.notes,

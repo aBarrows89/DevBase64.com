@@ -25,6 +25,7 @@ import type * as crons from "../crons.js";
 import type * as dealerInquiries from "../dealerInquiries.js";
 import type * as documents from "../documents.js";
 import type * as employeeChat from "../employeeChat.js";
+import type * as employeePortal from "../employeePortal.js";
 import type * as equipment from "../equipment.js";
 import type * as jobs from "../jobs.js";
 import type * as locations from "../locations.js";
@@ -69,6 +70,7 @@ declare const fullApi: ApiFromModules<{
   dealerInquiries: typeof dealerInquiries;
   documents: typeof documents;
   employeeChat: typeof employeeChat;
+  employeePortal: typeof employeePortal;
   equipment: typeof equipment;
   jobs: typeof jobs;
   locations: typeof locations;
