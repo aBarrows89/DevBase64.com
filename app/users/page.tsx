@@ -56,8 +56,8 @@ function UsersContent() {
     managedDepartments: [] as string[],
   });
 
-  // Get departments for department_manager assignment
-  const departments = useQuery(api.personnel.getDepartments) || [];
+  // Get departments from shift planning module for department_manager assignment
+  const departments = useQuery(api.shifts.getDepartments) || [];
 
   // Form state for password reset
   const [newPassword, setNewPassword] = useState("");

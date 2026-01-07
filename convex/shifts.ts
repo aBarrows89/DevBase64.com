@@ -644,3 +644,24 @@ export const setDailyTasks = mutation({
     return null;
   },
 });
+
+// Get all unique departments from shifts (for department manager assignment)
+export const getDepartments = query({
+  handler: async (ctx) => {
+    const shifts = await ctx.db.query("shifts").collect();
+    const departments = [...new Set(shifts.map((s) => s.department))];
+
+    // Include default departments even if no shifts exist yet
+    const defaultDepartments = [
+      "Shipping",
+      "Receiving",
+      "Inventory",
+      "Purchases",
+      "Janitorial",
+    ];
+
+    // Combine and dedupe
+    const allDepartments = [...new Set([...defaultDepartments, ...departments])];
+    return allDepartments.sort();
+  },
+});
