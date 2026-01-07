@@ -6,6 +6,7 @@ import { ThemeProvider } from "./theme-context";
 import { SidebarProvider } from "./sidebar-context";
 import GlobalSearch from "@/components/GlobalSearch";
 import KeyboardShortcuts from "@/components/KeyboardShortcuts";
+import SystemBanner from "@/components/SystemBanner";
 
 // Production deployment
 const convex = new ConvexReactClient(
@@ -18,6 +19,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <ThemeProvider>
         <SidebarProvider>
           <AuthProvider>
+            <SystemBanner />
             {children}
             <GlobalSearch />
             <KeyboardShortcuts />

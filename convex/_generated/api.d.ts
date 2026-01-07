@@ -41,6 +41,7 @@ import type * as safetyChecklist from "../safetyChecklist.js";
 import type * as search from "../search.js";
 import type * as shiftTemplates from "../shiftTemplates.js";
 import type * as shifts from "../shifts.js";
+import type * as systemBanners from "../systemBanners.js";
 import type * as tasks from "../tasks.js";
 import type * as timeClock from "../timeClock.js";
 import type * as timeOffRequests from "../timeOffRequests.js";
@@ -86,6 +87,7 @@ declare const fullApi: ApiFromModules<{
   search: typeof search;
   shiftTemplates: typeof shiftTemplates;
   shifts: typeof shifts;
+  systemBanners: typeof systemBanners;
   tasks: typeof tasks;
   timeClock: typeof timeClock;
   timeOffRequests: typeof timeOffRequests;

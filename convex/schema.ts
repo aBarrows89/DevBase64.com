@@ -20,6 +20,23 @@ export default defineSchema({
     .index("by_email", ["email"])
     .index("by_personnel", ["personnelId"]),
 
+  // ============ SYSTEM BANNERS ============
+  systemBanners: defineTable({
+    message: v.string(),
+    type: v.string(), // "info" | "warning" | "error" | "success"
+    isActive: v.boolean(),
+    showOnMobile: v.boolean(),
+    showOnDesktop: v.boolean(),
+    dismissible: v.boolean(), // Can users dismiss it?
+    linkUrl: v.optional(v.string()), // Optional link
+    linkText: v.optional(v.string()), // Optional link text
+    expiresAt: v.optional(v.number()), // Auto-expire timestamp
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_active", ["isActive"]),
+
   // ============ PROJECT MANAGEMENT ============
   projects: defineTable({
     name: v.string(),
