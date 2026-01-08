@@ -247,7 +247,7 @@ export const searchLinkableItems = query({
   handler: async (ctx, args) => {
     const query = args.searchQuery.toLowerCase();
     const results: Array<{
-      type: "project" | "application" | "personnel";
+      type: "project" | "application" | "personnel" | "document";
       id: string;
       name: string;
       subtitle: string;
@@ -290,6 +290,34 @@ export const searchLinkableItems = query({
           id: person._id,
           name: `${person.firstName} ${person.lastName}`,
           subtitle: `${person.position} - ${person.department}`,
+        });
+      }
+    }
+
+    // Search documents from Doc Hub
+    const documents = await ctx.db
+      .query("documents")
+      .filter((q) => q.eq(q.field("isActive"), true))
+      .collect();
+    for (const doc of documents) {
+      if (
+        doc.name.toLowerCase().includes(query) ||
+        doc.fileName.toLowerCase().includes(query) ||
+        (doc.description && doc.description.toLowerCase().includes(query))
+      ) {
+        const categoryLabels: Record<string, string> = {
+          forms: "Form",
+          policies: "Policy",
+          sops: "SOP",
+          templates: "Template",
+          training: "Training",
+          other: "Document",
+        };
+        results.push({
+          type: "document",
+          id: doc._id,
+          name: doc.name,
+          subtitle: `${categoryLabels[doc.category] || "Document"} - ${doc.fileName}`,
         });
       }
     }

@@ -312,7 +312,7 @@ function MessagesContent() {
     }
 
     // Parse # links in format [#type:id:name]
-    const linkRegex = /\[#(project|application|personnel):([^:]+):([^\]]+)\]/g;
+    const linkRegex = /\[#(project|application|personnel|document):([^:]+):([^\]]+)\]/g;
     const parts: React.ReactNode[] = [];
     let lastIndex = 0;
     let match;
@@ -326,12 +326,14 @@ function MessagesContent() {
       const [, type, id, name] = match;
       const href = type === "project" ? `/projects`
         : type === "application" ? `/applications/${id}`
+        : type === "document" ? `/documents`
         : `/personnel/${id}`;
 
       const colors = {
         project: "bg-purple-500/20 text-purple-300 hover:bg-purple-500/30",
         application: "bg-green-500/20 text-green-300 hover:bg-green-500/30",
         personnel: "bg-blue-500/20 text-blue-300 hover:bg-blue-500/30",
+        document: "bg-amber-500/20 text-amber-300 hover:bg-amber-500/30",
       };
 
       parts.push(
@@ -341,7 +343,7 @@ function MessagesContent() {
           className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium ${colors[type as keyof typeof colors]} transition-colors`}
           onClick={(e) => e.stopPropagation()}
         >
-          <span className="opacity-70">#</span>
+          {type === "document" ? <span className="text-[10px]">📄</span> : <span className="opacity-70">#</span>}
           {name}
         </a>
       );
@@ -870,7 +872,7 @@ function MessagesContent() {
                   <div className="absolute bottom-full left-0 mb-2 z-50 w-full max-w-sm bg-slate-800 border border-slate-700 rounded-xl overflow-hidden shadow-xl">
                     <div className="p-2 border-b border-slate-700">
                       <span className="text-slate-400 text-xs">
-                        Type to search projects, applicants, or personnel
+                        Type to search documents, projects, applicants, or personnel
                       </span>
                     </div>
                     <div className="max-h-48 overflow-y-auto">
@@ -885,9 +887,10 @@ function MessagesContent() {
                             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
                               item.type === "project" ? "bg-purple-500/20 text-purple-400" :
                               item.type === "application" ? "bg-green-500/20 text-green-400" :
+                              item.type === "document" ? "bg-amber-500/20 text-amber-400" :
                               "bg-blue-500/20 text-blue-400"
                             }`}>
-                              {item.type === "project" ? "P" : item.type === "application" ? "A" : "E"}
+                              {item.type === "project" ? "P" : item.type === "application" ? "A" : item.type === "document" ? "D" : "E"}
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="text-white text-sm font-medium truncate">{item.name}</p>
