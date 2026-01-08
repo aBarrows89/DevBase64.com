@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { useAuth } from "@/app/auth-context";
+import { useAuth, UserRole } from "@/app/auth-context";
 import { useTheme } from "@/app/theme-context";
 import { useSidebar } from "@/app/sidebar-context";
 import { useQuery } from "convex/react";
@@ -86,7 +86,7 @@ const BOTTOM_NAV_ITEMS = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { user, logout, canViewPersonnel, canViewShifts, canManageTimeOff, canAccessDepartmentPortal } = useAuth();
+  const { user, logout, canViewPersonnel, canViewShifts, canManageTimeOff, canAccessDepartmentPortal, isOfficeManager } = useAuth();
   const { theme } = useTheme();
   const { isOpen, close } = useSidebar();
   const [openGroups, setOpenGroups] = useState<string[]>([]); // All closed by default
@@ -442,6 +442,144 @@ export default function Sidebar() {
                 <span className="font-medium text-sm sm:text-base">Announcements</span>
               </Link>
             </>
+          ) : isOfficeManager ? (
+            <>
+              {/* Office Manager - Limited navigation */}
+              {/* Dashboard */}
+              <Link
+                href="/"
+                onClick={handleNavClick}
+                className={`flex items-center gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg transition-all ${
+                  pathname === "/"
+                    ? isDark
+                      ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
+                      : "bg-blue-50 text-blue-600 border border-blue-200"
+                    : isDark
+                      ? "text-slate-400 hover:bg-slate-700/50 hover:text-white"
+                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                }`}
+              >
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
+                <span className="font-medium text-sm sm:text-base">Dashboard</span>
+              </Link>
+
+              {/* Projects */}
+              <Link
+                href="/projects"
+                onClick={handleNavClick}
+                className={`flex items-center gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg transition-all ${
+                  pathname === "/projects" || pathname.startsWith("/projects")
+                    ? isDark
+                      ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
+                      : "bg-blue-50 text-blue-600 border border-blue-200"
+                    : isDark
+                      ? "text-slate-400 hover:bg-slate-700/50 hover:text-white"
+                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                }`}
+              >
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                <span className="font-medium text-sm sm:text-base">Projects</span>
+              </Link>
+
+              {/* Doc Hub */}
+              <Link
+                href="/documents"
+                onClick={handleNavClick}
+                className={`flex items-center gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg transition-all ${
+                  pathname === "/documents" || pathname.startsWith("/documents")
+                    ? isDark
+                      ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
+                      : "bg-blue-50 text-blue-600 border border-blue-200"
+                    : isDark
+                      ? "text-slate-400 hover:bg-slate-700/50 hover:text-white"
+                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                }`}
+              >
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z M12 3v6h6" />
+                </svg>
+                <span className="font-medium text-sm sm:text-base">Doc Hub</span>
+              </Link>
+
+              {/* Messages */}
+              <Link
+                href="/messages"
+                onClick={handleNavClick}
+                className={`flex items-center gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg transition-all ${
+                  pathname === "/messages"
+                    ? isDark
+                      ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
+                      : "bg-blue-50 text-blue-600 border border-blue-200"
+                    : isDark
+                      ? "text-slate-400 hover:bg-slate-700/50 hover:text-white"
+                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                }`}
+              >
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+                <span className="font-medium text-sm sm:text-base truncate flex-1">Messages</span>
+                {unreadCount && unreadCount > 0 && (
+                  <span className="min-w-[20px] h-[20px] px-1.5 text-[11px] font-bold flex items-center justify-center rounded-full bg-red-500 text-white">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
+              </Link>
+
+              {/* Calendar */}
+              <Link
+                href="/calendar"
+                onClick={handleNavClick}
+                className={`flex items-center gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg transition-all ${
+                  pathname === "/calendar"
+                    ? isDark
+                      ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
+                      : "bg-blue-50 text-blue-600 border border-blue-200"
+                    : isDark
+                      ? "text-slate-400 hover:bg-slate-700/50 hover:text-white"
+                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                }`}
+              >
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span className="font-medium text-sm sm:text-base truncate flex-1">Calendar</span>
+                {unreadEventInvites && unreadEventInvites > 0 && (
+                  <span className="min-w-[20px] h-[20px] px-1.5 text-[11px] font-bold flex items-center justify-center rounded-full bg-amber-500 text-white">
+                    {unreadEventInvites > 99 ? "99+" : unreadEventInvites}
+                  </span>
+                )}
+              </Link>
+
+              {/* Notifications */}
+              <Link
+                href="/notifications"
+                onClick={handleNavClick}
+                className={`flex items-center gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg transition-all ${
+                  pathname === "/notifications"
+                    ? isDark
+                      ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
+                      : "bg-blue-50 text-blue-600 border border-blue-200"
+                    : isDark
+                      ? "text-slate-400 hover:bg-slate-700/50 hover:text-white"
+                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                }`}
+              >
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                </svg>
+                <span className="font-medium text-sm sm:text-base truncate flex-1">Notifications</span>
+                {unreadNotificationCount && unreadNotificationCount > 0 && (
+                  <span className="min-w-[20px] h-[20px] px-1.5 text-[11px] font-bold flex items-center justify-center rounded-full bg-red-500 text-white">
+                    {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
+                  </span>
+                )}
+              </Link>
+            </>
           ) : (
             <>
               {/* Full navigation for other roles */}
@@ -597,8 +735,8 @@ export default function Sidebar() {
           )}
         </nav>
 
-        {/* Bottom Navigation - Hide for department managers and employees */}
-        {!isDepartmentManager && !isEmployee && (
+        {/* Bottom Navigation - Hide for department managers, office managers, and employees */}
+        {!isDepartmentManager && !isOfficeManager && !isEmployee && (
         <div className={`p-3 sm:p-4 border-t space-y-1 ${isDark ? "border-slate-700" : "border-gray-200"}`}>
           {filteredBottomNavItems.map((item) => {
             const isActive = pathname === item.href;

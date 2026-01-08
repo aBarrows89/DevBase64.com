@@ -5,7 +5,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 
-export type UserRole = "super_admin" | "admin" | "warehouse_director" | "warehouse_manager" | "department_manager" | "member" | "employee";
+export type UserRole = "super_admin" | "admin" | "warehouse_director" | "warehouse_manager" | "department_manager" | "office_manager" | "member" | "employee";
 
 export interface User {
   _id: Id<"users">;
@@ -50,6 +50,8 @@ interface AuthContextType {
   // Employee portal access
   isEmployee: boolean; // Is the user an employee (not admin/manager)
   canAccessEmployeePortal: boolean; // Employee portal access
+  // Office management role (limited access - no people, equipment, employee portal admin)
+  isOfficeManager: boolean;
   // Helper to get accessible location IDs for warehouse_manager
   getAccessibleLocationIds: () => Id<"locations">[] | "all";
 }
@@ -213,6 +215,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isEmployee = user?.role === "employee";
   const canAccessEmployeePortal = user?.role === "employee";
 
+  // Office management role - limited access (no people, equipment, employee portal admin)
+  const isOfficeManager = user?.role === "office_manager";
+
   // Helper to get accessible location IDs for warehouse_manager
   const getAccessibleLocationIds = (): Id<"locations">[] | "all" => {
     if (canViewAllShifts) {
@@ -290,6 +295,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         canAccessDepartmentPortal,
         isEmployee,
         canAccessEmployeePortal,
+        isOfficeManager,
         getAccessibleLocationIds,
       }}
     >

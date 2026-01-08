@@ -25,7 +25,7 @@ interface WebsiteMessage {
 }
 
 function DashboardContent() {
-  const { user } = useAuth();
+  const { user, isOfficeManager } = useAuth();
   const { theme } = useTheme();
   const router = useRouter();
   const isDark = theme === "dark";
@@ -44,13 +44,16 @@ function DashboardContent() {
   }, [isDepartmentManager, isEmployee, router]);
 
   const shouldSkipQueries = isDepartmentManager || isEmployee;
-  const projects = useQuery(api.projects.getAll, shouldSkipQueries ? "skip" : {});
-  const applications = useQuery(api.applications.getRecent, shouldSkipQueries ? "skip" : undefined);
-  const upcomingInterviews = useQuery(api.applications.getUpcomingInterviews, shouldSkipQueries ? "skip" : undefined);
-  const hiringAnalytics = useQuery(api.applications.getHiringAnalytics, shouldSkipQueries ? "skip" : undefined);
-  const contactMessages = useQuery(api.contactMessages.getRecent, shouldSkipQueries ? "skip" : undefined);
-  const dealerInquiries = useQuery(api.dealerInquiries.getRecent, shouldSkipQueries ? "skip" : undefined);
-  const pendingTenureCheckIns = useQuery(api.personnel.getPendingTenureCheckIns, shouldSkipQueries ? "skip" : undefined);
+  // Office managers only see projects - skip other queries
+  const shouldSkipPeopleQueries = shouldSkipQueries || isOfficeManager;
+
+  const projects = useQuery(api.projects.getAll, shouldSkipQueries ? "skip" : (user?._id ? { userId: user._id } : {}));
+  const applications = useQuery(api.applications.getRecent, shouldSkipPeopleQueries ? "skip" : undefined);
+  const upcomingInterviews = useQuery(api.applications.getUpcomingInterviews, shouldSkipPeopleQueries ? "skip" : undefined);
+  const hiringAnalytics = useQuery(api.applications.getHiringAnalytics, shouldSkipPeopleQueries ? "skip" : undefined);
+  const contactMessages = useQuery(api.contactMessages.getRecent, shouldSkipPeopleQueries ? "skip" : undefined);
+  const dealerInquiries = useQuery(api.dealerInquiries.getRecent, shouldSkipPeopleQueries ? "skip" : undefined);
+  const pendingTenureCheckIns = useQuery(api.personnel.getPendingTenureCheckIns, shouldSkipPeopleQueries ? "skip" : undefined);
 
   // Show loading while redirecting
   if (isDepartmentManager || isEmployee) {
@@ -140,7 +143,7 @@ function DashboardContent() {
 
         <div className="p-4 sm:p-8 space-y-6 sm:space-y-8">
           {/* Stats Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+          <div className={`grid grid-cols-2 md:grid-cols-2 ${isOfficeManager ? "lg:grid-cols-3" : "lg:grid-cols-4"} gap-3 sm:gap-6`}>
             {/* Projects */}
             <div className={`border rounded-xl p-4 sm:p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
               <div className="flex items-center justify-between mb-2 sm:mb-4">
@@ -227,39 +230,41 @@ function DashboardContent() {
               <p className={`text-xs sm:text-sm mt-1 ${isDark ? "text-slate-500" : "text-gray-400"}`}>need attention</p>
             </div>
 
-            {/* Applications */}
-            <div className={`border rounded-xl p-4 sm:p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
-              <div className="flex items-center justify-between mb-2 sm:mb-4">
-                <h3 className={`text-xs sm:text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                  New Applications
-                </h3>
-                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                  <svg
-                    className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                    />
-                  </svg>
+            {/* Applications - Hide for office managers */}
+            {!isOfficeManager && (
+              <div className={`border rounded-xl p-4 sm:p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
+                <div className="flex items-center justify-between mb-2 sm:mb-4">
+                  <h3 className={`text-xs sm:text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    New Applications
+                  </h3>
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                    <svg
+                      className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                      />
+                    </svg>
+                  </div>
                 </div>
+                <p className={`text-2xl sm:text-3xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  {applicationStats.new}
+                </p>
+                <p className={`text-xs sm:text-sm mt-1 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                  {applicationStats.total} total
+                </p>
               </div>
-              <p className={`text-2xl sm:text-3xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
-                {applicationStats.new}
-              </p>
-              <p className={`text-xs sm:text-sm mt-1 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
-                {applicationStats.total} total
-              </p>
-            </div>
+            )}
           </div>
 
           {/* Content Sections */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+          <div className={`grid grid-cols-1 ${isOfficeManager ? "" : "lg:grid-cols-2"} gap-4 sm:gap-6`}>
             {/* Recent Projects */}
             <div className={`border rounded-xl p-4 sm:p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
               <div className="flex items-center justify-between mb-4 sm:mb-6">
@@ -311,70 +316,73 @@ function DashboardContent() {
               </div>
             </div>
 
-            {/* Recent Applications */}
-            <div className={`border rounded-xl p-4 sm:p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
-              <div className="flex items-center justify-between mb-4 sm:mb-6">
-                <h2 className={`text-base sm:text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
-                  Recent Applications
-                </h2>
-                <a
-                  href="/applications"
-                  className={`text-sm transition-colors ${isDark ? "text-cyan-400 hover:text-cyan-300" : "text-blue-600 hover:text-blue-700"}`}
-                >
-                  View all
-                </a>
-              </div>
-              <div className="space-y-3 sm:space-y-4">
-                {applications?.slice(0, 5).map((app) => (
-                  <div
-                    key={app._id}
-                    className={`flex items-center justify-between p-3 sm:p-4 rounded-lg border ${isDark ? "bg-slate-900/50 border-slate-700/50" : "bg-gray-50 border-gray-100"}`}
+            {/* Recent Applications - Hide for office managers */}
+            {!isOfficeManager && (
+              <div className={`border rounded-xl p-4 sm:p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
+                <div className="flex items-center justify-between mb-4 sm:mb-6">
+                  <h2 className={`text-base sm:text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                    Recent Applications
+                  </h2>
+                  <a
+                    href="/applications"
+                    className={`text-sm transition-colors ${isDark ? "text-cyan-400 hover:text-cyan-300" : "text-blue-600 hover:text-blue-700"}`}
                   >
-                    <div className="flex-1 min-w-0">
-                      <h3 className={`text-sm sm:text-base font-medium truncate ${isDark ? "text-white" : "text-gray-900"}`}>
-                        {app.firstName} {app.lastName}
-                      </h3>
-                      <p className={`text-xs sm:text-sm truncate ${isDark ? "text-slate-500" : "text-gray-500"}`}>
-                        {app.appliedJobTitle}
-                      </p>
-                    </div>
-                    <div className="ml-2 sm:ml-4 flex items-center gap-1 sm:gap-2">
-                      {app.candidateAnalysis && (
+                    View all
+                  </a>
+                </div>
+                <div className="space-y-3 sm:space-y-4">
+                  {applications?.slice(0, 5).map((app) => (
+                    <div
+                      key={app._id}
+                      className={`flex items-center justify-between p-3 sm:p-4 rounded-lg border ${isDark ? "bg-slate-900/50 border-slate-700/50" : "bg-gray-50 border-gray-100"}`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <h3 className={`text-sm sm:text-base font-medium truncate ${isDark ? "text-white" : "text-gray-900"}`}>
+                          {app.firstName} {app.lastName}
+                        </h3>
+                        <p className={`text-xs sm:text-sm truncate ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                          {app.appliedJobTitle}
+                        </p>
+                      </div>
+                      <div className="ml-2 sm:ml-4 flex items-center gap-1 sm:gap-2">
+                        {app.candidateAnalysis && (
+                          <span
+                            className={`px-2 py-1 text-xs font-medium rounded-full ${
+                              app.candidateAnalysis.overallScore >= 70
+                                ? "bg-green-500/20 text-green-400"
+                                : app.candidateAnalysis.overallScore >= 50
+                                  ? "bg-amber-500/20 text-amber-400"
+                                  : "bg-red-500/20 text-red-400"
+                            }`}
+                          >
+                            {app.candidateAnalysis.overallScore}%
+                          </span>
+                        )}
                         <span
                           className={`px-2 py-1 text-xs font-medium rounded-full ${
-                            app.candidateAnalysis.overallScore >= 70
-                              ? "bg-green-500/20 text-green-400"
-                              : app.candidateAnalysis.overallScore >= 50
+                            app.status === "new"
+                              ? isDark ? "bg-cyan-500/20 text-cyan-400" : "bg-blue-100 text-blue-600"
+                              : app.status === "reviewed"
                                 ? "bg-amber-500/20 text-amber-400"
-                                : "bg-red-500/20 text-red-400"
+                                : isDark ? "bg-slate-500/20 text-slate-400" : "bg-gray-100 text-gray-600"
                           }`}
                         >
-                          {app.candidateAnalysis.overallScore}%
+                          {app.status}
                         </span>
-                      )}
-                      <span
-                        className={`px-2 py-1 text-xs font-medium rounded-full ${
-                          app.status === "new"
-                            ? isDark ? "bg-cyan-500/20 text-cyan-400" : "bg-blue-100 text-blue-600"
-                            : app.status === "reviewed"
-                              ? "bg-amber-500/20 text-amber-400"
-                              : isDark ? "bg-slate-500/20 text-slate-400" : "bg-gray-100 text-gray-600"
-                        }`}
-                      >
-                        {app.status}
-                      </span>
+                      </div>
                     </div>
-                  </div>
-                )) || (
-                  <p className={`text-center py-8 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
-                    No applications yet
-                  </p>
-                )}
+                  )) || (
+                    <p className={`text-center py-8 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                      No applications yet
+                    </p>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
-          {/* Website Messages & Hiring Analytics */}
+          {/* Website Messages & Hiring Analytics - Hide for office managers */}
+          {!isOfficeManager && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
             {/* Website Messages */}
             <div className={`border rounded-xl p-4 sm:p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
@@ -562,13 +570,14 @@ function DashboardContent() {
               )}
             </div>
           </div>
+          )}
 
           {/* Activity Feed */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+          <div className={`grid grid-cols-1 ${isOfficeManager ? "" : "lg:grid-cols-2"} gap-4 sm:gap-6`}>
             <ActivityFeed limit={15} />
 
-            {/* Pending Tenure Check-ins */}
-            {pendingTenureCheckIns && pendingTenureCheckIns.length > 0 && (
+            {/* Pending Tenure Check-ins - Hide for office managers */}
+            {!isOfficeManager && pendingTenureCheckIns && pendingTenureCheckIns.length > 0 && (
               <div className={`border rounded-xl p-4 sm:p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
                 <div className="flex items-center justify-between mb-4 sm:mb-6">
                   <h2 className={`text-base sm:text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>

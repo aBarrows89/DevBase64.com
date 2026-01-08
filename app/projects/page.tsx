@@ -41,7 +41,7 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
 
 function ProjectsContent() {
   const { user } = useAuth();
-  const projects = useQuery(api.projects.getAll, {}) || [];
+  const projects = useQuery(api.projects.getAll, user?._id ? { userId: user._id } : {}) || [];
   const stats = useQuery(api.projects.getStats);
   const users = useQuery(api.auth.getAllUsers) || [];
   const updateStatus = useMutation(api.projects.updateStatus);
@@ -49,6 +49,9 @@ function ProjectsContent() {
   const createProject = useMutation(api.projects.create);
   const updateProject = useMutation(api.projects.update);
   const deleteProject = useMutation(api.projects.remove);
+  const shareProject = useMutation(api.projects.shareProject);
+  const unshareProject = useMutation(api.projects.unshareProject);
+  const updateVisibility = useMutation(api.projects.updateVisibility);
 
   // Task mutations and actions
   const createTask = useMutation(api.tasks.create);
@@ -106,6 +109,11 @@ function ProjectsContent() {
     estimatedHours: "",
     assignedTo: "",
   });
+
+  // Sharing state
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [selectedShareUsers, setSelectedShareUsers] = useState<string[]>([]);
+  const [shareSearchQuery, setShareSearchQuery] = useState("");
 
   const handleStatusChange = async (projectId: string, newStatus: string) => {
     await updateStatus({
@@ -353,6 +361,57 @@ function ProjectsContent() {
     if (taskFilter === "all") return true;
     return task.assignedTo === user?._id;
   }) || [];
+
+  // Check if current user can manage sharing for the selected project
+  const canManageSharing = projectWithTasks && user && (
+    projectWithTasks.createdBy === user._id ||
+    ["super_admin", "admin"].includes(user.role)
+  );
+
+  // Filter users for share picker (exclude already shared and owner)
+  const availableShareUsers = users.filter((u) => {
+    if (!projectWithTasks) return false;
+    if (u._id === projectWithTasks.createdBy) return false; // Exclude owner
+    if (projectWithTasks.sharedWith?.includes(u._id)) return false; // Exclude already shared
+    if (shareSearchQuery && !u.name.toLowerCase().includes(shareSearchQuery.toLowerCase())) return false;
+    return true;
+  });
+
+  // Handle share project
+  const handleShareProject = async () => {
+    if (!selectedProjectId || !user || selectedShareUsers.length === 0) return;
+
+    await shareProject({
+      projectId: selectedProjectId,
+      userIds: selectedShareUsers as Id<"users">[],
+      sharedBy: user._id,
+    });
+
+    setSelectedShareUsers([]);
+    setShowShareModal(false);
+  };
+
+  // Handle unshare project
+  const handleUnshareUser = async (userId: Id<"users">) => {
+    if (!selectedProjectId || !user) return;
+
+    await unshareProject({
+      projectId: selectedProjectId,
+      userIds: [userId],
+      userId: user._id,
+    });
+  };
+
+  // Handle visibility change
+  const handleVisibilityChange = async (visibility: string) => {
+    if (!selectedProjectId || !user) return;
+
+    await updateVisibility({
+      projectId: selectedProjectId,
+      visibility,
+      userId: user._id,
+    });
+  };
 
   return (
     <div className="flex h-screen bg-slate-900">
@@ -610,6 +669,17 @@ function ProjectsContent() {
                     </>
                   ) : (
                     <>
+                      {canManageSharing && (
+                        <button
+                          onClick={() => setShowShareModal(true)}
+                          className="p-2 text-slate-400 hover:text-green-400 transition-colors"
+                          title="Share Project"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                          </svg>
+                        </button>
+                      )}
                       <button
                         onClick={() => setIsEditing(true)}
                         className="p-2 text-slate-400 hover:text-cyan-400 transition-colors"
@@ -1134,6 +1204,159 @@ function ProjectsContent() {
                 className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600"
               >
                 Delete Project
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Share Project Modal */}
+      {showShareModal && projectWithTasks && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+          <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 sm:p-6 w-full max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white">Share Project</h3>
+              <button
+                onClick={() => {
+                  setShowShareModal(false);
+                  setSelectedShareUsers([]);
+                  setShareSearchQuery("");
+                }}
+                className="p-1 text-slate-400 hover:text-white"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Visibility Setting */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-slate-300 mb-2">Visibility</label>
+              <div className="flex gap-2">
+                {["private", "public"].map((vis) => (
+                  <button
+                    key={vis}
+                    onClick={() => handleVisibilityChange(vis)}
+                    className={`px-3 py-1.5 text-sm rounded-lg border transition-colors capitalize ${
+                      projectWithTasks.visibility === vis || (!projectWithTasks.visibility && vis === "private")
+                        ? "bg-cyan-500/20 border-cyan-500/50 text-cyan-400"
+                        : "bg-slate-700/50 border-slate-600 text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    {vis}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                {projectWithTasks.visibility === "public"
+                  ? "Everyone in your team can view this project"
+                  : "Only you and shared users can view this project"}
+              </p>
+            </div>
+
+            {/* Currently Shared With */}
+            {projectWithTasks.sharedWith && projectWithTasks.sharedWith.length > 0 && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-slate-300 mb-2">Shared With</label>
+                <div className="flex flex-wrap gap-2">
+                  {projectWithTasks.sharedWith.map((userId) => {
+                    const sharedUser = users.find((u) => u._id === userId);
+                    if (!sharedUser) return null;
+                    return (
+                      <span
+                        key={userId}
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-green-500/20 border border-green-500/30 rounded-lg text-sm text-green-400"
+                      >
+                        {sharedUser.name}
+                        <button
+                          onClick={() => handleUnshareUser(userId)}
+                          className="p-0.5 hover:bg-green-500/30 rounded"
+                          title="Remove access"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Search Users to Share */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-slate-300 mb-2">Add People</label>
+              <input
+                type="text"
+                placeholder="Search users..."
+                value={shareSearchQuery}
+                onChange={(e) => setShareSearchQuery(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-cyan-500"
+              />
+            </div>
+
+            {/* Available Users to Share */}
+            <div className="flex-1 overflow-y-auto mb-4 max-h-48">
+              {availableShareUsers.length > 0 ? (
+                <div className="space-y-1">
+                  {availableShareUsers.slice(0, 10).map((u) => (
+                    <button
+                      key={u._id}
+                      onClick={() => {
+                        if (selectedShareUsers.includes(u._id)) {
+                          setSelectedShareUsers(selectedShareUsers.filter((id) => id !== u._id));
+                        } else {
+                          setSelectedShareUsers([...selectedShareUsers, u._id]);
+                        }
+                      }}
+                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
+                        selectedShareUsers.includes(u._id)
+                          ? "bg-cyan-500/20 border border-cyan-500/50"
+                          : "bg-slate-700/50 hover:bg-slate-700"
+                      }`}
+                    >
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white text-sm font-medium">
+                        {u.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-white truncate">{u.name}</p>
+                        <p className="text-xs text-slate-400 truncate">{u.email}</p>
+                      </div>
+                      {selectedShareUsers.includes(u._id) && (
+                        <svg className="w-5 h-5 text-cyan-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-center py-4 text-slate-500 text-sm">
+                  {shareSearchQuery ? "No matching users found" : "No more users to share with"}
+                </p>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex justify-end gap-3 pt-4 border-t border-slate-700">
+              <button
+                onClick={() => {
+                  setShowShareModal(false);
+                  setSelectedShareUsers([]);
+                  setShareSearchQuery("");
+                }}
+                className="px-4 py-2 text-slate-300 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleShareProject}
+                disabled={selectedShareUsers.length === 0}
+                className="px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Share ({selectedShareUsers.length})
               </button>
             </div>
           </div>

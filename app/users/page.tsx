@@ -211,6 +211,8 @@ function UsersContent() {
         return "bg-blue-500/20 text-blue-400";
       case "warehouse_manager":
         return "bg-orange-500/20 text-orange-400";
+      case "office_manager":
+        return "bg-pink-500/20 text-pink-400";
       case "member":
         return "bg-cyan-500/20 text-cyan-400";
       default:
@@ -230,6 +232,8 @@ function UsersContent() {
         return "Warehouse Manager";
       case "warehouse_director":
         return "Warehouse Director";
+      case "office_manager":
+        return "Office Manager";
       case "member":
         return "Member";
       default:
@@ -554,6 +558,7 @@ function UsersContent() {
                   <option value="warehouse_director">Warehouse Director</option>
                   <option value="warehouse_manager">Warehouse Manager</option>
                   <option value="department_manager">Department Manager</option>
+                  <option value="office_manager">Office Manager</option>
                   <option value="member">Member</option>
                 </select>
               </div>
@@ -615,6 +620,7 @@ function UsersContent() {
                   <option value="warehouse_director">Warehouse Director</option>
                   <option value="warehouse_manager">Warehouse Manager</option>
                   <option value="department_manager">Department Manager</option>
+                  <option value="office_manager">Office Manager</option>
                   <option value="member">Member</option>
                 </select>
               </div>

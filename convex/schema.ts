@@ -45,6 +45,9 @@ export default defineSchema({
     priority: v.string(), // "low" | "medium" | "high" | "urgent"
     createdBy: v.id("users"),
     assignedTo: v.optional(v.id("users")),
+    // Access control - who can view this project besides owner
+    sharedWith: v.optional(v.array(v.id("users"))), // Users who can view this project
+    visibility: v.optional(v.string()), // "private" | "team" | "public" - defaults to "private"
     estimatedHours: v.optional(v.number()),
     actualHours: v.optional(v.number()),
     dueDate: v.optional(v.string()),
@@ -66,7 +69,8 @@ export default defineSchema({
   })
     .index("by_status", ["status"])
     .index("by_assignee", ["assignedTo"])
-    .index("by_created", ["createdAt"]),
+    .index("by_created", ["createdAt"])
+    .index("by_owner", ["createdBy"]),
 
   tasks: defineTable({
     projectId: v.id("projects"),

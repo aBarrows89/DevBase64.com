@@ -2,9 +2,11 @@ import { query, mutation, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 
 // Get all projects with task counts (excludes archived by default)
+// Filters by user access: admins see all, others see owned + shared + assigned
 export const getAll = query({
   args: {
     includeArchived: v.optional(v.boolean()),
+    userId: v.optional(v.id("users")), // Current user for filtering
   },
   handler: async (ctx, args) => {
     let projects = await ctx.db
@@ -16,6 +18,30 @@ export const getAll = query({
     // Filter out archived unless explicitly requested
     if (!args.includeArchived) {
       projects = projects.filter((p) => p.status !== "archived");
+    }
+
+    // Apply access control filtering if userId provided
+    if (args.userId) {
+      const currentUser = await ctx.db.get(args.userId);
+
+      // Admins and super_admins can see all projects
+      if (currentUser && !["super_admin", "admin"].includes(currentUser.role)) {
+        projects = projects.filter((project) => {
+          // User owns the project
+          if (project.createdBy === args.userId) return true;
+
+          // User is assigned to the project
+          if (project.assignedTo === args.userId) return true;
+
+          // Project is explicitly shared with user
+          if (project.sharedWith?.includes(args.userId!)) return true;
+
+          // Project is public (visible to all)
+          if (project.visibility === "public") return true;
+
+          return false;
+        });
+      }
     }
 
     // Get task counts for each project
@@ -69,6 +95,8 @@ export const create = mutation({
     priority: v.string(),
     createdBy: v.id("users"),
     assignedTo: v.optional(v.id("users")),
+    sharedWith: v.optional(v.array(v.id("users"))),
+    visibility: v.optional(v.string()), // "private" | "team" | "public"
     estimatedHours: v.optional(v.number()),
     dueDate: v.optional(v.string()),
     repositoryId: v.optional(v.id("repositories")),
@@ -77,6 +105,8 @@ export const create = mutation({
     const now = Date.now();
     const projectId = await ctx.db.insert("projects", {
       ...args,
+      visibility: args.visibility || "private",
+      sharedWith: args.sharedWith || [],
       actualHours: undefined,
       aiGeneratedSteps: undefined,
       aiTimelineAnalysis: undefined,
@@ -365,6 +395,136 @@ export const getArchived = query({
       .collect();
 
     return archived;
+  },
+});
+
+// ============ PROJECT SHARING ============
+
+// Share project with users
+export const shareProject = mutation({
+  args: {
+    projectId: v.id("projects"),
+    userIds: v.array(v.id("users")),
+    sharedBy: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const project = await ctx.db.get(args.projectId);
+    if (!project) throw new Error("Project not found");
+
+    const sharer = await ctx.db.get(args.sharedBy);
+    if (!sharer) throw new Error("User not found");
+
+    // Only owner or admins can share
+    if (project.createdBy !== args.sharedBy && !["super_admin", "admin"].includes(sharer.role)) {
+      throw new Error("Not authorized to share this project");
+    }
+
+    const currentShared = project.sharedWith || [];
+    const newShared = [...new Set([...currentShared, ...args.userIds])];
+
+    await ctx.db.patch(args.projectId, {
+      sharedWith: newShared,
+      updatedAt: Date.now(),
+    });
+
+    // Create notifications for newly shared users
+    const now = Date.now();
+    for (const userId of args.userIds) {
+      if (currentShared.includes(userId)) continue; // Already shared
+      if (userId === args.sharedBy) continue; // Don't notify yourself
+
+      await ctx.db.insert("notifications", {
+        userId,
+        type: "project_shared",
+        title: `${sharer.name} shared a project with you`,
+        message: `You now have access to project "${project.name}"`,
+        link: `/projects?id=${args.projectId}`,
+        relatedId: args.projectId,
+        isRead: false,
+        isDismissed: false,
+        createdAt: now,
+      });
+    }
+
+    return { success: true, sharedWith: newShared };
+  },
+});
+
+// Unshare project from users
+export const unshareProject = mutation({
+  args: {
+    projectId: v.id("projects"),
+    userIds: v.array(v.id("users")),
+    userId: v.id("users"), // User performing the action
+  },
+  handler: async (ctx, args) => {
+    const project = await ctx.db.get(args.projectId);
+    if (!project) throw new Error("Project not found");
+
+    const user = await ctx.db.get(args.userId);
+    if (!user) throw new Error("User not found");
+
+    // Only owner or admins can unshare
+    if (project.createdBy !== args.userId && !["super_admin", "admin"].includes(user.role)) {
+      throw new Error("Not authorized to modify sharing for this project");
+    }
+
+    const currentShared = project.sharedWith || [];
+    const newShared = currentShared.filter((id) => !args.userIds.includes(id));
+
+    await ctx.db.patch(args.projectId, {
+      sharedWith: newShared,
+      updatedAt: Date.now(),
+    });
+
+    return { success: true, sharedWith: newShared };
+  },
+});
+
+// Update project visibility
+export const updateVisibility = mutation({
+  args: {
+    projectId: v.id("projects"),
+    visibility: v.string(), // "private" | "team" | "public"
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const project = await ctx.db.get(args.projectId);
+    if (!project) throw new Error("Project not found");
+
+    const user = await ctx.db.get(args.userId);
+    if (!user) throw new Error("User not found");
+
+    // Only owner or admins can change visibility
+    if (project.createdBy !== args.userId && !["super_admin", "admin"].includes(user.role)) {
+      throw new Error("Not authorized to change project visibility");
+    }
+
+    await ctx.db.patch(args.projectId, {
+      visibility: args.visibility,
+      updatedAt: Date.now(),
+    });
+
+    return { success: true };
+  },
+});
+
+// Get users a project is shared with (for UI)
+export const getSharedUsers = query({
+  args: { projectId: v.id("projects") },
+  handler: async (ctx, args) => {
+    const project = await ctx.db.get(args.projectId);
+    if (!project) return [];
+
+    const sharedWith = project.sharedWith || [];
+    const users = await Promise.all(
+      sharedWith.map(async (userId) => {
+        const user = await ctx.db.get(userId);
+        return user ? { _id: user._id, name: user.name, email: user.email } : null;
+      })
+    );
+
+    return users.filter(Boolean);
   },
 });
 
