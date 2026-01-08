@@ -506,15 +506,49 @@ export const scheduleInterview = mutation({
     date: v.string(), // ISO date string (YYYY-MM-DD)
     time: v.string(), // Time string (HH:MM)
     location: v.optional(v.string()), // "In-person", "Phone", "Video", or custom
+    userId: v.id("users"), // User scheduling the interview (for calendar event)
   },
   handler: async (ctx, args) => {
+    const application = await ctx.db.get(args.applicationId);
+    if (!application) throw new Error("Application not found");
+
+    const user = await ctx.db.get(args.userId);
+    if (!user) throw new Error("User not found");
+
+    const now = Date.now();
+
+    // Parse date and time to create start/end timestamps
+    const [year, month, day] = args.date.split("-").map(Number);
+    const [hours, minutes] = args.time.split(":").map(Number);
+    const startTime = new Date(year, month - 1, day, hours, minutes).getTime();
+    const endTime = startTime + 60 * 60 * 1000; // 1 hour interview by default
+
+    // Create calendar event
+    const eventId = await ctx.db.insert("events", {
+      title: `Interview: ${application.firstName} ${application.lastName}`,
+      description: `Job Interview for ${application.appliedJobTitle}\n\nCandidate: ${application.firstName} ${application.lastName}\nEmail: ${application.email}\nPhone: ${application.phone}`,
+      startTime,
+      endTime,
+      isAllDay: false,
+      location: args.location,
+      meetingType: args.location === "Video" ? "video" : args.location === "Phone" ? "phone" : "in-person",
+      createdBy: args.userId,
+      createdByName: user.name,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // Update application with interview details and event ID
     await ctx.db.patch(args.applicationId, {
       scheduledInterviewDate: args.date,
       scheduledInterviewTime: args.time,
       scheduledInterviewLocation: args.location,
+      scheduledInterviewEventId: eventId,
       status: "scheduled",
-      updatedAt: Date.now(),
+      updatedAt: now,
     });
+
+    return eventId;
   },
 });
 
@@ -522,12 +556,30 @@ export const scheduleInterview = mutation({
 export const clearScheduledInterview = mutation({
   args: {
     applicationId: v.id("applications"),
+    userId: v.id("users"), // User clearing the interview (for cancelling event)
   },
   handler: async (ctx, args) => {
+    const application = await ctx.db.get(args.applicationId);
+    if (!application) throw new Error("Application not found");
+
+    // Cancel the associated calendar event if it exists
+    if (application.scheduledInterviewEventId) {
+      const event = await ctx.db.get(application.scheduledInterviewEventId);
+      if (event && !event.isCancelled) {
+        await ctx.db.patch(application.scheduledInterviewEventId, {
+          isCancelled: true,
+          cancelledAt: Date.now(),
+          cancelledBy: args.userId,
+          updatedAt: Date.now(),
+        });
+      }
+    }
+
     await ctx.db.patch(args.applicationId, {
       scheduledInterviewDate: undefined,
       scheduledInterviewTime: undefined,
       scheduledInterviewLocation: undefined,
+      scheduledInterviewEventId: undefined,
       updatedAt: Date.now(),
     });
   },

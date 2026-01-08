@@ -349,6 +349,22 @@ function ApplicationDetailContent({ id }: { id: string }) {
                   View Personnel Record
                 </button>
               )}
+              {/* Schedule Interview button in header */}
+              <button
+                onClick={() => setShowScheduleModal(true)}
+                className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
+                  application.scheduledInterviewDate
+                    ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/30"
+                    : "bg-cyan-500 hover:bg-cyan-600 text-white"
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                {application.scheduledInterviewDate
+                  ? `Interview: ${new Date(application.scheduledInterviewDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })} @ ${application.scheduledInterviewTime}`
+                  : "Schedule Interview"}
+              </button>
               {/* Show "Hire" button if not already hired */}
               {!existingPersonnel && application.status !== "rejected" && (
                 <button
@@ -1235,7 +1251,10 @@ function ApplicationDetailContent({ id }: { id: string }) {
                   <button
                     onClick={async () => {
                       if (confirm("Clear the scheduled interview?")) {
-                        await clearScheduledInterview({ applicationId: application._id });
+                        await clearScheduledInterview({
+                          applicationId: application._id,
+                          userId: user?._id as Id<"users">,
+                        });
                       }
                     }}
                     className="px-3 py-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors text-sm"
@@ -1243,34 +1262,6 @@ function ApplicationDetailContent({ id }: { id: string }) {
                     Clear
                   </button>
                 </div>
-              </div>
-            </div>
-          )}
-
-          {/* Schedule Interview Button (when not scheduled) */}
-          {!application.scheduledInterviewDate && (
-            <div className="bg-slate-800/50 border border-slate-700 border-dashed rounded-xl p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-full bg-slate-700 flex items-center justify-center">
-                    <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <h2 className="text-lg font-semibold text-white">Schedule Interview</h2>
-                    <p className="text-slate-400 text-sm">No interview scheduled yet</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowScheduleModal(true)}
-                  className="px-4 py-2 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg transition-colors flex items-center gap-2"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  Schedule
-                </button>
               </div>
             </div>
           )}
@@ -1345,6 +1336,7 @@ function ApplicationDetailContent({ id }: { id: string }) {
                           date: scheduleDate,
                           time: scheduleTime,
                           location: scheduleLocation,
+                          userId: user?._id as Id<"users">,
                         });
                         setShowScheduleModal(false);
                         setScheduleDate("");

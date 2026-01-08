@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import Protected from "../protected";
 import Sidebar from "@/components/Sidebar";
 import { useAuth } from "../auth-context";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id, Doc } from "@/convex/_generated/dataModel";
 import dynamic from "next/dynamic";
@@ -42,6 +42,13 @@ interface MessageReaction {
   createdAt: number;
 }
 
+interface MessageAttachment {
+  storageId: Id<"_storage">;
+  fileName: string;
+  fileType: string;
+  fileSize: number;
+}
+
 interface EnrichedMessage {
   _id: Id<"messages">;
   conversationId: Id<"conversations">;
@@ -52,6 +59,77 @@ interface EnrichedMessage {
   createdAt: number;
   sender: User | null;
   reactions?: MessageReaction[];
+  attachments?: MessageAttachment[];
+}
+
+// Attachment item component
+function AttachmentItem({
+  attachment,
+  isOwn,
+  getAttachmentUrl,
+}: {
+  attachment: MessageAttachment;
+  isOwn: boolean;
+  getAttachmentUrl: (args: { storageId: Id<"_storage"> }) => Promise<string | null>;
+}) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleDownload = async () => {
+    if (url) {
+      window.open(url, "_blank");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const downloadUrl = await getAttachmentUrl({ storageId: attachment.storageId });
+      if (downloadUrl) {
+        setUrl(downloadUrl);
+        window.open(downloadUrl, "_blank");
+      }
+    } catch (error) {
+      console.error("Failed to get attachment URL:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  };
+
+  const isImage = attachment.fileType.startsWith("image/");
+
+  return (
+    <button
+      onClick={handleDownload}
+      disabled={isLoading}
+      className={`flex items-center gap-2 text-left w-full py-1 rounded transition-colors ${
+        isOwn ? "hover:bg-white/10" : "hover:bg-slate-700/50"
+      }`}
+    >
+      {isLoading ? (
+        <svg className="w-4 h-4 animate-spin flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        </svg>
+      ) : isImage ? (
+        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+      ) : (
+        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+        </svg>
+      )}
+      <span className="truncate text-sm flex-1">{attachment.fileName}</span>
+      <span className={`text-xs flex-shrink-0 ${isOwn ? "text-cyan-200" : "text-slate-400"}`}>
+        {formatFileSize(attachment.fileSize)}
+      </span>
+    </button>
+  );
 }
 
 function MessagesContent() {
@@ -95,6 +173,11 @@ function MessagesContent() {
   const [gifSearchQuery, setGifSearchQuery] = useState("");
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const gifPickerRef = useRef<HTMLDivElement>(null);
+
+  // File attachment state
+  const [pendingAttachments, setPendingAttachments] = useState<MessageAttachment[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Close pickers when clicking outside
   useEffect(() => {
@@ -300,6 +383,8 @@ function MessagesContent() {
   const createConversation = useMutation(api.messages.createConversation);
   const markAsRead = useMutation(api.messages.markAsRead);
   const toggleReaction = useMutation(api.messages.toggleReaction);
+  const generateUploadUrl = useMutation(api.messages.generateUploadUrl);
+  const getAttachmentUrl = useAction(api.messages.getAttachmentUrl);
 
   // State for message reactions
   const [reactionPickerMessageId, setReactionPickerMessageId] = useState<Id<"messages"> | null>(null);
@@ -354,9 +439,55 @@ function MessagesContent() {
     }
   }, [selectedConversation, user, markAsRead]);
 
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        // Get upload URL
+        const uploadUrl = await generateUploadUrl();
+
+        // Upload the file
+        const response = await fetch(uploadUrl, {
+          method: "POST",
+          headers: { "Content-Type": file.type },
+          body: file,
+        });
+
+        if (!response.ok) {
+          throw new Error("Upload failed");
+        }
+
+        const { storageId } = await response.json();
+
+        // Add to pending attachments
+        setPendingAttachments(prev => [...prev, {
+          storageId,
+          fileName: file.name,
+          fileType: file.type,
+          fileSize: file.size,
+        }]);
+      }
+    } catch (error) {
+      console.error("Failed to upload file:", error);
+    } finally {
+      setIsUploading(false);
+      // Clear file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
+  const removePendingAttachment = (index: number) => {
+    setPendingAttachments(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !selectedConversation || !user) return;
+    if ((!newMessage.trim() && pendingAttachments.length === 0) || !selectedConversation || !user) return;
 
     // Parse @mentions
     const mentionRegex = /@(\w+)/g;
@@ -375,11 +506,19 @@ function MessagesContent() {
     await sendMessage({
       conversationId: selectedConversation._id,
       senderId: user._id,
-      content: newMessage,
+      content: newMessage || (pendingAttachments.length > 0 ? "[Attachment]" : ""),
       mentions,
+      attachments: pendingAttachments.length > 0 ? pendingAttachments : undefined,
     });
 
     setNewMessage("");
+    setPendingAttachments([]);
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
   };
 
   const handleStartConversation = async (targetUser: User) => {
@@ -623,7 +762,20 @@ function MessagesContent() {
                                   }`
                             }`}
                           >
-                            {renderMessageContent(msg.content)}
+                            {msg.content !== "[Attachment]" && renderMessageContent(msg.content)}
+                            {/* Attachments */}
+                            {msg.attachments && msg.attachments.length > 0 && (
+                              <div className={`${msg.content !== "[Attachment]" ? "mt-2 pt-2 border-t border-white/20" : ""}`}>
+                                {msg.attachments.map((att, idx) => (
+                                  <AttachmentItem
+                                    key={idx}
+                                    attachment={att}
+                                    isOwn={isOwn}
+                                    getAttachmentUrl={getAttachmentUrl}
+                                  />
+                                ))}
+                              </div>
+                            )}
                           </div>
 
                           {/* Reaction button - shows on hover */}
@@ -801,7 +953,44 @@ function MessagesContent() {
                   </div>
                 )}
 
+                {/* Pending Attachments */}
+                {pendingAttachments.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {pendingAttachments.map((att, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2"
+                      >
+                        <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                        </svg>
+                        <span className="text-sm text-white truncate max-w-[150px]">{att.fileName}</span>
+                        <span className="text-xs text-slate-500">{formatFileSize(att.fileSize)}</span>
+                        <button
+                          type="button"
+                          onClick={() => removePendingAttachment(index)}
+                          className="text-slate-400 hover:text-red-400"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <form onSubmit={handleSendMessage} className="flex gap-2 sm:gap-3 items-center">
+                  {/* Hidden file input */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv"
+                  />
+
                   {/* Emoji Button */}
                   <button
                     type="button"
@@ -838,6 +1027,29 @@ function MessagesContent() {
                     GIF
                   </button>
 
+                  {/* File Attachment Button */}
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                    className={`p-2.5 rounded-xl transition-colors flex-shrink-0 ${
+                      isUploading
+                        ? "bg-slate-700 text-slate-500"
+                        : "text-slate-400 hover:text-white hover:bg-slate-800"
+                    }`}
+                    title="Attach file"
+                  >
+                    {isUploading ? (
+                      <svg className="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                      </svg>
+                    )}
+                  </button>
+
                   <input
                     ref={inputRef}
                     type="text"
@@ -848,7 +1060,7 @@ function MessagesContent() {
                   />
                   <button
                     type="submit"
-                    disabled={!newMessage.trim()}
+                    disabled={!newMessage.trim() && pendingAttachments.length === 0}
                     className="px-4 sm:px-6 py-2.5 sm:py-3 bg-cyan-500 text-white font-medium rounded-xl hover:bg-cyan-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
                   >
                     <svg

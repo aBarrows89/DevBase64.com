@@ -1,6 +1,7 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, action } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
+import { api } from "./_generated/api";
 
 // Get all conversations for a user
 export const getConversations = query({
@@ -135,6 +136,12 @@ export const sendMessage = mutation({
     senderId: v.id("users"),
     content: v.string(),
     mentions: v.array(v.id("users")),
+    attachments: v.optional(v.array(v.object({
+      storageId: v.id("_storage"),
+      fileName: v.string(),
+      fileType: v.string(),
+      fileSize: v.number(),
+    }))),
   },
   handler: async (ctx, args) => {
     const messageId = await ctx.db.insert("messages", {
@@ -142,6 +149,7 @@ export const sendMessage = mutation({
       senderId: args.senderId,
       content: args.content,
       mentions: args.mentions,
+      attachments: args.attachments,
       readBy: [args.senderId], // Sender has read their own message
       createdAt: Date.now(),
     });
@@ -152,6 +160,23 @@ export const sendMessage = mutation({
     });
 
     return messageId;
+  },
+});
+
+// Generate upload URL for file attachments
+export const generateUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+// Get attachment download URL
+export const getAttachmentUrl = action({
+  args: { storageId: v.id("_storage") },
+  handler: async (ctx, args): Promise<string | null> => {
+    const url = await ctx.storage.getUrl(args.storageId);
+    return url;
   },
 });
 

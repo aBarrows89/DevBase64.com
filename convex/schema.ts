@@ -187,6 +187,7 @@ export default defineSchema({
     scheduledInterviewDate: v.optional(v.string()), // ISO date string (YYYY-MM-DD)
     scheduledInterviewTime: v.optional(v.string()), // Time string (HH:MM)
     scheduledInterviewLocation: v.optional(v.string()), // "In-person", "Phone", "Video", or custom location
+    scheduledInterviewEventId: v.optional(v.id("events")), // Calendar event ID for auto-created event
     // Interview rounds (up to 3)
     interviewRounds: v.optional(
       v.array(
@@ -257,6 +258,13 @@ export default defineSchema({
       emoji: v.string(), // The emoji character (e.g., "👍", "❤️", "😂")
       userId: v.id("users"),
       createdAt: v.number(),
+    }))),
+    // File attachments
+    attachments: v.optional(v.array(v.object({
+      storageId: v.id("_storage"),
+      fileName: v.string(),
+      fileType: v.string(),
+      fileSize: v.number(),
     }))),
     createdAt: v.number(),
   })
