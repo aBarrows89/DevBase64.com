@@ -873,7 +873,7 @@ By signing below, the Employee acknowledges that they have read, understand, and
             </div>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {currentItems.map((item) => (
+              {(activeTab === "scanners" ? scanners : pickers)?.map((item) => (
                 <div
                   key={item._id}
                   className={`border rounded-xl p-5 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}
