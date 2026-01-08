@@ -1,8 +1,8 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 
-// Current IRS mileage rate (2025 rate - update annually)
-const CURRENT_IRS_RATE = 0.725; // $0.725 per mile for 2025
+// Current IRS mileage rate (2026 rate - update annually)
+const CURRENT_IRS_RATE = 0.725; // $0.725 per mile for 2026
 
 // Default home location
 const DEFAULT_FROM_LOCATION = "Latrobe, PA";
