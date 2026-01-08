@@ -1,5 +1,6 @@
-import { query, mutation } from "./_generated/server";
+import { query, mutation, action } from "./_generated/server";
 import { v } from "convex/values";
+import { api } from "./_generated/api";
 
 // Get all active documents
 export const getAll = query({
@@ -146,5 +147,21 @@ export const getCategoryCounts = query({
       counts[doc.category] = (counts[doc.category] || 0) + 1;
     }
     return counts;
+  },
+});
+
+// Action to get download URL (can be called imperatively)
+export const getFileDownloadUrl = action({
+  args: { documentId: v.id("documents") },
+  handler: async (ctx, args): Promise<string | null> => {
+    // Get the document to find the fileId
+    const doc = await ctx.runQuery(api.documents.getById, { documentId: args.documentId });
+    if (!doc) {
+      throw new Error("Document not found");
+    }
+
+    // Get the download URL from storage
+    const url = await ctx.storage.getUrl(doc.fileId);
+    return url;
   },
 });

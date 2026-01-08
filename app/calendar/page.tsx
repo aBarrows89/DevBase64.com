@@ -1,0 +1,776 @@
+"use client";
+
+import { useState, useMemo } from "react";
+import Protected from "../protected";
+import Sidebar from "@/components/Sidebar";
+import { useTheme } from "../theme-context";
+import { useAuth } from "../auth-context";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { Id } from "@/convex/_generated/dataModel";
+
+function formatTime(timestamp: number): string {
+  return new Date(timestamp).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+function formatDate(timestamp: number): string {
+  return new Date(timestamp).toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function formatDateForInput(date: Date): string {
+  return date.toISOString().slice(0, 16);
+}
+
+const MEETING_TYPES = [
+  { value: "zoom", label: "Zoom", icon: "📹" },
+  { value: "teams", label: "Microsoft Teams", icon: "💼" },
+  { value: "meet", label: "Google Meet", icon: "🎥" },
+  { value: "in_person", label: "In Person", icon: "🏢" },
+  { value: "phone", label: "Phone Call", icon: "📞" },
+  { value: "other", label: "Other", icon: "🔗" },
+];
+
+function CalendarContent() {
+  const { theme } = useTheme();
+  const { user } = useAuth();
+  const isDark = theme === "dark";
+
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [viewMode, setViewMode] = useState<"month" | "week" | "day">("month");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEventModal, setShowEventModal] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState<any>(null);
+
+  // Form state for creating/editing events
+  const [formData, setFormData] = useState({
+    title: "",
+    description: "",
+    startTime: formatDateForInput(new Date()),
+    endTime: formatDateForInput(new Date(Date.now() + 60 * 60 * 1000)),
+    isAllDay: false,
+    location: "",
+    meetingLink: "",
+    meetingType: "zoom",
+    inviteeIds: [] as Id<"users">[],
+  });
+
+  // Get date range for current view
+  const dateRange = useMemo(() => {
+    const start = new Date(selectedDate);
+    const end = new Date(selectedDate);
+
+    if (viewMode === "month") {
+      start.setDate(1);
+      start.setHours(0, 0, 0, 0);
+      end.setMonth(end.getMonth() + 1);
+      end.setDate(0);
+      end.setHours(23, 59, 59, 999);
+    } else if (viewMode === "week") {
+      const day = start.getDay();
+      start.setDate(start.getDate() - day);
+      start.setHours(0, 0, 0, 0);
+      end.setDate(start.getDate() + 6);
+      end.setHours(23, 59, 59, 999);
+    } else {
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+    }
+
+    return { start: start.getTime(), end: end.getTime() };
+  }, [selectedDate, viewMode]);
+
+  // Queries
+  const myEvents = useQuery(
+    api.events.listMyEvents,
+    user
+      ? {
+          userId: user._id as Id<"users">,
+          startDate: dateRange.start,
+          endDate: dateRange.end,
+        }
+      : "skip"
+  );
+
+  const pendingInvites = useQuery(
+    api.events.getPendingInvites,
+    user ? { userId: user._id as Id<"users"> } : "skip"
+  );
+
+  const allUsers = useQuery(api.auth.getAllUsers);
+
+  // Mutations
+  const createEvent = useMutation(api.events.create);
+  const updateEvent = useMutation(api.events.update);
+  const cancelEvent = useMutation(api.events.cancel);
+  const respondToInvite = useMutation(api.events.respondToInvite);
+  const markInviteRead = useMutation(api.events.markInviteRead);
+
+  // Calendar grid for month view
+  const calendarDays = useMemo(() => {
+    const days = [];
+    const firstDay = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+    const lastDay = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0);
+    const startPadding = firstDay.getDay();
+
+    // Add padding for previous month
+    for (let i = startPadding - 1; i >= 0; i--) {
+      const d = new Date(firstDay);
+      d.setDate(d.getDate() - i - 1);
+      days.push({ date: d, isCurrentMonth: false });
+    }
+
+    // Add days of current month
+    for (let i = 1; i <= lastDay.getDate(); i++) {
+      days.push({
+        date: new Date(selectedDate.getFullYear(), selectedDate.getMonth(), i),
+        isCurrentMonth: true,
+      });
+    }
+
+    // Add padding for next month
+    const remaining = 42 - days.length;
+    for (let i = 1; i <= remaining; i++) {
+      const d = new Date(lastDay);
+      d.setDate(d.getDate() + i);
+      days.push({ date: d, isCurrentMonth: false });
+    }
+
+    return days;
+  }, [selectedDate]);
+
+  // Get events for a specific day
+  const getEventsForDay = (date: Date) => {
+    if (!myEvents) return [];
+    const dayStart = new Date(date).setHours(0, 0, 0, 0);
+    const dayEnd = new Date(date).setHours(23, 59, 59, 999);
+    return myEvents.filter(
+      (e) => e.startTime >= dayStart && e.startTime <= dayEnd
+    );
+  };
+
+  const handleCreateEvent = async () => {
+    if (!user || !formData.title) return;
+
+    try {
+      await createEvent({
+        title: formData.title,
+        description: formData.description || undefined,
+        startTime: new Date(formData.startTime).getTime(),
+        endTime: new Date(formData.endTime).getTime(),
+        isAllDay: formData.isAllDay,
+        location: formData.location || undefined,
+        meetingLink: formData.meetingLink || undefined,
+        meetingType: formData.meetingType || undefined,
+        inviteeIds: formData.inviteeIds,
+        userId: user._id as Id<"users">,
+      });
+
+      setShowCreateModal(false);
+      resetForm();
+    } catch (err) {
+      console.error("Failed to create event:", err);
+    }
+  };
+
+  const handleRespondToInvite = async (eventId: Id<"events">, status: string) => {
+    if (!user) return;
+    try {
+      await respondToInvite({
+        eventId,
+        userId: user._id as Id<"users">,
+        status,
+      });
+    } catch (err) {
+      console.error("Failed to respond:", err);
+    }
+  };
+
+  const handleCancelEvent = async (eventId: Id<"events">) => {
+    if (!user || !confirm("Are you sure you want to cancel this event?")) return;
+    try {
+      await cancelEvent({ eventId, userId: user._id as Id<"users"> });
+      setShowEventModal(false);
+      setSelectedEvent(null);
+    } catch (err) {
+      console.error("Failed to cancel:", err);
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      title: "",
+      description: "",
+      startTime: formatDateForInput(new Date()),
+      endTime: formatDateForInput(new Date(Date.now() + 60 * 60 * 1000)),
+      isAllDay: false,
+      location: "",
+      meetingLink: "",
+      meetingType: "zoom",
+      inviteeIds: [],
+    });
+  };
+
+  const openEventDetails = async (event: any) => {
+    setSelectedEvent(event);
+    setShowEventModal(true);
+    // Mark as read if it's an invite
+    if (user && event.myInviteStatus === "pending") {
+      await markInviteRead({
+        eventId: event._id,
+        userId: user._id as Id<"users">,
+      });
+    }
+  };
+
+  const navigateMonth = (delta: number) => {
+    const newDate = new Date(selectedDate);
+    newDate.setMonth(newDate.getMonth() + delta);
+    setSelectedDate(newDate);
+  };
+
+  const isToday = (date: Date) => {
+    const today = new Date();
+    return (
+      date.getDate() === today.getDate() &&
+      date.getMonth() === today.getMonth() &&
+      date.getFullYear() === today.getFullYear()
+    );
+  };
+
+  return (
+    <div className={`flex h-screen ${isDark ? "bg-slate-900" : "bg-gray-50"}`}>
+      <Sidebar />
+
+      <main className="flex-1 overflow-y-auto">
+        {/* Header */}
+        <header
+          className={`sticky top-0 z-10 backdrop-blur-sm border-b px-4 sm:px-8 py-4 ${
+            isDark ? "bg-slate-900/80 border-slate-700" : "bg-white/80 border-gray-200"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <h1 className={`text-xl sm:text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
+                Calendar
+              </h1>
+              {pendingInvites && pendingInvites.length > 0 && (
+                <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                  {pendingInvites.length} pending
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => {
+                resetForm();
+                setShowCreateModal(true);
+              }}
+              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
+                isDark
+                  ? "bg-cyan-500 text-white hover:bg-cyan-600"
+                  : "bg-blue-600 text-white hover:bg-blue-700"
+              }`}
+            >
+              + New Event
+            </button>
+          </div>
+        </header>
+
+        <div className="p-4 sm:p-8">
+          {/* Pending Invites Section */}
+          {pendingInvites && pendingInvites.length > 0 && (
+            <div className={`mb-6 p-4 rounded-xl border ${isDark ? "bg-amber-500/10 border-amber-500/30" : "bg-amber-50 border-amber-200"}`}>
+              <h2 className={`font-semibold mb-3 ${isDark ? "text-amber-400" : "text-amber-800"}`}>
+                Pending Invitations
+              </h2>
+              <div className="space-y-2">
+                {pendingInvites.map((invite) => (
+                  <div
+                    key={invite._id}
+                    className={`flex items-center justify-between p-3 rounded-lg ${
+                      isDark ? "bg-slate-800" : "bg-white"
+                    }`}
+                  >
+                    <div>
+                      <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                        {invite.event?.title}
+                      </p>
+                      <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                        {invite.event && formatDate(invite.event.startTime)} at{" "}
+                        {invite.event && formatTime(invite.event.startTime)}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleRespondToInvite(invite.eventId, "accepted")}
+                        className="px-3 py-1 text-sm font-medium rounded bg-green-500/20 text-green-400 hover:bg-green-500/30"
+                      >
+                        Accept
+                      </button>
+                      <button
+                        onClick={() => handleRespondToInvite(invite.eventId, "declined")}
+                        className="px-3 py-1 text-sm font-medium rounded bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Calendar Navigation */}
+          <div className={`flex items-center justify-between mb-4 p-4 rounded-xl border ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200"}`}>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => navigateMonth(-1)}
+                className={`p-2 rounded-lg transition-colors ${isDark ? "hover:bg-slate-700 text-slate-400" : "hover:bg-gray-100 text-gray-600"}`}
+              >
+                &larr;
+              </button>
+              <h2 className={`text-lg font-semibold min-w-[200px] text-center ${isDark ? "text-white" : "text-gray-900"}`}>
+                {selectedDate.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+              </h2>
+              <button
+                onClick={() => navigateMonth(1)}
+                className={`p-2 rounded-lg transition-colors ${isDark ? "hover:bg-slate-700 text-slate-400" : "hover:bg-gray-100 text-gray-600"}`}
+              >
+                &rarr;
+              </button>
+            </div>
+            <button
+              onClick={() => setSelectedDate(new Date())}
+              className={`px-3 py-1.5 text-sm font-medium rounded-lg ${isDark ? "bg-slate-700 text-white hover:bg-slate-600" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+            >
+              Today
+            </button>
+          </div>
+
+          {/* Calendar Grid */}
+          <div className={`rounded-xl border overflow-hidden ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200"}`}>
+            {/* Day headers */}
+            <div className="grid grid-cols-7">
+              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+                <div
+                  key={day}
+                  className={`p-2 text-center text-sm font-medium border-b ${isDark ? "bg-slate-700 text-slate-300 border-slate-600" : "bg-gray-50 text-gray-600 border-gray-200"}`}
+                >
+                  {day}
+                </div>
+              ))}
+            </div>
+
+            {/* Calendar days */}
+            <div className="grid grid-cols-7">
+              {calendarDays.map((day, idx) => {
+                const dayEvents = getEventsForDay(day.date);
+                const today = isToday(day.date);
+
+                return (
+                  <div
+                    key={idx}
+                    className={`min-h-[100px] p-1 border-b border-r cursor-pointer transition-colors ${
+                      isDark ? "border-slate-700" : "border-gray-100"
+                    } ${
+                      day.isCurrentMonth
+                        ? isDark ? "bg-slate-800" : "bg-white"
+                        : isDark ? "bg-slate-800/50" : "bg-gray-50"
+                    } ${
+                      today ? (isDark ? "ring-2 ring-cyan-500 ring-inset" : "ring-2 ring-blue-500 ring-inset") : ""
+                    } hover:${isDark ? "bg-slate-700" : "bg-gray-50"}`}
+                    onClick={() => {
+                      const newDate = new Date(day.date);
+                      setFormData({
+                        ...formData,
+                        startTime: formatDateForInput(newDate),
+                        endTime: formatDateForInput(new Date(newDate.getTime() + 60 * 60 * 1000)),
+                      });
+                      setShowCreateModal(true);
+                    }}
+                  >
+                    <div
+                      className={`text-sm font-medium mb-1 ${
+                        today
+                          ? "text-cyan-500"
+                          : day.isCurrentMonth
+                          ? isDark ? "text-white" : "text-gray-900"
+                          : isDark ? "text-slate-600" : "text-gray-400"
+                      }`}
+                    >
+                      {day.date.getDate()}
+                    </div>
+                    <div className="space-y-0.5">
+                      {dayEvents.slice(0, 3).map((event) => (
+                        <div
+                          key={event._id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEventDetails(event);
+                          }}
+                          className={`text-xs px-1 py-0.5 rounded truncate cursor-pointer ${
+                            event.myInviteStatus === "pending"
+                              ? "bg-amber-500/20 text-amber-400"
+                              : event.myInviteStatus === "organizer"
+                              ? isDark ? "bg-cyan-500/20 text-cyan-400" : "bg-blue-100 text-blue-700"
+                              : isDark ? "bg-green-500/20 text-green-400" : "bg-green-100 text-green-700"
+                          }`}
+                        >
+                          {formatTime(event.startTime)} {event.title}
+                        </div>
+                      ))}
+                      {dayEvents.length > 3 && (
+                        <div className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                          +{dayEvents.length - 3} more
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Create Event Modal */}
+        {showCreateModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className={`w-full max-w-lg rounded-xl border max-h-[90vh] overflow-y-auto ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200"}`}>
+              <div className={`p-4 border-b ${isDark ? "border-slate-700" : "border-gray-200"}`}>
+                <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  Create Event
+                </h2>
+              </div>
+
+              <div className="p-4 space-y-4">
+                {/* Title */}
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                    Title *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.title}
+                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-lg border ${isDark ? "bg-slate-900 border-slate-600 text-white" : "bg-white border-gray-300 text-gray-900"}`}
+                    placeholder="Event title"
+                  />
+                </div>
+
+                {/* Date/Time */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                      Start
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={formData.startTime}
+                      onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
+                      className={`w-full px-3 py-2 rounded-lg border ${isDark ? "bg-slate-900 border-slate-600 text-white" : "bg-white border-gray-300 text-gray-900"}`}
+                    />
+                  </div>
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                      End
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={formData.endTime}
+                      onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
+                      className={`w-full px-3 py-2 rounded-lg border ${isDark ? "bg-slate-900 border-slate-600 text-white" : "bg-white border-gray-300 text-gray-900"}`}
+                    />
+                  </div>
+                </div>
+
+                {/* Meeting Type */}
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                    Meeting Type
+                  </label>
+                  <select
+                    value={formData.meetingType}
+                    onChange={(e) => setFormData({ ...formData, meetingType: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-lg border ${isDark ? "bg-slate-900 border-slate-600 text-white" : "bg-white border-gray-300 text-gray-900"}`}
+                  >
+                    {MEETING_TYPES.map((type) => (
+                      <option key={type.value} value={type.value}>
+                        {type.icon} {type.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Meeting Link */}
+                {formData.meetingType !== "in_person" && formData.meetingType !== "phone" && (
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                      Meeting Link
+                    </label>
+                    <input
+                      type="url"
+                      value={formData.meetingLink}
+                      onChange={(e) => setFormData({ ...formData, meetingLink: e.target.value })}
+                      className={`w-full px-3 py-2 rounded-lg border ${isDark ? "bg-slate-900 border-slate-600 text-white" : "bg-white border-gray-300 text-gray-900"}`}
+                      placeholder="https://zoom.us/j/..."
+                    />
+                  </div>
+                )}
+
+                {/* Location */}
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                    Location
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.location}
+                    onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-lg border ${isDark ? "bg-slate-900 border-slate-600 text-white" : "bg-white border-gray-300 text-gray-900"}`}
+                    placeholder="Conference Room A, or virtual"
+                  />
+                </div>
+
+                {/* Description */}
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                    Description
+                  </label>
+                  <textarea
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    rows={3}
+                    className={`w-full px-3 py-2 rounded-lg border resize-none ${isDark ? "bg-slate-900 border-slate-600 text-white" : "bg-white border-gray-300 text-gray-900"}`}
+                    placeholder="Event details..."
+                  />
+                </div>
+
+                {/* Invite Users */}
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                    Invite Users
+                  </label>
+                  <div className={`border rounded-lg max-h-40 overflow-y-auto ${isDark ? "border-slate-600" : "border-gray-300"}`}>
+                    {allUsers
+                      ?.filter((u) => u._id !== user?._id)
+                      .map((u) => (
+                        <label
+                          key={u._id}
+                          className={`flex items-center gap-2 p-2 cursor-pointer hover:${isDark ? "bg-slate-700" : "bg-gray-50"}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={formData.inviteeIds.includes(u._id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setFormData({
+                                  ...formData,
+                                  inviteeIds: [...formData.inviteeIds, u._id],
+                                });
+                              } else {
+                                setFormData({
+                                  ...formData,
+                                  inviteeIds: formData.inviteeIds.filter((id) => id !== u._id),
+                                });
+                              }
+                            }}
+                            className="rounded"
+                          />
+                          <span className={isDark ? "text-white" : "text-gray-900"}>{u.name}</span>
+                          <span className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                            {u.email}
+                          </span>
+                        </label>
+                      ))}
+                  </div>
+                  {formData.inviteeIds.length > 0 && (
+                    <p className={`text-xs mt-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                      {formData.inviteeIds.length} user(s) will be invited
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className={`p-4 border-t flex gap-3 ${isDark ? "border-slate-700" : "border-gray-200"}`}>
+                <button
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    resetForm();
+                  }}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium ${isDark ? "bg-slate-700 text-white hover:bg-slate-600" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCreateEvent}
+                  disabled={!formData.title}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium disabled:opacity-50 ${isDark ? "bg-cyan-500 text-white hover:bg-cyan-600" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+                >
+                  Create Event
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Event Details Modal */}
+        {showEventModal && selectedEvent && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className={`w-full max-w-lg rounded-xl border ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200"}`}>
+              <div className={`p-4 border-b ${isDark ? "border-slate-700" : "border-gray-200"}`}>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                      {selectedEvent.title}
+                    </h2>
+                    <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                      {formatDate(selectedEvent.startTime)} at {formatTime(selectedEvent.startTime)} - {formatTime(selectedEvent.endTime)}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setShowEventModal(false);
+                      setSelectedEvent(null);
+                    }}
+                    className={`p-1 rounded hover:${isDark ? "bg-slate-700" : "bg-gray-100"}`}
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-4 space-y-4">
+                {/* Meeting Link */}
+                {selectedEvent.meetingLink && (
+                  <div>
+                    <p className={`text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Meeting Link</p>
+                    <a
+                      href={selectedEvent.meetingLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-cyan-500 hover:underline break-all"
+                    >
+                      {selectedEvent.meetingLink}
+                    </a>
+                  </div>
+                )}
+
+                {/* Location */}
+                {selectedEvent.location && (
+                  <div>
+                    <p className={`text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Location</p>
+                    <p className={isDark ? "text-white" : "text-gray-900"}>{selectedEvent.location}</p>
+                  </div>
+                )}
+
+                {/* Description */}
+                {selectedEvent.description && (
+                  <div>
+                    <p className={`text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Description</p>
+                    <p className={isDark ? "text-white" : "text-gray-900"}>{selectedEvent.description}</p>
+                  </div>
+                )}
+
+                {/* Organizer */}
+                <div>
+                  <p className={`text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Organizer</p>
+                  <p className={isDark ? "text-white" : "text-gray-900"}>{selectedEvent.createdByName}</p>
+                </div>
+
+                {/* Invitees */}
+                {selectedEvent.invitees && selectedEvent.invitees.length > 0 && (
+                  <div>
+                    <p className={`text-sm font-medium mb-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>Invitees</p>
+                    <div className="space-y-1">
+                      {selectedEvent.invitees.map((inv: any) => (
+                        <div key={inv._id} className="flex items-center justify-between text-sm">
+                          <span className={isDark ? "text-white" : "text-gray-900"}>{inv.userName}</span>
+                          <span
+                            className={`px-2 py-0.5 rounded text-xs ${
+                              inv.status === "accepted"
+                                ? "bg-green-500/20 text-green-400"
+                                : inv.status === "declined"
+                                ? "bg-red-500/20 text-red-400"
+                                : "bg-amber-500/20 text-amber-400"
+                            }`}
+                          >
+                            {inv.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Response buttons for invitees */}
+                {selectedEvent.myInviteStatus === "pending" && (
+                  <div className={`pt-4 border-t ${isDark ? "border-slate-700" : "border-gray-200"}`}>
+                    <p className={`text-sm font-medium mb-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>Your Response</p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          handleRespondToInvite(selectedEvent._id, "accepted");
+                          setShowEventModal(false);
+                        }}
+                        className="flex-1 px-3 py-2 text-sm font-medium rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30"
+                      >
+                        Accept
+                      </button>
+                      <button
+                        onClick={() => {
+                          handleRespondToInvite(selectedEvent._id, "maybe");
+                          setShowEventModal(false);
+                        }}
+                        className="flex-1 px-3 py-2 text-sm font-medium rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500/30"
+                      >
+                        Maybe
+                      </button>
+                      <button
+                        onClick={() => {
+                          handleRespondToInvite(selectedEvent._id, "declined");
+                          setShowEventModal(false);
+                        }}
+                        className="flex-1 px-3 py-2 text-sm font-medium rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Cancel button for organizer */}
+                {selectedEvent.myInviteStatus === "organizer" && (
+                  <div className={`pt-4 border-t ${isDark ? "border-slate-700" : "border-gray-200"}`}>
+                    <button
+                      onClick={() => handleCancelEvent(selectedEvent._id)}
+                      className="w-full px-3 py-2 text-sm font-medium rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                    >
+                      Cancel Event
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
+
+export default function CalendarPage() {
+  return (
+    <Protected>
+      <CalendarContent />
+    </Protected>
+  );
+}

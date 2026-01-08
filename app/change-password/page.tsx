@@ -65,9 +65,9 @@ export default function ChangePasswordPage() {
         {/* Logo */}
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
-            DevBase64
+            IE Central
           </h1>
-          <p className={`mt-2 ${isDark ? "text-slate-500" : "text-gray-500"}`}>Development Dashboard</p>
+          <p className={`mt-2 ${isDark ? "text-slate-500" : "text-gray-500"}`}>Import Export Tire Company</p>
         </div>
 
         {/* Change Password Form */}

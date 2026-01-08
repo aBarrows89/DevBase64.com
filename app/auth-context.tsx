@@ -71,14 +71,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Load saved session on mount
   useEffect(() => {
-    const savedUserId = localStorage.getItem("devbase64_user_id");
+    const savedUserId = localStorage.getItem("ie_central_user_id");
     if (savedUserId) {
       // Basic validation - Convex user IDs should be a specific format
       // Clear invalid IDs that might be from other tables/projects
       if (savedUserId.length > 0) {
         setUserId(savedUserId);
       } else {
-        localStorage.removeItem("devbase64_user_id");
+        localStorage.removeItem("ie_central_user_id");
         setInitialLoadComplete(true);
       }
     } else {
@@ -102,7 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // User ID in localStorage doesn't match any user in database
         // This can happen if the ID is from a different table/project
         console.warn("Invalid user session detected, clearing...");
-        localStorage.removeItem("devbase64_user_id");
+        localStorage.removeItem("ie_central_user_id");
         setUserId(null);
       }
       setInitialLoadComplete(true);
@@ -117,7 +117,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const result = await loginMutation({ email, password });
       if (result.success && result.userId) {
         setUserId(result.userId);
-        localStorage.setItem("devbase64_user_id", result.userId);
+        localStorage.setItem("ie_central_user_id", result.userId);
         return {
           success: true,
           forcePasswordChange: result.forcePasswordChange,
@@ -131,7 +131,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = () => {
     setUserId(null);
-    localStorage.removeItem("devbase64_user_id");
+    localStorage.removeItem("ie_central_user_id");
     hasLoadedUserData.current = false; // Reset for next login
     setInitialLoadComplete(true); // Keep as complete since we know there's no session
   };

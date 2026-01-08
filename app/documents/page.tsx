@@ -5,7 +5,7 @@ import Protected from "../protected";
 import Sidebar from "@/components/Sidebar";
 import { useTheme } from "../theme-context";
 import { useAuth } from "../auth-context";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 
@@ -39,9 +39,7 @@ function DocumentsContent() {
   const archiveDocument = useMutation(api.documents.archive);
   const removeDocument = useMutation(api.documents.remove);
   const incrementDownload = useMutation(api.documents.incrementDownload);
-  const getDownloadUrl = useQuery(api.documents.getDownloadUrl,
-    documents?.[0]?.fileId ? { fileId: documents[0].fileId } : "skip"
-  );
+  const getFileDownloadUrl = useAction(api.documents.getFileDownloadUrl);
 
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [editingDocument, setEditingDocument] = useState<Id<"documents"> | null>(null);
@@ -128,22 +126,22 @@ function DocumentsContent() {
 
   const handleDownload = async (doc: NonNullable<typeof documents>[0]) => {
     try {
+      // Get the download URL using the action
+      const url = await getFileDownloadUrl({ documentId: doc._id });
+
+      if (!url) {
+        setError("Could not get download URL");
+        return;
+      }
+
       // Increment download count
       await incrementDownload({ documentId: doc._id });
 
-      // Get download URL and open in new tab
-      const response = await fetch(`/api/download?fileId=${doc.fileId}`);
-      if (!response.ok) {
-        // Fallback: construct URL directly
-        window.open(`${process.env.NEXT_PUBLIC_CONVEX_URL?.replace('.convex.cloud', '.convex.site')}/getFile?storageId=${doc.fileId}`, "_blank");
-      } else {
-        const { url } = await response.json();
-        window.open(url, "_blank");
-      }
+      // Open in new tab
+      window.open(url, "_blank");
     } catch (err) {
-      // Fallback to direct storage URL pattern
-      const storageUrl = `https://outstanding-dalmatian-787.convex.site/getFile?storageId=${doc.fileId}`;
-      window.open(storageUrl, "_blank");
+      console.error("Download error:", err);
+      setError(err instanceof Error ? err.message : "Download failed");
     }
   };
 

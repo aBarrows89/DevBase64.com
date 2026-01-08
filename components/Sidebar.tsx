@@ -33,6 +33,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/documents", label: "Doc Hub", icon: "M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z M12 3v6h6" },
   { href: "/users", label: "Users", icon: "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" },
   { href: "/messages", label: "Messages", icon: "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" },
+  { href: "/calendar", label: "Calendar", icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" },
   { href: "/notifications", label: "Notifications", icon: "M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" },
 ];
 
@@ -78,6 +79,7 @@ const NAV_GROUPS: NavGroup[] = [
 
 const BOTTOM_NAV_ITEMS = [
   { href: "/reports", label: "Reports", icon: "M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
+  { href: "/mileage", label: "Mileage", icon: "M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7", superAdminOnly: true },
   { href: "/audit-log", label: "Audit Log", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
   { href: "/settings", label: "Settings", icon: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" },
 ];
@@ -103,6 +105,12 @@ export default function Sidebar() {
   // Get unread message count
   const unreadCount = useQuery(
     api.messages.getUnreadCount,
+    user?._id ? { userId: user._id } : "skip"
+  );
+
+  // Get unread event invite count
+  const unreadEventInvites = useQuery(
+    api.events.getUnreadInviteCount,
     user?._id ? { userId: user._id } : "skip"
   );
 
@@ -152,9 +160,14 @@ export default function Sidebar() {
     return group;
   });
 
-  // Filter bottom nav items for warehouse manager (hide Reports and Audit Log)
+  // Check if user is super_admin
+  const isSuperAdmin = user?.role === "super_admin";
+
+  // Filter bottom nav items for warehouse manager (hide Reports and Audit Log) and superAdminOnly items
   const filteredBottomNavItems = BOTTOM_NAV_ITEMS.filter((item) => {
     if (isWarehouseManager && (item.href === "/reports" || item.href === "/audit-log")) return false;
+    // Hide superAdminOnly items from non-super_admins
+    if ('superAdminOnly' in item && item.superAdminOnly && !isSuperAdmin) return false;
     return true;
   });
 
@@ -436,8 +449,10 @@ export default function Sidebar() {
               {filteredNavItems.map((item) => {
                 const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
                 const isMessages = item.href === "/messages";
+                const isCalendar = item.href === "/calendar";
                 const isNotifications = item.href === "/notifications";
                 const showMessageBadge = isMessages && unreadCount && unreadCount > 0;
+                const showCalendarBadge = isCalendar && unreadEventInvites && unreadEventInvites > 0;
                 const showNotificationBadge = isNotifications && unreadNotificationCount && unreadNotificationCount > 0;
 
                 return (
@@ -472,6 +487,11 @@ export default function Sidebar() {
                     {showMessageBadge && (
                       <span className="min-w-[20px] h-[20px] px-1.5 text-[11px] font-bold flex items-center justify-center rounded-full bg-red-500 text-white">
                         {unreadCount > 99 ? "99+" : unreadCount}
+                      </span>
+                    )}
+                    {showCalendarBadge && (
+                      <span className="min-w-[20px] h-[20px] px-1.5 text-[11px] font-bold flex items-center justify-center rounded-full bg-amber-500 text-white">
+                        {unreadEventInvites > 99 ? "99+" : unreadEventInvites}
                       </span>
                     )}
                     {showNotificationBadge && (

@@ -52,7 +52,7 @@ export default function LoginPage() {
             className="h-14 w-auto mx-auto"
             priority
           />
-          <p className={`mt-3 ${isDark ? "text-slate-500" : "text-gray-500"}`}>Business Intelligence Dashboard</p>
+          <p className={`mt-3 ${isDark ? "text-slate-500" : "text-gray-500"}`}>IE Central - Business Intelligence</p>
         </div>
 
         {/* Login Form */}

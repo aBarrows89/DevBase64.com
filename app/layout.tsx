@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "DevBase64 Dashboard",
-  description: "Project management and development dashboard",
+  title: "IE Central",
+  description: "Import Export Tire Company - Business Intelligence Dashboard",
 };
 
 export default function RootLayout({

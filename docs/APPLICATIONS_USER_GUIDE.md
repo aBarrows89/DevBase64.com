@@ -1,6 +1,6 @@
 # Applications & Hiring System User Guide
 
-This guide covers how to use the Applications screen, conduct interviews, and operate the hiring systems in DevBase64.
+This guide covers how to use the Applications screen, conduct interviews, and operate the hiring systems in IE Central.
 
 ---
 

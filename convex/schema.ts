@@ -1213,4 +1213,73 @@ export default defineSchema({
     .index("by_enrollment", ["enrollmentId"])
     .index("by_personnel", ["personnelId"])
     .index("by_status", ["status"]),
+
+  // ============ CALENDAR / EVENTS ============
+  events: defineTable({
+    title: v.string(),
+    description: v.optional(v.string()),
+    startTime: v.number(), // Unix timestamp (ms)
+    endTime: v.number(), // Unix timestamp (ms)
+    isAllDay: v.boolean(),
+    location: v.optional(v.string()), // Physical location or virtual
+    meetingLink: v.optional(v.string()), // Zoom, Teams, Meet, etc.
+    meetingType: v.optional(v.string()), // "zoom" | "teams" | "meet" | "other" | "in_person"
+    createdBy: v.id("users"),
+    createdByName: v.string(),
+    // Recurrence (optional - for future)
+    isRecurring: v.optional(v.boolean()),
+    recurrenceRule: v.optional(v.string()), // RRULE format
+    // Status
+    isCancelled: v.optional(v.boolean()),
+    cancelledAt: v.optional(v.number()),
+    cancelledBy: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_start", ["startTime"])
+    .index("by_created_by", ["createdBy"])
+    .index("by_created", ["createdAt"]),
+
+  // Event invitations (who's invited and their response)
+  eventInvites: defineTable({
+    eventId: v.id("events"),
+    userId: v.id("users"),
+    status: v.string(), // "pending" | "accepted" | "declined" | "maybe"
+    respondedAt: v.optional(v.number()),
+    // Notification tracking
+    notifiedAt: v.optional(v.number()),
+    isRead: v.boolean(),
+    createdAt: v.number(),
+  })
+    .index("by_event", ["eventId"])
+    .index("by_user", ["userId"])
+    .index("by_user_status", ["userId", "status"])
+    .index("by_user_unread", ["userId", "isRead"]),
+
+  // ============ MILEAGE TRACKING (super_admin only) ============
+  mileageEntries: defineTable({
+    date: v.string(), // YYYY-MM-DD
+    fromLocation: v.string(), // Starting location (e.g., "Latrobe, PA")
+    toLocation: v.string(), // Destination
+    miles: v.number(), // One-way miles
+    isRoundTrip: v.boolean(), // If true, miles are doubled for reimbursement
+    purpose: v.string(), // Business purpose
+    vehicle: v.optional(v.string()), // Vehicle used (e.g., "2022 Ford F-150")
+    // Reimbursement calculation
+    irsRate: v.number(), // IRS rate at time of entry (e.g., 0.67)
+    reimbursementAmount: v.number(), // Calculated: miles * rate (or miles * 2 * rate for round trip)
+    // Status
+    status: v.string(), // "pending" | "submitted" | "approved" | "paid"
+    submittedAt: v.optional(v.number()),
+    approvedAt: v.optional(v.number()),
+    paidAt: v.optional(v.number()),
+    // Notes
+    notes: v.optional(v.string()),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_date", ["date"])
+    .index("by_status", ["status"])
+    .index("by_created_by", ["createdBy"]),
 });

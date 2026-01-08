@@ -106,6 +106,7 @@ function ShiftsContent() {
   }, [locations, getAccessibleLocationIds]);
 
   // Get all personnel not yet assigned to any shift today (includes leads)
+  // Filter by selected location and sort by location
   const unassignedPersonnel = useMemo(() => {
     const assignedIds = new Set<string>();
     shifts.forEach(shift => {
@@ -116,8 +117,29 @@ function ShiftsContent() {
         assignedIds.add(shift.leadId);
       }
     });
-    return activePersonnel.filter(p => !assignedIds.has(p._id));
-  }, [shifts, activePersonnel]);
+
+    // Filter by assigned status
+    let filtered = activePersonnel.filter(p => !assignedIds.has(p._id));
+
+    // Filter by selected location if one is selected
+    if (selectedLocationId) {
+      filtered = filtered.filter(p => p.locationId === selectedLocationId);
+    }
+
+    // Sort by location name, then by last name
+    return filtered.sort((a, b) => {
+      // Get location names for sorting
+      const aLocation = locations.find(l => l._id === a.locationId)?.name || "No Location";
+      const bLocation = locations.find(l => l._id === b.locationId)?.name || "No Location";
+
+      // First sort by location
+      const locationCompare = aLocation.localeCompare(bLocation);
+      if (locationCompare !== 0) return locationCompare;
+
+      // Then sort by last name within same location
+      return a.lastName.localeCompare(b.lastName);
+    });
+  }, [shifts, activePersonnel, selectedLocationId, locations]);
 
   // Mutations
   const createShift = useMutation(api.shifts.create);
@@ -1256,26 +1278,34 @@ function ShiftsContent() {
               {/* Horizontal scroll on mobile, vertical on desktop */}
               <div className="p-2 sm:p-3 lg:space-y-2 lg:max-h-[calc(100vh-300px)] overflow-x-auto lg:overflow-x-visible lg:overflow-y-auto">
                 <div className="flex lg:flex-col gap-2 lg:gap-2">
-                  {unassignedPersonnel.map((person) => (
-                    <div
-                      key={person._id}
-                      draggable={canEditShifts}
-                      onDragStart={(e) => handleDragStart(e, person._id, `${person.firstName} ${person.lastName}`, "unassigned")}
-                      onDragEnd={handleDragEnd}
-                      className={`p-2 sm:p-3 rounded-lg cursor-move transition-colors flex-shrink-0 min-w-[120px] lg:min-w-0 ${
-                        isDark
-                          ? "bg-slate-700/50 hover:bg-slate-700"
-                          : "bg-gray-50 hover:bg-gray-100"
-                      }`}
-                    >
-                      <div className={`font-medium text-sm sm:text-base whitespace-nowrap lg:whitespace-normal ${isDark ? "text-white" : "text-gray-900"}`}>
-                        {person.firstName} {person.lastName}
+                  {unassignedPersonnel.map((person) => {
+                    const personLocation = locations.find(l => l._id === person.locationId);
+                    return (
+                      <div
+                        key={person._id}
+                        draggable={canEditShifts}
+                        onDragStart={(e) => handleDragStart(e, person._id, `${person.firstName} ${person.lastName}`, "unassigned")}
+                        onDragEnd={handleDragEnd}
+                        className={`p-2 sm:p-3 rounded-lg cursor-move transition-colors flex-shrink-0 min-w-[120px] lg:min-w-0 ${
+                          isDark
+                            ? "bg-slate-700/50 hover:bg-slate-700"
+                            : "bg-gray-50 hover:bg-gray-100"
+                        }`}
+                      >
+                        <div className={`font-medium text-sm sm:text-base whitespace-nowrap lg:whitespace-normal ${isDark ? "text-white" : "text-gray-900"}`}>
+                          {person.firstName} {person.lastName}
+                        </div>
+                        <div className={`text-xs ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                          {person.department}
+                        </div>
+                        {personLocation && !selectedLocationId && (
+                          <div className={`text-xs mt-0.5 ${isDark ? "text-cyan-400/70" : "text-blue-500/70"}`}>
+                            📍 {personLocation.name}
+                          </div>
+                        )}
                       </div>
-                      <div className={`text-xs ${isDark ? "text-slate-500" : "text-gray-500"}`}>
-                        {person.department}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                   {unassignedPersonnel.length === 0 && (
                     <div className={`text-center py-4 lg:py-8 w-full ${isDark ? "text-slate-500" : "text-gray-400"}`}>
                       <p className="text-sm">All staff assigned</p>
@@ -1346,27 +1376,35 @@ function ShiftsContent() {
 
               <div className="space-y-2 max-h-80 overflow-y-auto">
                 {unassignedPersonnel.length > 0 ? (
-                  unassignedPersonnel.map((person) => (
-                    <button
-                      key={person._id}
-                      onClick={() => handleAssignPersonnel(person._id)}
-                      className={`w-full flex items-center justify-between p-3 rounded-lg transition-colors ${
-                        isDark
-                          ? "bg-slate-700/50 hover:bg-slate-700 text-white"
-                          : "bg-gray-50 hover:bg-gray-100 text-gray-900"
-                      }`}
-                    >
-                      <div className="text-left">
-                        <div className="font-medium">{person.firstName} {person.lastName}</div>
-                        <div className={`text-xs ${isDark ? "text-slate-500" : "text-gray-500"}`}>
-                          {person.department} - {person.position}
+                  unassignedPersonnel.map((person) => {
+                    const personLocation = locations.find(l => l._id === person.locationId);
+                    return (
+                      <button
+                        key={person._id}
+                        onClick={() => handleAssignPersonnel(person._id)}
+                        className={`w-full flex items-center justify-between p-3 rounded-lg transition-colors ${
+                          isDark
+                            ? "bg-slate-700/50 hover:bg-slate-700 text-white"
+                            : "bg-gray-50 hover:bg-gray-100 text-gray-900"
+                        }`}
+                      >
+                        <div className="text-left">
+                          <div className="font-medium">{person.firstName} {person.lastName}</div>
+                          <div className={`text-xs ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                            {person.department} - {person.position}
+                          </div>
+                          {personLocation && !selectedLocationId && (
+                            <div className={`text-xs ${isDark ? "text-cyan-400/70" : "text-blue-500/70"}`}>
+                              📍 {personLocation.name}
+                            </div>
+                          )}
                         </div>
-                      </div>
-                      <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                      </svg>
-                    </button>
-                  ))
+                        <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                      </button>
+                    );
+                  })
                 ) : (
                   <p className={`text-sm text-center py-8 ${isDark ? "text-slate-500" : "text-gray-500"}`}>
                     All staff have been assigned
