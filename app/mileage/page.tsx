@@ -203,9 +203,100 @@ function MileageContent() {
           @media print {
             body * { visibility: hidden; }
             .print-area, .print-area * { visibility: visible; }
-            .print-area { position: absolute; left: 0; top: 0; width: 100%; }
+            .print-area {
+              position: absolute;
+              left: 0;
+              top: 0;
+              width: 100%;
+              background: white !important;
+              color: black !important;
+              padding: 0.4in;
+            }
             .no-print { display: none !important; }
-            @page { margin: 0.5in; }
+            .print-only { display: block !important; }
+            @page {
+              margin: 0.4in;
+              size: letter;
+            }
+            table {
+              border-collapse: collapse;
+              width: 100%;
+              font-size: 9pt;
+              margin-top: 16px;
+            }
+            th, td {
+              border: 1px solid #555;
+              padding: 5px 6px;
+              text-align: left;
+            }
+            th {
+              background: #e5e7eb !important;
+              font-weight: 600;
+              color: #111 !important;
+              text-transform: uppercase;
+              font-size: 8pt;
+            }
+            td {
+              color: #333 !important;
+            }
+            tfoot td {
+              background: #f3f4f6 !important;
+              font-weight: bold;
+            }
+            .print-header {
+              border-bottom: 3px solid #111;
+              padding-bottom: 12px;
+              margin-bottom: 0;
+            }
+            .print-header h1 {
+              font-size: 18pt;
+              letter-spacing: 1px;
+            }
+            .print-summary {
+              background: #f9fafb !important;
+              border: 2px solid #333;
+              padding: 10px;
+              margin-top: 12px;
+              border-radius: 4px;
+            }
+            .print-summary p {
+              margin: 0;
+            }
+            .print-footer {
+              margin-top: 24px;
+              page-break-inside: avoid;
+            }
+            .signature-line {
+              border-top: 1px solid #333;
+              width: 100%;
+              max-width: 280px;
+              margin-top: 50px;
+              padding-top: 4px;
+            }
+            .grid {
+              display: grid !important;
+            }
+            .grid-cols-2 {
+              grid-template-columns: repeat(2, 1fr) !important;
+            }
+            .grid-cols-3 {
+              grid-template-columns: repeat(3, 1fr) !important;
+            }
+            .gap-4 {
+              gap: 16px !important;
+            }
+            .gap-8 {
+              gap: 32px !important;
+            }
+            .text-center {
+              text-align: center !important;
+            }
+            .text-right {
+              text-align: right !important;
+            }
+            strong {
+              font-weight: 700 !important;
+            }
           }
         `}</style>
 
@@ -255,12 +346,39 @@ function MileageContent() {
 
         <div className="p-4 sm:p-8 print-area" ref={printRef}>
           {/* Print Header */}
-          <div className="hidden print:block mb-6">
-            <h1 className="text-2xl font-bold">Mileage Reimbursement Report</h1>
-            <p className="text-gray-600">
-              {selectedMonth ? months.find((m) => m.value === selectedMonth)?.label : "All Months"} {selectedYear}
-            </p>
-            <p className="text-sm text-gray-500">IRS Rate: ${currentRate?.toFixed(2)}/mile</p>
+          <div className="hidden print:block print-header">
+            <div className="text-center mb-4">
+              <h1 className="text-2xl font-bold mb-1">MILEAGE REIMBURSEMENT REQUEST</h1>
+              <p className="text-sm text-gray-500">Business Travel Expense Report</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 mt-4 text-sm">
+              <div>
+                <p><strong>Employee:</strong> {user?.name || "N/A"}</p>
+                <p><strong>Email:</strong> {user?.email || "N/A"}</p>
+              </div>
+              <div className="text-right">
+                <p><strong>Period:</strong> {selectedMonth ? months.find((m) => m.value === selectedMonth)?.label : "All Months"} {selectedYear}</p>
+                <p><strong>IRS Standard Rate:</strong> ${currentRate?.toFixed(3)}/mile</p>
+              </div>
+            </div>
+
+            <div className="print-summary mt-4">
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <p className="text-xs text-gray-500 uppercase">Total Entries</p>
+                  <p className="text-lg font-bold">{summary?.totalEntries || 0}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 uppercase">Total Miles</p>
+                  <p className="text-lg font-bold">{summary?.totalMiles?.toFixed(1) || 0}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 uppercase">Total Reimbursement</p>
+                  <p className="text-lg font-bold">{formatCurrency(summary?.totalReimbursement || 0)}</p>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Filters */}
@@ -448,9 +566,32 @@ function MileageContent() {
             </table>
           </div>
 
-          {/* Print Footer */}
-          <div className="hidden print:block mt-8 pt-4 border-t text-sm text-gray-500">
-            <p>Generated on {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}</p>
+          {/* Print Footer with Signatures */}
+          <div className="hidden print:block print-footer">
+            <div className="mt-6 p-4 border border-gray-300 bg-gray-50">
+              <p className="text-xs text-gray-600 mb-2">
+                <strong>EMPLOYEE CERTIFICATION:</strong> I certify that the above mileage was incurred in the performance
+                of official business duties and that I have not been reimbursed from any other source.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-8 mt-8">
+              <div>
+                <div className="signature-line"></div>
+                <p className="text-sm"><strong>Employee Signature</strong></p>
+                <p className="text-xs text-gray-500 mt-1">Date: ________________</p>
+              </div>
+              <div>
+                <div className="signature-line"></div>
+                <p className="text-sm"><strong>Supervisor Approval</strong></p>
+                <p className="text-xs text-gray-500 mt-1">Date: ________________</p>
+              </div>
+            </div>
+
+            <div className="mt-8 pt-4 border-t border-gray-300 text-xs text-gray-400 text-center">
+              <p>Report Generated: {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}</p>
+              <p className="mt-1">This document is for internal use only.</p>
+            </div>
           </div>
         </div>
 
