@@ -24,6 +24,7 @@ const statusColors: Record<string, string> = {
 
 const TABS = [
   { id: "overview", label: "Overview" },
+  { id: "calls", label: "Calls" },
   { id: "writeups", label: "Write-Ups" },
   { id: "attendance", label: "Attendance" },
   { id: "merits", label: "Merits" },
@@ -311,6 +312,7 @@ function PersonnelDetailContent() {
   const equipmentAgreements = useQuery(api.equipment.getPersonnelAgreements, { personnelId });
   const locations = useQuery(api.locations.list);
   const safetyCompletions = useQuery(api.safetyChecklist.getPersonnelCompletions, { personnelId, limit: 20 });
+  const callLogs = useQuery(api.personnel.getCallLogs, { personnelId });
 
   // Get linked application if exists
   const linkedApplication = useQuery(
@@ -335,6 +337,8 @@ function PersonnelDetailContent() {
   const toggleTraining = useMutation(api.personnel.toggleTraining);
   const recordTenureCheckIn = useMutation(api.personnel.recordTenureCheckIn);
   const dismissTenureNotifications = useMutation(api.notifications.dismissTenureCheckInNotifications);
+  const logCall = useMutation(api.personnel.logCall);
+  const deleteCallLog = useMutation(api.personnel.deleteCallLog);
 
   // File upload state
   const [uploadingWriteUpId, setUploadingWriteUpId] = useState<Id<"writeUps"> | null>(null);
@@ -347,6 +351,12 @@ function PersonnelDetailContent() {
   // Attendance file upload state
   const [uploadingAttendanceId, setUploadingAttendanceId] = useState<Id<"attendance"> | null>(null);
   const [isUploadingAttendance, setIsUploadingAttendance] = useState(false);
+
+  // Call log state
+  const [showCallLogModal, setShowCallLogModal] = useState(false);
+  const [callOutcome, setCallOutcome] = useState<string>("");
+  const [callNotes, setCallNotes] = useState("");
+  const [isLoggingCall, setIsLoggingCall] = useState(false);
 
   // Edit personnel loading state
   const [isSavingPersonnel, setIsSavingPersonnel] = useState(false);
@@ -907,7 +917,20 @@ function PersonnelDetailContent() {
                   </div>
                   <div>
                     <p className={`text-xs font-medium ${isDark ? "text-slate-500" : "text-gray-500"}`}>Phone</p>
-                    <p className={`${isDark ? "text-white" : "text-gray-900"}`}>{personnel.phone}</p>
+                    <div className="flex items-center gap-2">
+                      <a href={`tel:${personnel.phone}`} className={`${isDark ? "text-white" : "text-gray-900"}`}>{personnel.phone}</a>
+                      <button
+                        onClick={() => setShowCallLogModal(true)}
+                        className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                          isDark
+                            ? "bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 border border-cyan-500/30"
+                            : "bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200"
+                        }`}
+                        title="Log a phone call"
+                      >
+                        Log Call
+                      </button>
+                    </div>
                   </div>
                   <div>
                     <p className={`text-xs font-medium ${isDark ? "text-slate-500" : "text-gray-500"}`}>Hire Date</p>
@@ -1406,6 +1429,126 @@ function PersonnelDetailContent() {
                       Only managers can record check-ins
                     </p>
                   )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Calls Tab */}
+          {activeTab === "calls" && (
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <h3 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  Call History
+                </h3>
+                <button
+                  onClick={() => setShowCallLogModal(true)}
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+                    isDark
+                      ? "bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 border border-cyan-500/30"
+                      : "bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200"
+                  }`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                  </svg>
+                  Log Call
+                </button>
+              </div>
+
+              {callLogs && callLogs.length > 0 ? (
+                <div className="space-y-3">
+                  {callLogs.map((call) => (
+                    <div
+                      key={call._id}
+                      className={`p-4 rounded-xl border ${
+                        isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className={`p-2 rounded-lg ${
+                            call.outcome === "answered"
+                              ? "bg-green-500/20 text-green-400"
+                              : call.outcome === "no_answer"
+                              ? "bg-red-500/20 text-red-400"
+                              : call.outcome === "voicemail"
+                              ? "bg-amber-500/20 text-amber-400"
+                              : "bg-slate-500/20 text-slate-400"
+                          }`}>
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                            </svg>
+                          </div>
+                          <div>
+                            <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                              {new Date(call.calledAt).toLocaleDateString()} at {new Date(call.calledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                            <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                              Called by {call.calledByName}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {call.outcome && (
+                            <span className={`px-2 py-1 text-xs font-medium rounded ${
+                              call.outcome === "answered"
+                                ? "bg-green-500/20 text-green-400"
+                                : call.outcome === "no_answer"
+                                ? "bg-red-500/20 text-red-400"
+                                : call.outcome === "voicemail"
+                                ? "bg-amber-500/20 text-amber-400"
+                                : call.outcome === "busy"
+                                ? "bg-orange-500/20 text-orange-400"
+                                : "bg-slate-500/20 text-slate-400"
+                            }`}>
+                              {call.outcome === "no_answer" ? "No Answer" :
+                               call.outcome === "wrong_number" ? "Wrong Number" :
+                               call.outcome.charAt(0).toUpperCase() + call.outcome.slice(1)}
+                            </span>
+                          )}
+                          {canDeleteRecords && (
+                            <button
+                              onClick={async () => {
+                                if (confirm("Delete this call log?")) {
+                                  await deleteCallLog({ callLogId: call._id });
+                                }
+                              }}
+                              className={`p-1 rounded transition-colors ${
+                                isDark ? "hover:bg-red-500/20 text-slate-500 hover:text-red-400" : "hover:bg-red-100 text-gray-400 hover:text-red-600"
+                              }`}
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      {call.notes && (
+                        <p className={`mt-3 text-sm ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                          {call.notes}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className={`text-center py-12 rounded-xl border ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-gray-50 border-gray-200"}`}>
+                  <svg className={`w-12 h-12 mx-auto mb-4 ${isDark ? "text-slate-600" : "text-gray-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                  </svg>
+                  <p className={`${isDark ? "text-slate-400" : "text-gray-500"}`}>No calls logged yet</p>
+                  <button
+                    onClick={() => setShowCallLogModal(true)}
+                    className={`mt-4 px-4 py-2 rounded-lg font-medium transition-colors ${
+                      isDark
+                        ? "bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400"
+                        : "bg-blue-50 hover:bg-blue-100 text-blue-600"
+                    }`}
+                  >
+                    Log First Call
+                  </button>
                 </div>
               )}
             </div>
@@ -2323,6 +2466,86 @@ function PersonnelDetailContent() {
                   className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-green-500 hover:bg-green-400 text-white" : "bg-green-600 hover:bg-green-700 text-white"}`}
                 >
                   Add Merit
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Call Log Modal */}
+        {showCallLogModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className={`w-full max-w-md rounded-xl p-6 ${isDark ? "bg-slate-800" : "bg-white"}`}>
+              <h2 className={`text-lg font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
+                Log Phone Call
+              </h2>
+              <div className="space-y-4">
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    Outcome
+                  </label>
+                  <select
+                    value={callOutcome}
+                    onChange={(e) => setCallOutcome(e.target.value)}
+                    className={`w-full px-3 py-2 rounded-lg border ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-white border-gray-300 text-gray-900"}`}
+                  >
+                    <option value="">Select outcome...</option>
+                    <option value="answered">Answered</option>
+                    <option value="no_answer">No Answer</option>
+                    <option value="voicemail">Voicemail</option>
+                    <option value="busy">Busy</option>
+                    <option value="wrong_number">Wrong Number</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    Notes (optional)
+                  </label>
+                  <textarea
+                    value={callNotes}
+                    onChange={(e) => setCallNotes(e.target.value)}
+                    rows={3}
+                    placeholder="Add any notes about the call..."
+                    className={`w-full px-3 py-2 rounded-lg border ${isDark ? "bg-slate-700 border-slate-600 text-white placeholder-slate-500" : "bg-white border-gray-300 text-gray-900"}`}
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => {
+                    setShowCallLogModal(false);
+                    setCallOutcome("");
+                    setCallNotes("");
+                  }}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-slate-700 hover:bg-slate-600 text-white" : "bg-gray-100 hover:bg-gray-200 text-gray-900"}`}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!user) return;
+                    setIsLoggingCall(true);
+                    try {
+                      await logCall({
+                        personnelId,
+                        calledBy: user._id,
+                        calledByName: user.name,
+                        outcome: callOutcome || undefined,
+                        notes: callNotes || undefined,
+                      });
+                      setShowCallLogModal(false);
+                      setCallOutcome("");
+                      setCallNotes("");
+                    } catch (error) {
+                      console.error("Failed to log call:", error);
+                    } finally {
+                      setIsLoggingCall(false);
+                    }
+                  }}
+                  disabled={isLoggingCall}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-cyan-500 hover:bg-cyan-400 text-white" : "bg-blue-600 hover:bg-blue-700 text-white"} disabled:opacity-50`}
+                >
+                  {isLoggingCall ? "Logging..." : "Log Call"}
                 </button>
               </div>
             </div>

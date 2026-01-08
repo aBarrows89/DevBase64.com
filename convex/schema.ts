@@ -388,6 +388,21 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_email", ["email"]),
 
+  // Phone call logs for personnel
+  personnelCallLogs: defineTable({
+    personnelId: v.id("personnel"),
+    calledAt: v.number(), // Timestamp of the call
+    calledBy: v.id("users"), // Who made the call
+    calledByName: v.string(), // Name of caller for display
+    duration: v.optional(v.number()), // Call duration in minutes (optional)
+    outcome: v.optional(v.string()), // "answered" | "no_answer" | "voicemail" | "busy" | "wrong_number"
+    notes: v.optional(v.string()), // Notes about the call
+    createdAt: v.number(),
+  })
+    .index("by_personnel", ["personnelId"])
+    .index("by_called_at", ["calledAt"])
+    .index("by_caller", ["calledBy"]),
+
   // Write-ups / Disciplinary Records
   writeUps: defineTable({
     personnelId: v.id("personnel"),

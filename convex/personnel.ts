@@ -874,3 +874,89 @@ export const updateResumeAndAnalysis = mutation({
     return args.personnelId;
   },
 });
+
+// ============ PHONE CALL LOGS ============
+
+// Log a phone call to a personnel member
+export const logCall = mutation({
+  args: {
+    personnelId: v.id("personnel"),
+    calledBy: v.id("users"),
+    calledByName: v.string(),
+    outcome: v.optional(v.string()), // "answered" | "no_answer" | "voicemail" | "busy" | "wrong_number"
+    duration: v.optional(v.number()), // Duration in minutes
+    notes: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+
+    const callLogId = await ctx.db.insert("personnelCallLogs", {
+      personnelId: args.personnelId,
+      calledAt: now,
+      calledBy: args.calledBy,
+      calledByName: args.calledByName,
+      outcome: args.outcome,
+      duration: args.duration,
+      notes: args.notes,
+      createdAt: now,
+    });
+
+    return callLogId;
+  },
+});
+
+// Get call logs for a specific personnel member
+export const getCallLogs = query({
+  args: {
+    personnelId: v.id("personnel"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const logs = await ctx.db
+      .query("personnelCallLogs")
+      .withIndex("by_personnel", (q) => q.eq("personnelId", args.personnelId))
+      .order("desc")
+      .take(args.limit ?? 50);
+
+    return logs;
+  },
+});
+
+// Get recent call logs across all personnel (for activity feed)
+export const getRecentCallLogs = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const logs = await ctx.db
+      .query("personnelCallLogs")
+      .withIndex("by_called_at")
+      .order("desc")
+      .take(args.limit ?? 20);
+
+    // Enrich with personnel info
+    return await Promise.all(
+      logs.map(async (log) => {
+        const personnel = await ctx.db.get(log.personnelId);
+        return {
+          ...log,
+          personnelName: personnel
+            ? `${personnel.firstName} ${personnel.lastName}`
+            : "Unknown",
+          personnelPhone: personnel?.phone,
+        };
+      })
+    );
+  },
+});
+
+// Delete a call log (admin only)
+export const deleteCallLog = mutation({
+  args: {
+    callLogId: v.id("personnelCallLogs"),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.delete(args.callLogId);
+    return { success: true };
+  },
+});
