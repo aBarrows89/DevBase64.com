@@ -507,6 +507,7 @@ export const scheduleInterview = mutation({
     time: v.string(), // Time string (HH:MM)
     location: v.optional(v.string()), // "In-person", "Phone", "Video", or custom
     userId: v.id("users"), // User scheduling the interview (for calendar event)
+    startTimestamp: v.optional(v.number()), // Pre-calculated timestamp from frontend (preserves local timezone)
   },
   handler: async (ctx, args) => {
     const application = await ctx.db.get(args.applicationId);
@@ -517,10 +518,9 @@ export const scheduleInterview = mutation({
 
     const now = Date.now();
 
-    // Parse date and time to create start/end timestamps
-    const [year, month, day] = args.date.split("-").map(Number);
-    const [hours, minutes] = args.time.split(":").map(Number);
-    const startTime = new Date(year, month - 1, day, hours, minutes).getTime();
+    // Use frontend-provided timestamp (preserves user's local timezone)
+    // The frontend calculates this using new Date(date + 'T' + time) which uses local timezone
+    const startTime = args.startTimestamp!;
     const endTime = startTime + 60 * 60 * 1000; // 1 hour interview by default
 
     // Create calendar event

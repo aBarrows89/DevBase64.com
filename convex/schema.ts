@@ -712,6 +712,57 @@ export default defineSchema({
     .index("by_personnel", ["returnedBy"])
     .index("by_checked", ["checkedAt"]),
 
+  // Vehicles (company fleet)
+  vehicles: defineTable({
+    // Identification
+    vin: v.string(), // Vehicle Identification Number (17 characters)
+    plateNumber: v.optional(v.string()), // License plate
+    // Vehicle details
+    year: v.optional(v.number()), // Model year (e.g., 2024)
+    make: v.string(), // Ford, Chevrolet, Toyota, etc.
+    model: v.string(), // F-150, Silverado, Camry, etc.
+    trim: v.optional(v.string()), // XLT, LT, LE, etc.
+    color: v.optional(v.string()),
+    fuelType: v.optional(v.string()), // "gasoline" | "diesel" | "electric" | "hybrid"
+    // Location & Assignment
+    locationId: v.optional(v.id("locations")),
+    assignedTo: v.optional(v.id("personnel")), // Current driver
+    assignedAt: v.optional(v.number()),
+    // Status
+    status: v.string(), // "active" | "maintenance" | "out_of_service" | "retired"
+    // Mileage tracking
+    currentMileage: v.optional(v.number()), // Current odometer reading
+    lastMileageUpdate: v.optional(v.number()), // When mileage was last updated
+    // Insurance
+    insurancePolicyNumber: v.optional(v.string()),
+    insuranceProvider: v.optional(v.string()),
+    insuranceExpirationDate: v.optional(v.string()), // YYYY-MM-DD
+    // Registration
+    registrationExpirationDate: v.optional(v.string()), // YYYY-MM-DD
+    registrationState: v.optional(v.string()), // PA, OH, etc.
+    // Purchase info
+    purchaseDate: v.optional(v.string()), // YYYY-MM-DD
+    purchasePrice: v.optional(v.number()),
+    purchasedFrom: v.optional(v.string()), // Dealer name
+    // Maintenance
+    lastMaintenanceDate: v.optional(v.string()),
+    nextMaintenanceDue: v.optional(v.string()), // Date or mileage
+    nextMaintenanceMileage: v.optional(v.number()),
+    // Notes
+    notes: v.optional(v.string()),
+    conditionNotes: v.optional(v.string()),
+    // Retirement
+    retiredAt: v.optional(v.number()),
+    retiredReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_vin", ["vin"])
+    .index("by_plate", ["plateNumber"])
+    .index("by_status", ["status"])
+    .index("by_location", ["locationId"])
+    .index("by_assigned", ["assignedTo"]),
+
   // Equipment assignment history (for audit trail)
   equipmentHistory: defineTable({
     equipmentType: v.string(), // "scanner" | "picker"

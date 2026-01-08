@@ -1297,3 +1297,338 @@ export const deleteEquipment = mutation({
     return { success: true };
   },
 });
+
+// ============ VEHICLE QUERIES ============
+
+// List all vehicles
+export const listVehicles = query({
+  args: {
+    locationId: v.optional(v.id("locations")),
+    status: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    let vehicles;
+
+    if (args.locationId) {
+      vehicles = await ctx.db
+        .query("vehicles")
+        .withIndex("by_location", (q) => q.eq("locationId", args.locationId!))
+        .collect();
+    } else {
+      vehicles = await ctx.db.query("vehicles").collect();
+    }
+
+    if (args.status) {
+      vehicles = vehicles.filter((v) => v.status === args.status);
+    }
+
+    // Enrich with location and personnel info
+    return await Promise.all(
+      vehicles.map(async (vehicle) => {
+        const location = vehicle.locationId
+          ? await ctx.db.get(vehicle.locationId)
+          : null;
+        const assignedPerson = vehicle.assignedTo
+          ? await ctx.db.get(vehicle.assignedTo)
+          : null;
+
+        return {
+          ...vehicle,
+          locationName: location?.name ?? "Unassigned",
+          assignedPersonName: assignedPerson
+            ? `${assignedPerson.firstName} ${assignedPerson.lastName}`
+            : null,
+        };
+      })
+    );
+  },
+});
+
+// Get single vehicle
+export const getVehicle = query({
+  args: { id: v.id("vehicles") },
+  handler: async (ctx, args) => {
+    const vehicle = await ctx.db.get(args.id);
+    if (!vehicle) return null;
+
+    const location = vehicle.locationId
+      ? await ctx.db.get(vehicle.locationId)
+      : null;
+    const assignedPerson = vehicle.assignedTo
+      ? await ctx.db.get(vehicle.assignedTo)
+      : null;
+
+    return {
+      ...vehicle,
+      locationName: location?.name ?? "Unassigned",
+      assignedPersonName: assignedPerson
+        ? `${assignedPerson.firstName} ${assignedPerson.lastName}`
+        : null,
+    };
+  },
+});
+
+// Get vehicle by VIN
+export const getVehicleByVin = query({
+  args: { vin: v.string() },
+  handler: async (ctx, args) => {
+    const vehicle = await ctx.db
+      .query("vehicles")
+      .withIndex("by_vin", (q) => q.eq("vin", args.vin))
+      .first();
+    return vehicle;
+  },
+});
+
+// ============ VEHICLE MUTATIONS ============
+
+// Create a new vehicle
+export const createVehicle = mutation({
+  args: {
+    vin: v.string(),
+    plateNumber: v.optional(v.string()),
+    year: v.optional(v.number()),
+    make: v.string(),
+    model: v.string(),
+    trim: v.optional(v.string()),
+    color: v.optional(v.string()),
+    fuelType: v.optional(v.string()),
+    locationId: v.optional(v.id("locations")),
+    currentMileage: v.optional(v.number()),
+    insurancePolicyNumber: v.optional(v.string()),
+    insuranceProvider: v.optional(v.string()),
+    insuranceExpirationDate: v.optional(v.string()),
+    registrationExpirationDate: v.optional(v.string()),
+    registrationState: v.optional(v.string()),
+    purchaseDate: v.optional(v.string()),
+    purchasePrice: v.optional(v.number()),
+    purchasedFrom: v.optional(v.string()),
+    notes: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    // Check for duplicate VIN
+    const existing = await ctx.db
+      .query("vehicles")
+      .withIndex("by_vin", (q) => q.eq("vin", args.vin))
+      .first();
+
+    if (existing) {
+      throw new Error("A vehicle with this VIN already exists");
+    }
+
+    const now = Date.now();
+    const vehicleId = await ctx.db.insert("vehicles", {
+      vin: args.vin.toUpperCase(),
+      plateNumber: args.plateNumber?.toUpperCase(),
+      year: args.year,
+      make: args.make,
+      model: args.model,
+      trim: args.trim,
+      color: args.color,
+      fuelType: args.fuelType,
+      locationId: args.locationId,
+      status: "active",
+      currentMileage: args.currentMileage,
+      lastMileageUpdate: args.currentMileage ? now : undefined,
+      insurancePolicyNumber: args.insurancePolicyNumber,
+      insuranceProvider: args.insuranceProvider,
+      insuranceExpirationDate: args.insuranceExpirationDate,
+      registrationExpirationDate: args.registrationExpirationDate,
+      registrationState: args.registrationState,
+      purchaseDate: args.purchaseDate,
+      purchasePrice: args.purchasePrice,
+      purchasedFrom: args.purchasedFrom,
+      notes: args.notes,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return vehicleId;
+  },
+});
+
+// Update a vehicle
+export const updateVehicle = mutation({
+  args: {
+    id: v.id("vehicles"),
+    vin: v.optional(v.string()),
+    plateNumber: v.optional(v.string()),
+    year: v.optional(v.number()),
+    make: v.optional(v.string()),
+    model: v.optional(v.string()),
+    trim: v.optional(v.string()),
+    color: v.optional(v.string()),
+    fuelType: v.optional(v.string()),
+    locationId: v.optional(v.id("locations")),
+    status: v.optional(v.string()),
+    currentMileage: v.optional(v.number()),
+    insurancePolicyNumber: v.optional(v.string()),
+    insuranceProvider: v.optional(v.string()),
+    insuranceExpirationDate: v.optional(v.string()),
+    registrationExpirationDate: v.optional(v.string()),
+    registrationState: v.optional(v.string()),
+    purchaseDate: v.optional(v.string()),
+    purchasePrice: v.optional(v.number()),
+    purchasedFrom: v.optional(v.string()),
+    lastMaintenanceDate: v.optional(v.string()),
+    nextMaintenanceDue: v.optional(v.string()),
+    nextMaintenanceMileage: v.optional(v.number()),
+    notes: v.optional(v.string()),
+    conditionNotes: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { id, ...updates } = args;
+    const vehicle = await ctx.db.get(id);
+    if (!vehicle) {
+      throw new Error("Vehicle not found");
+    }
+
+    // Check for duplicate VIN if changing
+    if (updates.vin && updates.vin !== vehicle.vin) {
+      const existing = await ctx.db
+        .query("vehicles")
+        .withIndex("by_vin", (q) => q.eq("vin", updates.vin!))
+        .first();
+      if (existing) {
+        throw new Error("A vehicle with this VIN already exists");
+      }
+    }
+
+    const now = Date.now();
+    const updateData: Record<string, unknown> = {
+      ...updates,
+      updatedAt: now,
+    };
+
+    // Track mileage updates
+    if (updates.currentMileage !== undefined && updates.currentMileage !== vehicle.currentMileage) {
+      updateData.lastMileageUpdate = now;
+    }
+
+    // Uppercase VIN and plate
+    if (updates.vin) {
+      updateData.vin = updates.vin.toUpperCase();
+    }
+    if (updates.plateNumber) {
+      updateData.plateNumber = updates.plateNumber.toUpperCase();
+    }
+
+    await ctx.db.patch(id, updateData);
+    return { success: true };
+  },
+});
+
+// Assign vehicle to personnel
+export const assignVehicle = mutation({
+  args: {
+    vehicleId: v.id("vehicles"),
+    personnelId: v.id("personnel"),
+  },
+  handler: async (ctx, args) => {
+    const vehicle = await ctx.db.get(args.vehicleId);
+    if (!vehicle) {
+      throw new Error("Vehicle not found");
+    }
+
+    const personnel = await ctx.db.get(args.personnelId);
+    if (!personnel) {
+      throw new Error("Personnel not found");
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(args.vehicleId, {
+      assignedTo: args.personnelId,
+      assignedAt: now,
+      updatedAt: now,
+    });
+
+    return { success: true };
+  },
+});
+
+// Unassign vehicle
+export const unassignVehicle = mutation({
+  args: {
+    vehicleId: v.id("vehicles"),
+  },
+  handler: async (ctx, args) => {
+    const vehicle = await ctx.db.get(args.vehicleId);
+    if (!vehicle) {
+      throw new Error("Vehicle not found");
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(args.vehicleId, {
+      assignedTo: undefined,
+      assignedAt: undefined,
+      updatedAt: now,
+    });
+
+    return { success: true };
+  },
+});
+
+// Retire a vehicle
+export const retireVehicle = mutation({
+  args: {
+    vehicleId: v.id("vehicles"),
+    reason: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const vehicle = await ctx.db.get(args.vehicleId);
+    if (!vehicle) {
+      throw new Error("Vehicle not found");
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(args.vehicleId, {
+      status: "retired",
+      retiredAt: now,
+      retiredReason: args.reason,
+      assignedTo: undefined,
+      assignedAt: undefined,
+      updatedAt: now,
+    });
+
+    return { success: true };
+  },
+});
+
+// Update vehicle mileage
+export const updateVehicleMileage = mutation({
+  args: {
+    vehicleId: v.id("vehicles"),
+    mileage: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const vehicle = await ctx.db.get(args.vehicleId);
+    if (!vehicle) {
+      throw new Error("Vehicle not found");
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(args.vehicleId, {
+      currentMileage: args.mileage,
+      lastMileageUpdate: now,
+      updatedAt: now,
+    });
+
+    return { success: true };
+  },
+});
+
+// Delete a vehicle (super_admin only)
+export const deleteVehicle = mutation({
+  args: {
+    vehicleId: v.id("vehicles"),
+  },
+  handler: async (ctx, args) => {
+    const vehicle = await ctx.db.get(args.vehicleId);
+    if (!vehicle) {
+      throw new Error("Vehicle not found");
+    }
+
+    await ctx.db.delete(args.vehicleId);
+    return { success: true };
+  },
+});

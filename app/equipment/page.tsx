@@ -11,7 +11,7 @@ import { Id } from "@/convex/_generated/dataModel";
 import SignaturePad from "@/components/SignaturePad";
 import QRCodeModal from "@/components/QRCodeModal";
 
-type EquipmentType = "scanners" | "pickers";
+type EquipmentType = "scanners" | "pickers" | "vehicles";
 
 // Equipment value for agreements
 const EQUIPMENT_VALUE = 100;
@@ -120,6 +120,9 @@ function EquipmentContent() {
   const pickers = useQuery(api.equipment.listPickers,
     selectedLocation === "all" ? {} : { locationId: selectedLocation }
   );
+  const vehicles = useQuery(api.equipment.listVehicles,
+    selectedLocation === "all" ? {} : { locationId: selectedLocation }
+  );
   const personnel = useQuery(api.personnel.list, {});
   const activePersonnel = useQuery(api.equipment.listActivePersonnel);
   const safetyCompletions = useQuery(
@@ -145,6 +148,10 @@ function EquipmentContent() {
   const returnEquipmentWithCheck = useMutation(api.equipment.returnEquipmentWithCheck);
   const deleteEquipmentMutation = useMutation(api.equipment.deleteEquipment);
   const reassignEquipmentMutation = useMutation(api.equipment.reassignEquipment);
+  const createVehicle = useMutation(api.equipment.createVehicle);
+  const updateVehicle = useMutation(api.equipment.updateVehicle);
+  const retireVehicle = useMutation(api.equipment.retireVehicle);
+  const deleteVehicleMutation = useMutation(api.equipment.deleteVehicle);
 
   // Delete modal state (superuser only)
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -163,6 +170,31 @@ function EquipmentContent() {
     notes: "",
     conditionNotes: "",
   });
+
+  // Vehicle form state
+  const [vehicleFormData, setVehicleFormData] = useState({
+    vin: "",
+    plateNumber: "",
+    year: "",
+    make: "",
+    model: "",
+    trim: "",
+    color: "",
+    fuelType: "",
+    locationId: "" as string,
+    currentMileage: "",
+    insurancePolicyNumber: "",
+    insuranceProvider: "",
+    insuranceExpirationDate: "",
+    registrationExpirationDate: "",
+    registrationState: "",
+    purchaseDate: "",
+    purchasePrice: "",
+    purchasedFrom: "",
+    notes: "",
+  });
+  const [editingVehicleId, setEditingVehicleId] = useState<Id<"vehicles"> | null>(null);
+  const [showNewVehicle, setShowNewVehicle] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -554,7 +586,9 @@ By signing below, the Employee acknowledges that they have read, understand, and
     });
   };
 
-  const currentItems = sortByStatus(activeTab === "scanners" ? scanners : pickers);
+  const currentItems = activeTab === "vehicles"
+    ? vehicles
+    : sortByStatus(activeTab === "scanners" ? scanners : pickers);
 
   const openQRModal = (item: NonNullable<typeof pickers>[0]) => {
     setQREquipment({
@@ -602,21 +636,33 @@ By signing below, the Employee acknowledges that they have read, understand, and
             <div>
               <h1 className={`text-xl sm:text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>Equipment</h1>
               <p className={`text-xs sm:text-sm mt-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                Manage scanners and pickers inventory
+                Manage scanners, pickers, and vehicles
               </p>
             </div>
             <button
               onClick={() => {
-                setShowNewEquipment(true);
-                setEditingId(null);
-                resetForm();
+                if (activeTab === "vehicles") {
+                  setShowNewVehicle(true);
+                  setEditingVehicleId(null);
+                  setVehicleFormData({
+                    vin: "", plateNumber: "", year: "", make: "", model: "", trim: "",
+                    color: "", fuelType: "", locationId: "", currentMileage: "",
+                    insurancePolicyNumber: "", insuranceProvider: "", insuranceExpirationDate: "",
+                    registrationExpirationDate: "", registrationState: "", purchaseDate: "",
+                    purchasePrice: "", purchasedFrom: "", notes: "",
+                  });
+                } else {
+                  setShowNewEquipment(true);
+                  setEditingId(null);
+                  resetForm();
+                }
               }}
               className={`px-3 sm:px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${isDark ? "bg-cyan-500 text-white hover:bg-cyan-600" : "bg-blue-600 text-white hover:bg-blue-700"}`}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              <span className="hidden sm:inline">Add {activeTab === "scanners" ? "Scanner" : "Picker"}</span>
+              <span className="hidden sm:inline">Add {activeTab === "scanners" ? "Scanner" : activeTab === "pickers" ? "Picker" : "Vehicle"}</span>
             </button>
           </div>
 
@@ -643,6 +689,16 @@ By signing below, the Employee acknowledges that they have read, understand, and
                 }`}
               >
                 Pickers ({pickers?.length ?? 0})
+              </button>
+              <button
+                onClick={() => setActiveTab("vehicles")}
+                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                  activeTab === "vehicles"
+                    ? isDark ? "bg-cyan-500 text-white" : "bg-white text-gray-900 shadow-sm"
+                    : isDark ? "text-slate-400 hover:text-white" : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                Vehicles ({vehicles?.length ?? 0})
               </button>
             </div>
 
@@ -675,7 +731,145 @@ By signing below, the Employee acknowledges that they have read, understand, and
             </div>
           ) : currentItems.length === 0 ? (
             <div className={`text-center py-12 border rounded-xl ${isDark ? "bg-slate-800/50 border-slate-700 text-slate-400" : "bg-white border-gray-200 text-gray-500"}`}>
-              No {activeTab} found. Add your first {activeTab === "scanners" ? "scanner" : "picker"}.
+              No {activeTab} found. Add your first {activeTab === "scanners" ? "scanner" : activeTab === "pickers" ? "picker" : "vehicle"}.
+            </div>
+          ) : activeTab === "vehicles" ? (
+            /* Vehicles Grid */
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {(vehicles || []).map((vehicle) => (
+                <div
+                  key={vehicle._id}
+                  className={`border rounded-xl p-5 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}
+                >
+                  <div className="flex items-start justify-between gap-3 mb-4">
+                    <div className="min-w-0">
+                      <h3 className={`font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                        {vehicle.year} {vehicle.make} {vehicle.model}
+                      </h3>
+                      {vehicle.trim && (
+                        <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                          {vehicle.trim}
+                        </p>
+                      )}
+                    </div>
+                    <span className={`px-2.5 py-1 text-xs font-medium rounded shrink-0 ${
+                      vehicle.status === "active" ? "bg-green-500/20 text-green-400" :
+                      vehicle.status === "maintenance" ? "bg-yellow-500/20 text-yellow-400" :
+                      vehicle.status === "out_of_service" ? "bg-red-500/20 text-red-400" :
+                      "bg-slate-500/20 text-slate-400"
+                    }`}>
+                      {vehicle.status}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 text-sm">
+                    <div className={`${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                      <span className={`${isDark ? "text-slate-500" : "text-gray-400"}`}>VIN:</span> {vehicle.vin}
+                    </div>
+                    {vehicle.plateNumber && (
+                      <div className={`${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                        <span className={`${isDark ? "text-slate-500" : "text-gray-400"}`}>Plate:</span> {vehicle.plateNumber}
+                      </div>
+                    )}
+                    {vehicle.color && (
+                      <div className={`${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                        <span className={`${isDark ? "text-slate-500" : "text-gray-400"}`}>Color:</span> {vehicle.color}
+                      </div>
+                    )}
+                    {vehicle.currentMileage && (
+                      <div className={`${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                        <span className={`${isDark ? "text-slate-500" : "text-gray-400"}`}>Mileage:</span> {vehicle.currentMileage.toLocaleString()} mi
+                      </div>
+                    )}
+                    {vehicle.locationName && vehicle.locationName !== "Unassigned" && (
+                      <div className={`${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                        <span className={`${isDark ? "text-slate-500" : "text-gray-400"}`}>Location:</span> {vehicle.locationName}
+                      </div>
+                    )}
+                    {vehicle.assignedPersonName && (
+                      <div className={`${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                        <span className={`${isDark ? "text-slate-500" : "text-gray-400"}`}>Driver:</span> {vehicle.assignedPersonName}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Insurance/Registration Warnings */}
+                  {(vehicle.insuranceExpirationDate || vehicle.registrationExpirationDate) && (
+                    <div className="mt-3 space-y-1">
+                      {vehicle.insuranceExpirationDate && new Date(vehicle.insuranceExpirationDate) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) && (
+                        <div className={`text-xs p-2 rounded ${
+                          new Date(vehicle.insuranceExpirationDate) < new Date()
+                            ? "bg-red-500/10 text-red-400 border border-red-500/20"
+                            : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                        }`}>
+                          Insurance {new Date(vehicle.insuranceExpirationDate) < new Date() ? "expired" : "expires"}: {new Date(vehicle.insuranceExpirationDate).toLocaleDateString()}
+                        </div>
+                      )}
+                      {vehicle.registrationExpirationDate && new Date(vehicle.registrationExpirationDate) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) && (
+                        <div className={`text-xs p-2 rounded ${
+                          new Date(vehicle.registrationExpirationDate) < new Date()
+                            ? "bg-red-500/10 text-red-400 border border-red-500/20"
+                            : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                        }`}>
+                          Registration {new Date(vehicle.registrationExpirationDate) < new Date() ? "expired" : "expires"}: {new Date(vehicle.registrationExpirationDate).toLocaleDateString()}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className={`flex flex-wrap gap-2 mt-4 pt-4 border-t ${isDark ? "border-slate-700/50" : "border-gray-200"}`}>
+                    <button
+                      onClick={() => {
+                        setEditingVehicleId(vehicle._id);
+                        setShowNewVehicle(true);
+                        setVehicleFormData({
+                          vin: vehicle.vin,
+                          plateNumber: vehicle.plateNumber || "",
+                          year: vehicle.year?.toString() || "",
+                          make: vehicle.make,
+                          model: vehicle.model,
+                          trim: vehicle.trim || "",
+                          color: vehicle.color || "",
+                          fuelType: vehicle.fuelType || "",
+                          locationId: vehicle.locationId || "",
+                          currentMileage: vehicle.currentMileage?.toString() || "",
+                          insurancePolicyNumber: vehicle.insurancePolicyNumber || "",
+                          insuranceProvider: vehicle.insuranceProvider || "",
+                          insuranceExpirationDate: vehicle.insuranceExpirationDate || "",
+                          registrationExpirationDate: vehicle.registrationExpirationDate || "",
+                          registrationState: vehicle.registrationState || "",
+                          purchaseDate: vehicle.purchaseDate || "",
+                          purchasePrice: vehicle.purchasePrice?.toString() || "",
+                          purchasedFrom: vehicle.purchasedFrom || "",
+                          notes: vehicle.notes || "",
+                        });
+                      }}
+                      className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${isDark ? "bg-slate-700 text-slate-300 hover:bg-slate-600" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+                    >
+                      Edit
+                    </button>
+                    {vehicle.status !== "retired" && isSuperuser && (
+                      <button
+                        onClick={async () => {
+                          if (confirm(`Retire this vehicle? (${vehicle.year} ${vehicle.make} ${vehicle.model})`)) {
+                            const reason = prompt("Reason for retirement:");
+                            if (reason) {
+                              try {
+                                await retireVehicle({ vehicleId: vehicle._id, reason });
+                              } catch (err) {
+                                setError(err instanceof Error ? err.message : "Failed to retire vehicle");
+                              }
+                            }
+                          }
+                        }}
+                        className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${isDark ? "bg-red-500/20 text-red-400 hover:bg-red-500/30" : "bg-red-50 text-red-600 hover:bg-red-100"}`}
+                      >
+                        Retire
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -1833,6 +2027,342 @@ By signing below, the Employee acknowledges that they have read, understand, and
             locationName={qrEquipment.locationName}
             isDark={isDark}
           />
+        )}
+
+        {/* Vehicle Form Modal */}
+        {showNewVehicle && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className={`border rounded-xl p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200"}`}>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className={`text-xl font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  {editingVehicleId ? "Edit Vehicle" : "Add New Vehicle"}
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowNewVehicle(false);
+                    setEditingVehicleId(null);
+                  }}
+                  className={`p-1 rounded-lg transition-colors ${isDark ? "hover:bg-slate-700" : "hover:bg-gray-100"}`}
+                >
+                  <svg className={`w-5 h-5 ${isDark ? "text-slate-400" : "text-gray-500"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                setError("");
+                try {
+                  if (editingVehicleId) {
+                    await updateVehicle({
+                      id: editingVehicleId,
+                      vin: vehicleFormData.vin,
+                      plateNumber: vehicleFormData.plateNumber || undefined,
+                      year: vehicleFormData.year ? parseInt(vehicleFormData.year) : undefined,
+                      make: vehicleFormData.make || undefined,
+                      model: vehicleFormData.model || undefined,
+                      trim: vehicleFormData.trim || undefined,
+                      color: vehicleFormData.color || undefined,
+                      fuelType: vehicleFormData.fuelType || undefined,
+                      locationId: vehicleFormData.locationId as Id<"locations"> || undefined,
+                      currentMileage: vehicleFormData.currentMileage ? parseInt(vehicleFormData.currentMileage) : undefined,
+                      insurancePolicyNumber: vehicleFormData.insurancePolicyNumber || undefined,
+                      insuranceProvider: vehicleFormData.insuranceProvider || undefined,
+                      insuranceExpirationDate: vehicleFormData.insuranceExpirationDate || undefined,
+                      registrationExpirationDate: vehicleFormData.registrationExpirationDate || undefined,
+                      registrationState: vehicleFormData.registrationState || undefined,
+                      purchaseDate: vehicleFormData.purchaseDate || undefined,
+                      purchasePrice: vehicleFormData.purchasePrice ? parseFloat(vehicleFormData.purchasePrice) : undefined,
+                      purchasedFrom: vehicleFormData.purchasedFrom || undefined,
+                      notes: vehicleFormData.notes || undefined,
+                    });
+                  } else {
+                    await createVehicle({
+                      vin: vehicleFormData.vin,
+                      plateNumber: vehicleFormData.plateNumber || undefined,
+                      year: vehicleFormData.year ? parseInt(vehicleFormData.year) : undefined,
+                      make: vehicleFormData.make,
+                      model: vehicleFormData.model,
+                      trim: vehicleFormData.trim || undefined,
+                      color: vehicleFormData.color || undefined,
+                      fuelType: vehicleFormData.fuelType || undefined,
+                      locationId: vehicleFormData.locationId as Id<"locations"> || undefined,
+                      currentMileage: vehicleFormData.currentMileage ? parseInt(vehicleFormData.currentMileage) : undefined,
+                      insurancePolicyNumber: vehicleFormData.insurancePolicyNumber || undefined,
+                      insuranceProvider: vehicleFormData.insuranceProvider || undefined,
+                      insuranceExpirationDate: vehicleFormData.insuranceExpirationDate || undefined,
+                      registrationExpirationDate: vehicleFormData.registrationExpirationDate || undefined,
+                      registrationState: vehicleFormData.registrationState || undefined,
+                      purchaseDate: vehicleFormData.purchaseDate || undefined,
+                      purchasePrice: vehicleFormData.purchasePrice ? parseFloat(vehicleFormData.purchasePrice) : undefined,
+                      purchasedFrom: vehicleFormData.purchasedFrom || undefined,
+                      notes: vehicleFormData.notes || undefined,
+                    });
+                  }
+                  setShowNewVehicle(false);
+                  setEditingVehicleId(null);
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : "Failed to save vehicle");
+                }
+              }} className="space-y-6">
+                {/* Vehicle Identification */}
+                <div>
+                  <h3 className={`text-sm font-semibold mb-3 ${isDark ? "text-white" : "text-gray-900"}`}>Vehicle Identification</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>VIN *</label>
+                      <input
+                        type="text"
+                        value={vehicleFormData.vin}
+                        onChange={(e) => setVehicleFormData({ ...vehicleFormData, vin: e.target.value.toUpperCase() })}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                        placeholder="17-character VIN"
+                        maxLength={17}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>Plate Number</label>
+                      <input
+                        type="text"
+                        value={vehicleFormData.plateNumber}
+                        onChange={(e) => setVehicleFormData({ ...vehicleFormData, plateNumber: e.target.value.toUpperCase() })}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                        placeholder="License plate"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Vehicle Details */}
+                <div>
+                  <h3 className={`text-sm font-semibold mb-3 ${isDark ? "text-white" : "text-gray-900"}`}>Vehicle Details</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>Year</label>
+                      <input
+                        type="number"
+                        value={vehicleFormData.year}
+                        onChange={(e) => setVehicleFormData({ ...vehicleFormData, year: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                        placeholder="2024"
+                        min="1900"
+                        max="2100"
+                      />
+                    </div>
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>Make *</label>
+                      <input
+                        type="text"
+                        value={vehicleFormData.make}
+                        onChange={(e) => setVehicleFormData({ ...vehicleFormData, make: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                        placeholder="Ford"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>Model *</label>
+                      <input
+                        type="text"
+                        value={vehicleFormData.model}
+                        onChange={(e) => setVehicleFormData({ ...vehicleFormData, model: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                        placeholder="F-150"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>Trim</label>
+                      <input
+                        type="text"
+                        value={vehicleFormData.trim}
+                        onChange={(e) => setVehicleFormData({ ...vehicleFormData, trim: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                        placeholder="XLT"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-4">
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>Color</label>
+                      <input
+                        type="text"
+                        value={vehicleFormData.color}
+                        onChange={(e) => setVehicleFormData({ ...vehicleFormData, color: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                        placeholder="White"
+                      />
+                    </div>
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>Fuel Type</label>
+                      <select
+                        value={vehicleFormData.fuelType}
+                        onChange={(e) => setVehicleFormData({ ...vehicleFormData, fuelType: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                      >
+                        <option value="">Select...</option>
+                        <option value="gasoline">Gasoline</option>
+                        <option value="diesel">Diesel</option>
+                        <option value="electric">Electric</option>
+                        <option value="hybrid">Hybrid</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>Current Mileage</label>
+                      <input
+                        type="number"
+                        value={vehicleFormData.currentMileage}
+                        onChange={(e) => setVehicleFormData({ ...vehicleFormData, currentMileage: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                        placeholder="50000"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Location */}
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>Location</label>
+                  <select
+                    value={vehicleFormData.locationId}
+                    onChange={(e) => setVehicleFormData({ ...vehicleFormData, locationId: e.target.value })}
+                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                  >
+                    <option value="">Select location...</option>
+                    {locations?.map((loc) => (
+                      <option key={loc._id} value={loc._id}>{loc.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Insurance & Registration */}
+                <div>
+                  <h3 className={`text-sm font-semibold mb-3 ${isDark ? "text-white" : "text-gray-900"}`}>Insurance & Registration</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>Insurance Provider</label>
+                      <input
+                        type="text"
+                        value={vehicleFormData.insuranceProvider}
+                        onChange={(e) => setVehicleFormData({ ...vehicleFormData, insuranceProvider: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                        placeholder="State Farm"
+                      />
+                    </div>
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>Policy Number</label>
+                      <input
+                        type="text"
+                        value={vehicleFormData.insurancePolicyNumber}
+                        onChange={(e) => setVehicleFormData({ ...vehicleFormData, insurancePolicyNumber: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                        placeholder="Policy #"
+                      />
+                    </div>
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>Insurance Expiration</label>
+                      <input
+                        type="date"
+                        value={vehicleFormData.insuranceExpirationDate}
+                        onChange={(e) => setVehicleFormData({ ...vehicleFormData, insuranceExpirationDate: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                      />
+                    </div>
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>Registration Expiration</label>
+                      <input
+                        type="date"
+                        value={vehicleFormData.registrationExpirationDate}
+                        onChange={(e) => setVehicleFormData({ ...vehicleFormData, registrationExpirationDate: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                      />
+                    </div>
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>Registration State</label>
+                      <input
+                        type="text"
+                        value={vehicleFormData.registrationState}
+                        onChange={(e) => setVehicleFormData({ ...vehicleFormData, registrationState: e.target.value.toUpperCase() })}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                        placeholder="PA"
+                        maxLength={2}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Purchase Info */}
+                <div>
+                  <h3 className={`text-sm font-semibold mb-3 ${isDark ? "text-white" : "text-gray-900"}`}>Purchase Info</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>Purchase Date</label>
+                      <input
+                        type="date"
+                        value={vehicleFormData.purchaseDate}
+                        onChange={(e) => setVehicleFormData({ ...vehicleFormData, purchaseDate: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                      />
+                    </div>
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>Purchase Price</label>
+                      <input
+                        type="number"
+                        value={vehicleFormData.purchasePrice}
+                        onChange={(e) => setVehicleFormData({ ...vehicleFormData, purchasePrice: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                        placeholder="35000"
+                      />
+                    </div>
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>Purchased From</label>
+                      <input
+                        type="text"
+                        value={vehicleFormData.purchasedFrom}
+                        onChange={(e) => setVehicleFormData({ ...vehicleFormData, purchasedFrom: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                        placeholder="Dealer name"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Notes */}
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>Notes</label>
+                  <textarea
+                    value={vehicleFormData.notes}
+                    onChange={(e) => setVehicleFormData({ ...vehicleFormData, notes: e.target.value })}
+                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                    rows={3}
+                    placeholder="Any additional notes..."
+                  />
+                </div>
+
+                {/* Buttons */}
+                <div className="flex justify-end gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowNewVehicle(false);
+                      setEditingVehicleId(null);
+                    }}
+                    className={`px-4 py-2 font-medium rounded-lg transition-colors ${isDark ? "bg-slate-700 text-white hover:bg-slate-600" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className={`px-4 py-2 font-medium rounded-lg transition-colors ${isDark ? "bg-cyan-500 text-white hover:bg-cyan-600" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+                  >
+                    {editingVehicleId ? "Save Changes" : "Add Vehicle"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
         )}
 
         {/* Safety History Modal */}

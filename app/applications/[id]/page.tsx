@@ -1331,12 +1331,15 @@ function ApplicationDetailContent({ id }: { id: string }) {
                       if (!scheduleDate || !scheduleTime) return;
                       setIsScheduling(true);
                       try {
+                        // Calculate timestamp in user's local timezone
+                        const startTimestamp = new Date(`${scheduleDate}T${scheduleTime}`).getTime();
                         await scheduleInterview({
                           applicationId: application._id,
                           date: scheduleDate,
                           time: scheduleTime,
                           location: scheduleLocation,
                           userId: user?._id as Id<"users">,
+                          startTimestamp,
                         });
                         setShowScheduleModal(false);
                         setScheduleDate("");
