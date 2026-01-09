@@ -240,20 +240,20 @@ function ApplicationsContent() {
         <div className="p-4 sm:p-8 space-y-4 sm:space-y-6">
           {/* Stats */}
           {stats && (
-            <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-2 sm:gap-4">
-              <div className={`rounded-lg p-2 sm:p-4 text-center ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
-                <p className={`text-lg sm:text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{stats.total}</p>
-                <p className={`text-[10px] sm:text-xs ${isDark ? "text-slate-500" : "text-gray-500"}`}>Total</p>
+            <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5 sm:gap-2">
+              <div className={`rounded-lg p-1.5 sm:p-2 text-center ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
+                <p className={`text-base sm:text-lg font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{stats.total}</p>
+                <p className={`text-[9px] sm:text-[10px] ${isDark ? "text-slate-500" : "text-gray-500"}`}>Total</p>
               </div>
               {STATUS_OPTIONS.map((status) => (
                 <div
                   key={status.value}
-                  className={`rounded-lg p-2 sm:p-4 text-center ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}
+                  className={`rounded-lg p-1.5 sm:p-2 text-center ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}
                 >
-                  <p className={`text-lg sm:text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  <p className={`text-base sm:text-lg font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
                     {stats[status.value as keyof typeof stats] || 0}
                   </p>
-                  <p className={`text-[10px] sm:text-xs ${isDark ? "text-slate-500" : "text-gray-500"}`}>{status.label}</p>
+                  <p className={`text-[9px] sm:text-[10px] truncate ${isDark ? "text-slate-500" : "text-gray-500"}`}>{status.label}</p>
                 </div>
               ))}
             </div>
