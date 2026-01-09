@@ -118,6 +118,11 @@ function CalendarContent() {
   const cancelEvent = useMutation(api.events.cancel);
   const respondToInvite = useMutation(api.events.respondToInvite);
   const markInviteRead = useMutation(api.events.markInviteRead);
+  const addInvitees = useMutation(api.events.addInvitees);
+
+  // State for adding invitees to existing events
+  const [showAddInviteesModal, setShowAddInviteesModal] = useState(false);
+  const [selectedInviteeIds, setSelectedInviteeIds] = useState<Id<"users">[]>([]);
 
   // Calendar grid for month view
   const calendarDays = useMemo(() => {
@@ -207,6 +212,20 @@ function CalendarContent() {
       setSelectedEvent(null);
     } catch (err) {
       console.error("Failed to cancel:", err);
+    }
+  };
+
+  const handleAddInvitees = async () => {
+    if (!selectedEvent || selectedInviteeIds.length === 0) return;
+    try {
+      await addInvitees({
+        eventId: selectedEvent._id,
+        inviteeIds: selectedInviteeIds,
+      });
+      setShowAddInviteesModal(false);
+      setSelectedInviteeIds([]);
+    } catch (err) {
+      console.error("Failed to add invitees:", err);
     }
   };
 
@@ -753,9 +772,22 @@ function CalendarContent() {
                   </div>
                 )}
 
-                {/* Cancel button for organizer */}
+                {/* Organizer actions */}
                 {selectedEvent.myInviteStatus === "organizer" && (
-                  <div className={`pt-4 border-t ${isDark ? "border-slate-700" : "border-gray-200"}`}>
+                  <div className={`pt-4 border-t space-y-2 ${isDark ? "border-slate-700" : "border-gray-200"}`}>
+                    <button
+                      onClick={() => {
+                        setSelectedInviteeIds([]);
+                        setShowAddInviteesModal(true);
+                      }}
+                      className={`w-full px-3 py-2 text-sm font-medium rounded-lg ${
+                        isDark
+                          ? "bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30"
+                          : "bg-blue-100 text-blue-600 hover:bg-blue-200"
+                      }`}
+                    >
+                      + Add Invitees
+                    </button>
                     <button
                       onClick={() => handleCancelEvent(selectedEvent._id)}
                       className="w-full px-3 py-2 text-sm font-medium rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30"
@@ -764,6 +796,108 @@ function CalendarContent() {
                     </button>
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Add Invitees Modal */}
+        {showAddInviteesModal && selectedEvent && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+            <div className={`w-full max-w-md rounded-xl border ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200"}`}>
+              <div className={`p-4 border-b ${isDark ? "border-slate-700" : "border-gray-200"}`}>
+                <div className="flex items-center justify-between">
+                  <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                    Add Invitees
+                  </h2>
+                  <button
+                    onClick={() => {
+                      setShowAddInviteesModal(false);
+                      setSelectedInviteeIds([]);
+                    }}
+                    className={`p-1 rounded-lg ${isDark ? "hover:bg-slate-700" : "hover:bg-gray-100"}`}
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <p className={`text-sm mt-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                  Select users to invite to: {selectedEvent.title}
+                </p>
+              </div>
+
+              <div className="p-4 max-h-80 overflow-y-auto">
+                <div className="space-y-2">
+                  {allUsers
+                    ?.filter((u) => {
+                      // Filter out users already invited
+                      const existingInviteeIds = selectedEvent.invitees?.map((i: any) => i.userId) || [];
+                      return !existingInviteeIds.includes(u._id) && u._id !== selectedEvent.createdBy;
+                    })
+                    .map((u) => (
+                      <label
+                        key={u._id}
+                        className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors ${
+                          isDark
+                            ? selectedInviteeIds.includes(u._id as Id<"users">)
+                              ? "bg-cyan-500/20"
+                              : "hover:bg-slate-700"
+                            : selectedInviteeIds.includes(u._id as Id<"users">)
+                            ? "bg-blue-50"
+                            : "hover:bg-gray-50"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedInviteeIds.includes(u._id as Id<"users">)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedInviteeIds([...selectedInviteeIds, u._id as Id<"users">]);
+                            } else {
+                              setSelectedInviteeIds(selectedInviteeIds.filter((id) => id !== u._id));
+                            }
+                          }}
+                          className="rounded"
+                        />
+                        <div className="flex-1">
+                          <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                            {u.name}
+                          </p>
+                          <p className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                            {u.email}
+                          </p>
+                        </div>
+                      </label>
+                    ))}
+                </div>
+              </div>
+
+              <div className={`p-4 border-t flex gap-2 ${isDark ? "border-slate-700" : "border-gray-200"}`}>
+                <button
+                  onClick={() => {
+                    setShowAddInviteesModal(false);
+                    setSelectedInviteeIds([]);
+                  }}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium ${
+                    isDark
+                      ? "bg-slate-700 text-white hover:bg-slate-600"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAddInvitees}
+                  disabled={selectedInviteeIds.length === 0}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium disabled:opacity-50 ${
+                    isDark
+                      ? "bg-cyan-500 text-white hover:bg-cyan-600"
+                      : "bg-blue-600 text-white hover:bg-blue-700"
+                  }`}
+                >
+                  Add {selectedInviteeIds.length > 0 ? `(${selectedInviteeIds.length})` : ""}
+                </button>
               </div>
             </div>
           </div>

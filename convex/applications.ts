@@ -508,6 +508,7 @@ export const scheduleInterview = mutation({
     location: v.optional(v.string()), // "In-person", "Phone", "Video", or custom
     userId: v.id("users"), // User scheduling the interview (for calendar event)
     startTimestamp: v.optional(v.number()), // Pre-calculated timestamp from frontend (preserves local timezone)
+    additionalAttendees: v.optional(v.array(v.id("users"))), // Optional additional attendees
   },
   handler: async (ctx, args) => {
     const application = await ctx.db.get(args.applicationId);
@@ -537,6 +538,32 @@ export const scheduleInterview = mutation({
       createdAt: now,
       updatedAt: now,
     });
+
+    // Find Nick Quinn by email to auto-add as attendee
+    const allUsers = await ctx.db.query("users").collect();
+    const nickUser = allUsers.find(u => u.email === "Mrquinn1985@gmail.com");
+
+    // Collect all attendees: scheduling user, Nick (if found), and any additional attendees
+    const attendeeIds = new Set<string>();
+    attendeeIds.add(args.userId); // Add the scheduling user
+    if (nickUser) {
+      attendeeIds.add(nickUser._id); // Add Nick
+    }
+    if (args.additionalAttendees) {
+      args.additionalAttendees.forEach(id => attendeeIds.add(id));
+    }
+
+    // Create event invites for all attendees
+    for (const attendeeId of attendeeIds) {
+      await ctx.db.insert("eventInvites", {
+        eventId,
+        userId: attendeeId as any, // Cast needed for Set iteration
+        status: "accepted", // Auto-accept for interview attendees
+        isRead: true,
+        notifiedAt: now,
+        createdAt: now,
+      });
+    }
 
     // Update application with interview details and event ID
     await ctx.db.patch(args.applicationId, {
