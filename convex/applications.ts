@@ -878,3 +878,108 @@ export const getRecentlyInterviewed = query({
     return interviewedApps;
   },
 });
+
+// ============ ACTIVITY TIMELINE FOR ATS ============
+
+// Log an activity for an application
+export const logActivity = mutation({
+  args: {
+    applicationId: v.id("applications"),
+    type: v.string(),
+    description: v.string(),
+    previousValue: v.optional(v.string()),
+    newValue: v.optional(v.string()),
+    performedBy: v.optional(v.id("users")),
+    performedByName: v.string(),
+    metadata: v.optional(v.any()),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.insert("applicationActivity", {
+      ...args,
+      createdAt: Date.now(),
+    });
+  },
+});
+
+// Get activity timeline for an application
+export const getActivityTimeline = query({
+  args: { applicationId: v.id("applications") },
+  handler: async (ctx, args) => {
+    const activities = await ctx.db
+      .query("applicationActivity")
+      .withIndex("by_application", (q) => q.eq("applicationId", args.applicationId))
+      .order("desc")
+      .collect();
+
+    return activities;
+  },
+});
+
+// Get applications grouped by status for Kanban view
+export const getByStatusGrouped = query({
+  args: {},
+  handler: async (ctx) => {
+    const applications = await ctx.db
+      .query("applications")
+      .withIndex("by_created")
+      .order("desc")
+      .collect();
+
+    // Group by status
+    const grouped: Record<string, typeof applications> = {
+      new: [],
+      reviewed: [],
+      contacted: [],
+      scheduled: [],
+      interviewed: [],
+      hired: [],
+      rejected: [],
+    };
+
+    for (const app of applications) {
+      if (grouped[app.status]) {
+        grouped[app.status].push(app);
+      }
+    }
+
+    return grouped;
+  },
+});
+
+// Update status with activity logging
+export const updateStatusWithActivity = mutation({
+  args: {
+    applicationId: v.id("applications"),
+    newStatus: v.string(),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const application = await ctx.db.get(args.applicationId);
+    if (!application) throw new Error("Application not found");
+
+    const user = await ctx.db.get(args.userId);
+    if (!user) throw new Error("User not found");
+
+    const previousStatus = application.status;
+
+    // Update the status
+    await ctx.db.patch(args.applicationId, {
+      status: args.newStatus,
+      updatedAt: Date.now(),
+    });
+
+    // Log the activity
+    await ctx.db.insert("applicationActivity", {
+      applicationId: args.applicationId,
+      type: "status_change",
+      description: `Status changed from ${previousStatus} to ${args.newStatus}`,
+      previousValue: previousStatus,
+      newValue: args.newStatus,
+      performedBy: args.userId,
+      performedByName: user.name,
+      createdAt: Date.now(),
+    });
+
+    return args.applicationId;
+  },
+});

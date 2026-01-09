@@ -33,7 +33,10 @@ function ApplicationDetailContent({ id }: { id: string }) {
   const application = useQuery(api.applications.getById, {
     applicationId: id as Id<"applications">,
   });
-  const updateStatus = useMutation(api.applications.updateStatus);
+  const activityTimeline = useQuery(api.applications.getActivityTimeline, {
+    applicationId: id as Id<"applications">,
+  });
+  const updateStatusWithActivity = useMutation(api.applications.updateStatusWithActivity);
   const deleteApplication = useMutation(api.applications.remove);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -146,7 +149,12 @@ function ApplicationDetailContent({ id }: { id: string }) {
   }
 
   const handleStatusChange = async (newStatus: string) => {
-    await updateStatus({ applicationId: application._id, status: newStatus });
+    if (!user) return;
+    await updateStatusWithActivity({
+      applicationId: application._id,
+      newStatus,
+      userId: user._id,
+    });
   };
 
   const getScoreColor = (score: number) => {
@@ -1205,6 +1213,123 @@ function ApplicationDetailContent({ id }: { id: string }) {
               <p className="text-slate-300">{application.candidateAnalysis.hiringTeamNotes}</p>
             </div>
           )}
+
+          {/* Activity Timeline */}
+          <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+            <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+              <svg className="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Activity Timeline
+            </h2>
+            {activityTimeline && activityTimeline.length > 0 ? (
+              <div className="relative">
+                {/* Timeline line */}
+                <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-slate-700" />
+
+                <div className="space-y-4">
+                  {activityTimeline.map((activity, index) => {
+                    // Get icon and color based on activity type
+                    const getActivityStyle = (type: string) => {
+                      switch (type) {
+                        case "application_received":
+                          return { icon: "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z", color: "bg-cyan-500", borderColor: "border-cyan-500/30" };
+                        case "status_change":
+                          return { icon: "M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15", color: "bg-purple-500", borderColor: "border-purple-500/30" };
+                        case "interview_scheduled":
+                          return { icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z", color: "bg-orange-500", borderColor: "border-orange-500/30" };
+                        case "interview_completed":
+                          return { icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z", color: "bg-blue-500", borderColor: "border-blue-500/30" };
+                        case "note_added":
+                          return { icon: "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z", color: "bg-amber-500", borderColor: "border-amber-500/30" };
+                        case "evaluation_added":
+                          return { icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z", color: "bg-indigo-500", borderColor: "border-indigo-500/30" };
+                        case "hired":
+                          return { icon: "M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z", color: "bg-green-500", borderColor: "border-green-500/30" };
+                        case "rejected":
+                          return { icon: "M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z", color: "bg-red-500", borderColor: "border-red-500/30" };
+                        default:
+                          return { icon: "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z", color: "bg-slate-500", borderColor: "border-slate-500/30" };
+                      }
+                    };
+
+                    const style = getActivityStyle(activity.type);
+                    const isFirst = index === 0;
+
+                    return (
+                      <div key={activity._id} className="relative flex items-start gap-4 pl-8">
+                        {/* Timeline dot */}
+                        <div className={`absolute left-0 w-8 h-8 rounded-full ${style.color} flex items-center justify-center z-10 ${isFirst ? "ring-2 ring-white/20" : ""}`}>
+                          <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={style.icon} />
+                          </svg>
+                        </div>
+
+                        {/* Content */}
+                        <div className={`flex-1 bg-slate-900/50 border ${style.borderColor} rounded-lg p-4`}>
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <p className="text-white font-medium">{activity.description}</p>
+                              {activity.previousValue && activity.newValue && (
+                                <p className="text-slate-400 text-sm mt-1">
+                                  <span className="text-slate-500">{activity.previousValue}</span>
+                                  <span className="mx-2">→</span>
+                                  <span className="text-slate-300">{activity.newValue}</span>
+                                </p>
+                              )}
+                              {activity.metadata && typeof activity.metadata === "object" && (
+                                <div className="mt-2 space-y-1">
+                                  {(activity.metadata as { score?: number; recommendation?: string; round?: number }).score !== undefined && (
+                                    <p className="text-sm">
+                                      <span className="text-slate-400">Score: </span>
+                                      <span className={getScoreColor((activity.metadata as { score: number }).score)}>
+                                        {(activity.metadata as { score: number }).score}%
+                                      </span>
+                                    </p>
+                                  )}
+                                  {(activity.metadata as { recommendation?: string }).recommendation && (
+                                    <p className="text-slate-300 text-sm">
+                                      {(activity.metadata as { recommendation: string }).recommendation}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                            <div className="text-right flex-shrink-0">
+                              <p className="text-slate-400 text-sm">
+                                {new Date(activity.createdAt).toLocaleDateString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                })}
+                              </p>
+                              <p className="text-slate-500 text-xs">
+                                {new Date(activity.createdAt).toLocaleTimeString("en-US", {
+                                  hour: "numeric",
+                                  minute: "2-digit",
+                                })}
+                              </p>
+                            </div>
+                          </div>
+                          <p className="text-slate-500 text-xs mt-2">
+                            By: {activity.performedByName}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <svg className="w-12 h-12 text-slate-600 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-slate-400">No activity recorded yet</p>
+                <p className="text-slate-500 text-sm mt-1">Activities will appear here as you interact with this application</p>
+              </div>
+            )}
+          </div>
 
           {/* Scheduled Interview Banner */}
           {application.scheduledInterviewDate && (

@@ -240,6 +240,21 @@ export default defineSchema({
     .index("by_job", ["appliedJobId"])
     .index("by_created", ["createdAt"]),
 
+  // Application activity tracking for ATS timeline
+  applicationActivity: defineTable({
+    applicationId: v.id("applications"),
+    type: v.string(), // "application_received" | "status_change" | "note_added" | "interview_scheduled" | "interview_completed" | "evaluation_added" | "hired" | "rejected"
+    description: v.string(),
+    previousValue: v.optional(v.string()), // For status changes
+    newValue: v.optional(v.string()),
+    performedBy: v.optional(v.id("users")), // Optional for system-generated activities
+    performedByName: v.string(),
+    metadata: v.optional(v.any()), // Additional context (interview round, score, etc.)
+    createdAt: v.number(),
+  })
+    .index("by_application", ["applicationId"])
+    .index("by_created", ["createdAt"]),
+
   // ============ MESSAGING ============
   conversations: defineTable({
     type: v.string(), // "direct" | "project"

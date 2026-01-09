@@ -13,21 +13,34 @@ import { useAuth } from "../auth-context";
 type Application = Doc<"applications">;
 
 const STATUS_OPTIONS = [
-  { value: "new", label: "New", color: "cyan" },
-  { value: "reviewed", label: "Reviewed", color: "amber" },
-  { value: "contacted", label: "Contacted", color: "purple" },
-  { value: "interviewed", label: "Interviewed", color: "blue" },
-  { value: "hired", label: "Hired", color: "green" },
-  { value: "rejected", label: "Rejected", color: "red" },
+  { value: "new", label: "New", color: "cyan", icon: "star" },
+  { value: "reviewed", label: "Reviewed", color: "amber", icon: "eye" },
+  { value: "contacted", label: "Contacted", color: "purple", icon: "mail" },
+  { value: "scheduled", label: "Scheduled", color: "orange", icon: "calendar" },
+  { value: "interviewed", label: "Interviewed", color: "blue", icon: "chat" },
+  { value: "hired", label: "Hired", color: "green", icon: "check" },
+  { value: "rejected", label: "Rejected", color: "red", icon: "x" },
 ];
 
 const statusColors: Record<string, string> = {
   new: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
   reviewed: "bg-amber-500/20 text-amber-400 border-amber-500/30",
   contacted: "bg-purple-500/20 text-purple-400 border-purple-500/30",
+  scheduled: "bg-orange-500/20 text-orange-400 border-orange-500/30",
   interviewed: "bg-blue-500/20 text-blue-400 border-blue-500/30",
   hired: "bg-green-500/20 text-green-400 border-green-500/30",
   rejected: "bg-red-500/20 text-red-400 border-red-500/30",
+};
+
+// Kanban column header colors
+const kanbanHeaderColors: Record<string, string> = {
+  new: "bg-cyan-500/30 border-cyan-500/50",
+  reviewed: "bg-amber-500/30 border-amber-500/50",
+  contacted: "bg-purple-500/30 border-purple-500/50",
+  scheduled: "bg-orange-500/30 border-orange-500/50",
+  interviewed: "bg-blue-500/30 border-blue-500/50",
+  hired: "bg-green-500/30 border-green-500/50",
+  rejected: "bg-red-500/30 border-red-500/50",
 };
 
 function ApplicationsContent() {
@@ -36,17 +49,22 @@ function ApplicationsContent() {
   const { user } = useAuth();
   const router = useRouter();
   const applications = useQuery(api.applications.getAll) || [];
+  const groupedApplications = useQuery(api.applications.getByStatusGrouped);
   const stats = useQuery(api.applications.getStats);
   const recentInterviews = useQuery(api.applications.getRecentlyInterviewed) || [];
   const updateStatus = useMutation(api.applications.updateStatus);
+  const updateStatusWithActivity = useMutation(api.applications.updateStatusWithActivity);
   const deleteApplication = useMutation(api.applications.remove);
 
+  const [viewMode, setViewMode] = useState<"table" | "kanban">("table");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState<Id<"applications"> | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [sortBy, setSortBy] = useState<"score" | "position" | "date">("date");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [draggedApp, setDraggedApp] = useState<Id<"applications"> | null>(null);
+  const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
 
   const handleSort = (column: "score" | "position" | "date") => {
     if (sortBy === column) {
@@ -108,6 +126,51 @@ function ApplicationsContent() {
 
   const canDeleteApplications = user?.role === "super_admin" || user?.role === "admin";
 
+  // Kanban drag and drop handlers
+  const handleDragStart = (appId: Id<"applications">) => {
+    setDraggedApp(appId);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedApp(null);
+    setDragOverColumn(null);
+  };
+
+  const handleDragOver = (e: React.DragEvent, status: string) => {
+    e.preventDefault();
+    setDragOverColumn(status);
+  };
+
+  const handleDrop = async (e: React.DragEvent, newStatus: string) => {
+    e.preventDefault();
+    if (!draggedApp || !user) return;
+
+    // Find the application to check current status
+    const app = applications.find(a => a._id === draggedApp);
+    if (!app || app.status === newStatus) {
+      handleDragEnd();
+      return;
+    }
+
+    await updateStatusWithActivity({
+      applicationId: draggedApp,
+      newStatus,
+      userId: user._id,
+    });
+    handleDragEnd();
+  };
+
+  // Calculate days since application was created (used for staleness indicator)
+  const getDaysInStatus = (app: Application) => {
+    const days = Math.floor((Date.now() - app.createdAt) / (1000 * 60 * 60 * 24));
+    return days;
+  };
+
+  // Check if application is new (less than 24 hours)
+  const isNewApplication = (app: Application) => {
+    return Date.now() - app.createdAt < 24 * 60 * 60 * 1000;
+  };
+
   return (
     <div className={`flex h-screen ${isDark ? "bg-slate-900" : "bg-[#f2f2f7]"}`}>
       <Sidebar />
@@ -125,20 +188,52 @@ function ApplicationsContent() {
                 Review and manage job applications
               </p>
             </div>
-            <button
-              onClick={() => router.push("/applications/bulk-upload")}
-              className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors flex-shrink-0 ${
-                isDark
-                  ? "bg-cyan-600 hover:bg-cyan-700 text-white"
-                  : "bg-blue-600 hover:bg-blue-700 text-white"
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-              </svg>
-              <span className="hidden sm:inline">Bulk Upload</span>
-              <span className="sm:hidden">Upload</span>
-            </button>
+            <div className="flex items-center gap-2 sm:gap-3">
+              {/* View Toggle */}
+              <div className={`flex rounded-lg p-1 ${isDark ? "bg-slate-800 border border-slate-700" : "bg-gray-100 border border-gray-200"}`}>
+                <button
+                  onClick={() => setViewMode("table")}
+                  className={`px-2 sm:px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                    viewMode === "table"
+                      ? isDark ? "bg-slate-700 text-white" : "bg-white text-gray-900 shadow-sm"
+                      : isDark ? "text-slate-400 hover:text-white" : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                  </svg>
+                  <span className="hidden sm:inline">Table</span>
+                </button>
+                <button
+                  onClick={() => setViewMode("kanban")}
+                  className={`px-2 sm:px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                    viewMode === "kanban"
+                      ? isDark ? "bg-slate-700 text-white" : "bg-white text-gray-900 shadow-sm"
+                      : isDark ? "text-slate-400 hover:text-white" : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                  </svg>
+                  <span className="hidden sm:inline">Kanban</span>
+                </button>
+              </div>
+
+              <button
+                onClick={() => router.push("/applications/bulk-upload")}
+                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors flex-shrink-0 ${
+                  isDark
+                    ? "bg-cyan-600 hover:bg-cyan-700 text-white"
+                    : "bg-blue-600 hover:bg-blue-700 text-white"
+                }`}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                <span className="hidden sm:inline">Bulk Upload</span>
+                <span className="sm:hidden">Upload</span>
+              </button>
+            </div>
           </div>
         </header>
 
@@ -411,32 +506,225 @@ function ApplicationsContent() {
             </div>
           )}
 
-          {/* Filters */}
-          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-            <div className="flex-1">
-              <input
-                type="text"
-                placeholder="Search name, email, or job..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className={`w-full px-3 sm:px-4 py-2 text-sm sm:text-base rounded-lg focus:outline-none ${isDark ? "bg-slate-800/50 border border-slate-700 text-white placeholder-slate-500 focus:border-cyan-500" : "bg-white border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-blue-600"}`}
-              />
+          {/* Filters - only show for table view */}
+          {viewMode === "table" && (
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+              <div className="flex-1">
+                <input
+                  type="text"
+                  placeholder="Search name, email, or job..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className={`w-full px-3 sm:px-4 py-2 text-sm sm:text-base rounded-lg focus:outline-none ${isDark ? "bg-slate-800/50 border border-slate-700 text-white placeholder-slate-500 focus:border-cyan-500" : "bg-white border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-blue-600"}`}
+                />
+              </div>
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className={`px-3 sm:px-4 py-2 text-sm sm:text-base rounded-lg focus:outline-none ${isDark ? "bg-slate-800/50 border border-slate-700 text-white focus:border-cyan-500" : "bg-white border border-gray-200 text-gray-900 focus:border-blue-600"}`}
+              >
+                <option value="all">All Statuses</option>
+                {STATUS_OPTIONS.map((status) => (
+                  <option key={status.value} value={status.value}>
+                    {status.label}
+                  </option>
+                ))}
+              </select>
             </div>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className={`px-3 sm:px-4 py-2 text-sm sm:text-base rounded-lg focus:outline-none ${isDark ? "bg-slate-800/50 border border-slate-700 text-white focus:border-cyan-500" : "bg-white border border-gray-200 text-gray-900 focus:border-blue-600"}`}
-            >
-              <option value="all">All Statuses</option>
-              {STATUS_OPTIONS.map((status) => (
-                <option key={status.value} value={status.value}>
-                  {status.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          )}
+
+          {/* Kanban Board View */}
+          {viewMode === "kanban" && groupedApplications && (
+            <div className="overflow-x-auto pb-4">
+              <div className="flex gap-4 min-w-max">
+                {STATUS_OPTIONS.map((status) => {
+                  const columnApps = groupedApplications[status.value] || [];
+                  const isDropTarget = dragOverColumn === status.value;
+
+                  return (
+                    <div
+                      key={status.value}
+                      className={`flex-shrink-0 w-72 rounded-xl transition-all ${
+                        isDark ? "bg-slate-800/50" : "bg-gray-100"
+                      } ${isDropTarget ? "ring-2 ring-cyan-500 ring-opacity-50" : ""}`}
+                      onDragOver={(e) => handleDragOver(e, status.value)}
+                      onDragLeave={() => setDragOverColumn(null)}
+                      onDrop={(e) => handleDrop(e, status.value)}
+                    >
+                      {/* Column Header */}
+                      <div className={`flex items-center justify-between px-4 py-3 rounded-t-xl border-b ${
+                        isDark
+                          ? `${kanbanHeaderColors[status.value]} border-slate-700`
+                          : "bg-white border-gray-200"
+                      }`}>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-sm font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                            {status.label}
+                          </span>
+                          <span className={`px-2 py-0.5 text-xs rounded-full ${
+                            isDark ? "bg-slate-700 text-slate-300" : "bg-gray-200 text-gray-600"
+                          }`}>
+                            {columnApps.length}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Column Cards */}
+                      <div className="p-3 space-y-3 max-h-[calc(100vh-400px)] overflow-y-auto">
+                        {columnApps.length === 0 ? (
+                          <div className={`text-center py-8 text-sm ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                            No candidates
+                          </div>
+                        ) : (
+                          columnApps.map((app: Application) => {
+                            const daysInStatus = getDaysInStatus(app);
+                            const isNew = isNewApplication(app);
+                            const isDragging = draggedApp === app._id;
+
+                            return (
+                              <div
+                                key={app._id}
+                                draggable
+                                onDragStart={() => handleDragStart(app._id)}
+                                onDragEnd={handleDragEnd}
+                                onClick={() => router.push(`/applications/${app._id}`)}
+                                className={`rounded-lg p-3 cursor-grab active:cursor-grabbing transition-all hover:scale-[1.02] ${
+                                  isDark
+                                    ? "bg-slate-900 border border-slate-700 hover:border-slate-600"
+                                    : "bg-white border border-gray-200 hover:border-gray-300 shadow-sm"
+                                } ${isDragging ? "opacity-50 scale-95" : ""}`}
+                              >
+                                {/* Card Header */}
+                                <div className="flex items-start justify-between mb-2">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <p className={`font-semibold truncate ${isDark ? "text-white" : "text-gray-900"}`}>
+                                        {app.firstName} {app.lastName}
+                                      </p>
+                                      {isNew && (
+                                        <span className="flex-shrink-0 px-1.5 py-0.5 text-[10px] font-medium bg-cyan-500/20 text-cyan-400 rounded">
+                                          NEW
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className={`text-xs truncate ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                                      {app.appliedJobTitle}
+                                    </p>
+                                  </div>
+                                  {app.candidateAnalysis && (
+                                    <div className={`flex-shrink-0 text-lg font-bold ${
+                                      app.candidateAnalysis.overallScore >= 70
+                                        ? "text-green-500"
+                                        : app.candidateAnalysis.overallScore >= 50
+                                          ? "text-amber-500"
+                                          : "text-red-500"
+                                    }`}>
+                                      {app.candidateAnalysis.overallScore}%
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Score Breakdown */}
+                                {app.candidateAnalysis && (
+                                  <div className="flex gap-3 text-xs mb-2">
+                                    <div>
+                                      <span className={isDark ? "text-slate-500" : "text-gray-400"}>Stab: </span>
+                                      <span className={isDark ? "text-slate-300" : "text-gray-700"}>
+                                        {app.candidateAnalysis.stabilityScore}
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <span className={isDark ? "text-slate-500" : "text-gray-400"}>Exp: </span>
+                                      <span className={isDark ? "text-slate-300" : "text-gray-700"}>
+                                        {app.candidateAnalysis.experienceScore}
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <span className={isDark ? "text-slate-500" : "text-gray-400"}>
+                                        {app.candidateAnalysis.totalYearsExperience.toFixed(1)}y
+                                      </span>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Flags */}
+                                {app.candidateAnalysis && (
+                                  <div className="flex gap-2 text-xs mb-2">
+                                    <span className="text-red-400">
+                                      {app.candidateAnalysis.redFlags.length} red flags
+                                    </span>
+                                    <span className="text-green-400">
+                                      {app.candidateAnalysis.greenFlags.length} green flags
+                                    </span>
+                                  </div>
+                                )}
+
+                                {/* Interview Scheduled Indicator */}
+                                {app.scheduledInterviewDate && (
+                                  <div className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded mb-2 ${
+                                    isDark ? "bg-orange-500/20 text-orange-400" : "bg-orange-100 text-orange-600"
+                                  }`}>
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
+                                    <span>
+                                      {new Date(app.scheduledInterviewDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                      {app.scheduledInterviewTime && ` @ ${app.scheduledInterviewTime}`}
+                                    </span>
+                                  </div>
+                                )}
+
+                                {/* Days in Status & Quick Actions */}
+                                <div className="flex items-center justify-between pt-2 border-t border-slate-700/50">
+                                  <span className={`text-xs ${
+                                    daysInStatus > 7
+                                      ? "text-amber-400"
+                                      : isDark ? "text-slate-500" : "text-gray-400"
+                                  }`}>
+                                    {daysInStatus === 0 ? "Today" : `${daysInStatus}d ago`}
+                                  </span>
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigator.clipboard.writeText(app.email);
+                                      }}
+                                      className={`p-1.5 rounded hover:bg-slate-700/50 transition-colors ${isDark ? "text-slate-400 hover:text-white" : "text-gray-400 hover:text-gray-700"}`}
+                                      title="Copy email"
+                                    >
+                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                      </svg>
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        router.push(`/applications/${app._id}`);
+                                      }}
+                                      className={`p-1.5 rounded hover:bg-slate-700/50 transition-colors ${isDark ? "text-slate-400 hover:text-white" : "text-gray-400 hover:text-gray-700"}`}
+                                      title="View details"
+                                    >
+                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                      </svg>
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Applications Table */}
+          {viewMode === "table" && (
           <div className={`rounded-xl overflow-hidden ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -601,6 +889,7 @@ function ApplicationsContent() {
               )}
             </div>
           </div>
+          )}
         </div>
       </main>
 
