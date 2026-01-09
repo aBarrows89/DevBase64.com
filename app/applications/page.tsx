@@ -37,6 +37,7 @@ function ApplicationsContent() {
   const router = useRouter();
   const applications = useQuery(api.applications.getAll) || [];
   const stats = useQuery(api.applications.getStats);
+  const recentInterviews = useQuery(api.applications.getRecentlyInterviewed) || [];
   const updateStatus = useMutation(api.applications.updateStatus);
   const deleteApplication = useMutation(api.applications.remove);
 
@@ -296,6 +297,119 @@ function ApplicationsContent() {
               </div>
             );
           })()}
+
+          {/* Recent Interviews Section */}
+          {recentInterviews.length > 0 && (
+            <div className={`rounded-xl p-4 sm:p-6 ${isDark ? "bg-gradient-to-r from-blue-900/30 to-indigo-900/30 border border-blue-700/50" : "bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200"}`}>
+              <div className="flex items-center gap-2 mb-4">
+                <svg className={`w-5 h-5 ${isDark ? "text-blue-400" : "text-indigo-600"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+                <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>Recent Interviews</h2>
+                <span className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                  (Last {recentInterviews.length} interviewed)
+                </span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+                {recentInterviews.slice(0, 5).map((interview) => (
+                  <div
+                    key={interview._id}
+                    onClick={() => router.push(`/applications/${interview._id}`)}
+                    className={`relative rounded-lg p-4 cursor-pointer transition-all hover:scale-[1.02] ${
+                      isDark
+                        ? "bg-slate-800/80 border border-slate-600 hover:border-blue-500"
+                        : "bg-white border border-gray-200 hover:border-indigo-400 shadow-sm hover:shadow-md"
+                    }`}
+                  >
+                    {/* Status Badge */}
+                    <div className="absolute top-2 right-2">
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full border ${statusColors[interview.status]}`}>
+                        {interview.status}
+                      </span>
+                    </div>
+
+                    {/* Name and Position */}
+                    <div className="mb-3 pr-16">
+                      <p className={`font-semibold truncate ${isDark ? "text-white" : "text-gray-900"}`}>
+                        {interview.firstName} {interview.lastName}
+                      </p>
+                      <p className={`text-xs truncate ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                        {interview.appliedJobTitle}
+                      </p>
+                    </div>
+
+                    {/* Interview Info */}
+                    <div className={`text-xs space-y-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                      <div className="flex items-center gap-1">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <span>{new Date(interview.interviewDate).toLocaleDateString()}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                        <span className="truncate">{interview.interviewerName}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className={`font-medium ${isDark ? "text-blue-400" : "text-indigo-600"}`}>
+                          Round {interview.roundNumber}
+                        </span>
+                        {interview.totalRounds > 1 && (
+                          <span className="opacity-70">of {interview.totalRounds}</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Scores */}
+                    <div className="mt-3 pt-2 border-t border-slate-700/50 flex gap-2">
+                      {interview.preliminaryScore !== null && (
+                        <div className={`text-xs px-2 py-1 rounded ${
+                          interview.preliminaryScore >= 75
+                            ? isDark ? "bg-green-900/50 text-green-400" : "bg-green-100 text-green-700"
+                            : interview.preliminaryScore >= 50
+                              ? isDark ? "bg-amber-900/50 text-amber-400" : "bg-amber-100 text-amber-700"
+                              : isDark ? "bg-red-900/50 text-red-400" : "bg-red-100 text-red-700"
+                        }`}>
+                          Prelim: {interview.preliminaryScore}%
+                        </div>
+                      )}
+                      {interview.aiScore !== null && (
+                        <div className={`text-xs px-2 py-1 rounded ${
+                          interview.aiScore >= 75
+                            ? isDark ? "bg-green-900/50 text-green-400" : "bg-green-100 text-green-700"
+                            : interview.aiScore >= 50
+                              ? isDark ? "bg-amber-900/50 text-amber-400" : "bg-amber-100 text-amber-700"
+                              : isDark ? "bg-red-900/50 text-red-400" : "bg-red-100 text-red-700"
+                        }`}>
+                          AI: {interview.aiScore}%
+                        </div>
+                      )}
+                      {interview.preliminaryScore === null && interview.aiScore === null && (
+                        <div className={`text-xs px-2 py-1 rounded ${isDark ? "bg-slate-700 text-slate-400" : "bg-gray-100 text-gray-500"}`}>
+                          Pending evaluation
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Recommendation */}
+                    {interview.recommendation && (
+                      <div className={`mt-2 text-[10px] truncate ${
+                        interview.recommendation.toLowerCase().includes("hire") || interview.recommendation.toLowerCase().includes("strong")
+                          ? isDark ? "text-green-400" : "text-green-600"
+                          : interview.recommendation.toLowerCase().includes("reject") || interview.recommendation.toLowerCase().includes("not")
+                            ? isDark ? "text-red-400" : "text-red-600"
+                            : isDark ? "text-slate-400" : "text-gray-500"
+                      }`}>
+                        {interview.recommendation}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Filters */}
           <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">

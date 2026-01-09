@@ -793,3 +793,61 @@ export const getHiringAnalytics = query({
     };
   },
 });
+
+// Get recently interviewed applications with interview summary
+export const getRecentlyInterviewed = query({
+  args: {},
+  handler: async (ctx) => {
+    const applications = await ctx.db.query("applications").collect();
+
+    // Filter applications that have interview rounds
+    const interviewedApps = applications
+      .filter((app) => app.interviewRounds && app.interviewRounds.length > 0)
+      .map((app) => {
+        const rounds = app.interviewRounds || [];
+        const latestRound = rounds[rounds.length - 1];
+
+        // Calculate preliminary evaluation average if exists
+        let prelimScore = null;
+        if (latestRound.preliminaryEvaluation) {
+          const prelim = latestRound.preliminaryEvaluation;
+          const scores = [
+            prelim.appearance,
+            prelim.manner,
+            prelim.conversation,
+            prelim.intelligence,
+            prelim.sociability,
+            prelim.overallHealthOpinion,
+          ].filter((s) => s !== undefined);
+          if (scores.length > 0) {
+            prelimScore = Math.round(
+              (scores.reduce((a, b) => a + b, 0) / scores.length) * 25
+            ); // Convert 1-4 to percentage
+          }
+        }
+
+        // Get AI evaluation score if exists
+        const aiScore = latestRound.aiEvaluation?.overallScore || null;
+
+        return {
+          _id: app._id,
+          firstName: app.firstName,
+          lastName: app.lastName,
+          appliedJobTitle: app.appliedJobTitle,
+          status: app.status,
+          interviewDate: latestRound.conductedAt,
+          interviewerName: latestRound.interviewerName,
+          roundNumber: latestRound.round,
+          totalRounds: rounds.length,
+          preliminaryScore: prelimScore,
+          aiScore: aiScore,
+          recommendation: latestRound.aiEvaluation?.recommendation || null,
+          interviewNotes: latestRound.interviewNotes || null,
+        };
+      })
+      .sort((a, b) => b.interviewDate - a.interviewDate)
+      .slice(0, 10); // Return most recent 10
+
+    return interviewedApps;
+  },
+});
