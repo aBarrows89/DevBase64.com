@@ -77,7 +77,7 @@ export default function BinLabelsPage() {
         <Sidebar />
         <main className="flex-1 overflow-auto print:overflow-visible">
           {/* Header - Hidden when printing */}
-          <header className={`sticky top-0 z-10 p-6 border-b print:hidden ${isDark ? "bg-slate-900/95 backdrop-blur border-slate-700" : "bg-[#f2f2f7]/95 backdrop-blur border-gray-200"}`}>
+          <header className={`sticky top-0 z-10 p-6 border-b print:hidden no-print ${isDark ? "bg-slate-900/95 backdrop-blur border-slate-700" : "bg-[#f2f2f7]/95 backdrop-blur border-gray-200"}`}>
             <div className="flex items-center justify-between">
               <div>
                 <h1 className={`text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
@@ -116,7 +116,7 @@ export default function BinLabelsPage() {
 
           <div className="p-6 print:p-0">
             {/* Input Form - Hidden when printing */}
-            <div className={`rounded-xl p-6 mb-6 print:hidden ${isDark ? "bg-slate-800 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
+            <div className={`rounded-xl p-6 mb-6 print:hidden no-print ${isDark ? "bg-slate-800 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
               <div className="flex items-center justify-between mb-4">
                 <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
                   Label Details
@@ -203,7 +203,7 @@ export default function BinLabelsPage() {
             </div>
 
             {/* Preview Section - Hidden when printing */}
-            <div className={`rounded-xl p-6 print:hidden ${isDark ? "bg-slate-800 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
+            <div className={`rounded-xl p-6 print:hidden no-print ${isDark ? "bg-slate-800 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
               <div className="flex items-center justify-between mb-4">
                 <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
                   Print Preview ({labelsWithCopies.filter(l => l.locationId).length} label{labelsWithCopies.filter(l => l.locationId).length !== 1 ? "s" : ""})
@@ -282,22 +282,12 @@ export default function BinLabelsPage() {
             </div>
 
             {/* Print-Only Labels */}
-            <div className="hidden print:block">
+            <div className="hidden print:block print-labels-container">
               {labelsWithCopies.map((label, index) => (
                 label.locationId && (
                   <div
                     key={index}
                     className="print-label"
-                    style={{
-                      width: "6in",
-                      height: "2in",
-                      pageBreakAfter: "always",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      padding: "0.15in",
-                      boxSizing: "border-box",
-                    }}
                   >
                     <PrintBarcode locationId={label.locationId} locationName={label.locationName} />
                   </div>
@@ -316,20 +306,65 @@ export default function BinLabelsPage() {
             margin: 0;
           }
 
-          body {
-            margin: 0;
-            padding: 0;
+          /* Hide everything */
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            background: white !important;
+            width: 6in !important;
+            height: 2in !important;
+          }
+
+          /* Hide all page elements */
+          body > * {
+            display: none !important;
+          }
+
+          /* Hide sidebar, header, forms */
+          aside,
+          header,
+          nav,
+          .no-print,
+          .print\\:hidden {
+            display: none !important;
+          }
+
+          /* Show only print labels container */
+          .print-labels-container {
+            display: block !important;
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 6in !important;
+            background: white !important;
           }
 
           .print-label {
             width: 6in !important;
             height: 2in !important;
-            page-break-after: always;
-            page-break-inside: avoid;
+            page-break-after: always !important;
+            page-break-inside: avoid !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            background: white !important;
+            margin: 0 !important;
+            padding: 0 !important;
           }
 
           .print-label:last-child {
-            page-break-after: auto;
+            page-break-after: auto !important;
+          }
+
+          /* Ensure barcode is visible */
+          .print-label svg {
+            display: block !important;
+          }
+
+          .print-label * {
+            color: black !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
         }
       `}</style>
