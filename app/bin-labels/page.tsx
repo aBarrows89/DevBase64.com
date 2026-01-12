@@ -204,41 +204,79 @@ export default function BinLabelsPage() {
 
             {/* Preview Section - Hidden when printing */}
             <div className={`rounded-xl p-6 print:hidden ${isDark ? "bg-slate-800 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
-              <h2 className={`text-lg font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
-                Preview ({labelsWithCopies.filter(l => l.locationId).length} label{labelsWithCopies.filter(l => l.locationId).length !== 1 ? "s" : ""})
-              </h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  Print Preview ({labelsWithCopies.filter(l => l.locationId).length} label{labelsWithCopies.filter(l => l.locationId).length !== 1 ? "s" : ""})
+                </h2>
+                <span className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                  Actual size: 2" × 6"
+                </span>
+              </div>
 
               {labels.some(l => l.locationId) ? (
-                <div className="flex flex-wrap gap-6 justify-center">
-                  {labels.map((label, index) => (
-                    label.locationId && (
-                      <div
-                        key={index}
-                        className="bg-white border-2 border-dashed border-gray-300 rounded-lg p-2"
-                        style={{ width: "2in", height: "6in" }}
-                      >
-                        <div className="h-full flex flex-col items-center justify-center text-black">
-                          <svg
-                            ref={(el) => { barcodeRefs.current[index] = el; }}
-                            className="w-full"
-                          />
-                          {label.locationName && (
-                            <div className="text-center mt-2 px-2">
-                              <p className="text-lg font-bold leading-tight">{label.locationName}</p>
+                <div className={`p-8 rounded-lg ${isDark ? "bg-slate-900/50" : "bg-gray-100"}`}>
+                  <div className="flex flex-wrap gap-8 justify-center">
+                    {labels.map((label, index) => (
+                      label.locationId && (
+                        <div key={index} className="flex flex-col items-center">
+                          {/* Label number indicator */}
+                          <span className={`text-xs font-medium mb-2 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                            Label #{index + 1} {copies > 1 && `(×${copies})`}
+                          </span>
+
+                          {/* Thermal label mockup - scaled to fit screen */}
+                          <div
+                            className="relative bg-white shadow-xl rounded-sm"
+                            style={{
+                              width: "192px",  // 2 inches at 96dpi
+                              height: "576px", // 6 inches at 96dpi
+                              boxShadow: "0 4px 20px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05)"
+                            }}
+                          >
+                            {/* Label edge styling */}
+                            <div
+                              className="absolute inset-0 rounded-sm"
+                              style={{
+                                background: "linear-gradient(to bottom, #fafafa 0%, #ffffff 5%, #ffffff 95%, #f5f5f5 100%)",
+                              }}
+                            />
+
+                            {/* Label content */}
+                            <div className="relative h-full flex flex-col items-center justify-center p-4 text-black">
+                              {/* Barcode */}
+                              <svg
+                                ref={(el) => { barcodeRefs.current[index] = el; }}
+                                className="w-full"
+                              />
+
+                              {/* Location name */}
+                              {label.locationName && (
+                                <div className="text-center mt-4 px-2">
+                                  <p className="text-xl font-bold leading-tight text-black">{label.locationName}</p>
+                                </div>
+                              )}
                             </div>
-                          )}
+
+                            {/* Subtle perforation line indicators */}
+                            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent" />
+                            <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent" />
+                          </div>
                         </div>
-                      </div>
-                    )
-                  ))}
+                      )
+                    ))}
+                  </div>
                 </div>
               ) : (
-                <div className={`text-center py-12 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
-                  <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className={`text-center py-16 rounded-lg ${isDark ? "bg-slate-900/50" : "bg-gray-100"}`}>
+                  <svg className="w-20 h-20 mx-auto mb-4 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
                   </svg>
-                  <p className="text-lg font-medium">Enter a Location ID to preview label</p>
-                  <p className="text-sm mt-1">The barcode will be generated using Code 128 format</p>
+                  <p className={`text-lg font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    Enter a Location ID to preview label
+                  </p>
+                  <p className={`text-sm mt-1 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                    The barcode will be generated using Code 128 format
+                  </p>
                 </div>
               )}
             </div>
