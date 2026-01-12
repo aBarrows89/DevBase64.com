@@ -38,6 +38,7 @@ import type * as notifications from "../notifications.js";
 import type * as personnel from "../personnel.js";
 import type * as projectSuggestions from "../projectSuggestions.js";
 import type * as projects from "../projects.js";
+import type * as quickbooks from "../quickbooks.js";
 import type * as reports from "../reports.js";
 import type * as safetyChecklist from "../safetyChecklist.js";
 import type * as search from "../search.js";
@@ -86,6 +87,7 @@ declare const fullApi: ApiFromModules<{
   personnel: typeof personnel;
   projectSuggestions: typeof projectSuggestions;
   projects: typeof projects;
+  quickbooks: typeof quickbooks;
   reports: typeof reports;
   safetyChecklist: typeof safetyChecklist;
   search: typeof search;

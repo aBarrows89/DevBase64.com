@@ -1349,6 +1349,112 @@ export default defineSchema({
     .index("by_user_status", ["userId", "status"])
     .index("by_user_unread", ["userId", "isRead"]),
 
+  // ============ QUICKBOOKS DESKTOP INTEGRATION ============
+  // QuickBooks connection configuration
+  qbConnection: defineTable({
+    companyName: v.string(), // QuickBooks company file name
+    companyId: v.optional(v.string()), // QB company ID if available
+    isActive: v.boolean(),
+    // Web Connector settings
+    wcPassword: v.string(), // Password for Web Connector authentication (hashed)
+    wcUsername: v.string(), // Username for Web Connector
+    lastConnectedAt: v.optional(v.number()),
+    lastSyncAt: v.optional(v.number()),
+    qbVersion: v.optional(v.string()), // QuickBooks version detected
+    // Sync settings
+    syncTimeEntries: v.boolean(), // Export time entries to QB
+    syncPayStubs: v.boolean(), // Import pay stubs from QB
+    syncEmployees: v.boolean(), // Sync employee list
+    autoSyncEnabled: v.boolean(), // Enable automatic sync
+    syncIntervalMinutes: v.number(), // How often to sync (default 15)
+    // Status
+    connectionStatus: v.string(), // "connected" | "disconnected" | "error" | "pending"
+    lastError: v.optional(v.string()),
+    lastErrorAt: v.optional(v.number()),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_active", ["isActive"]),
+
+  // Map personnel to QuickBooks employees
+  qbEmployeeMapping: defineTable({
+    personnelId: v.id("personnel"),
+    qbListId: v.string(), // QuickBooks Employee ListID
+    qbName: v.string(), // Name as it appears in QuickBooks
+    qbEditSequence: v.optional(v.string()), // QB edit sequence for updates
+    isActive: v.boolean(),
+    isSynced: v.boolean(), // True if successfully synced
+    lastSyncedAt: v.optional(v.number()),
+    syncError: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_personnel", ["personnelId"])
+    .index("by_qb_list_id", ["qbListId"])
+    .index("by_synced", ["isSynced"]),
+
+  // Queue of items pending sync to QuickBooks
+  qbSyncQueue: defineTable({
+    type: v.string(), // "time_entry" | "employee" | "paycheck_query"
+    action: v.string(), // "add" | "modify" | "query"
+    referenceId: v.string(), // ID of the source record (timeEntryId, personnelId, etc.)
+    referenceType: v.string(), // "timeEntries" | "personnel" | "payStubs"
+    qbRequestXml: v.optional(v.string()), // Generated QBXML request
+    status: v.string(), // "pending" | "processing" | "completed" | "failed"
+    priority: v.number(), // Lower = higher priority
+    attempts: v.number(), // Number of sync attempts
+    maxAttempts: v.number(), // Max retry attempts (default 3)
+    lastAttemptAt: v.optional(v.number()),
+    errorMessage: v.optional(v.string()),
+    qbResponseXml: v.optional(v.string()), // Response from QuickBooks
+    completedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_status", ["status"])
+    .index("by_status_priority", ["status", "priority"])
+    .index("by_reference", ["referenceType", "referenceId"]),
+
+  // Sync operation logs
+  qbSyncLog: defineTable({
+    sessionId: v.string(), // Unique session ID for grouping related operations
+    operation: v.string(), // "connect" | "sync_time" | "sync_employees" | "import_paychecks" | "error"
+    direction: v.string(), // "export" | "import"
+    recordType: v.optional(v.string()), // "time_entry" | "employee" | "paycheck"
+    recordId: v.optional(v.string()), // Related record ID
+    recordCount: v.optional(v.number()), // Number of records processed
+    status: v.string(), // "started" | "completed" | "failed"
+    message: v.optional(v.string()),
+    errorDetails: v.optional(v.string()),
+    durationMs: v.optional(v.number()), // How long the operation took
+    createdAt: v.number(),
+  })
+    .index("by_session", ["sessionId"])
+    .index("by_operation", ["operation"])
+    .index("by_created", ["createdAt"]),
+
+  // Pending time entries for QB export (summary view)
+  qbPendingTimeExport: defineTable({
+    personnelId: v.id("personnel"),
+    weekStartDate: v.string(), // YYYY-MM-DD (Sunday)
+    weekEndDate: v.string(), // YYYY-MM-DD (Saturday)
+    totalHours: v.number(),
+    regularHours: v.number(),
+    overtimeHours: v.number(),
+    status: v.string(), // "pending" | "approved" | "exported" | "error"
+    approvedBy: v.optional(v.id("users")),
+    approvedAt: v.optional(v.number()),
+    exportedAt: v.optional(v.number()),
+    qbTxnId: v.optional(v.string()), // QB Transaction ID after export
+    errorMessage: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_personnel", ["personnelId"])
+    .index("by_week", ["weekStartDate"])
+    .index("by_status", ["status"])
+    .index("by_personnel_week", ["personnelId", "weekStartDate"]),
+
   // ============ MILEAGE TRACKING (super_admin only) ============
   mileageEntries: defineTable({
     date: v.string(), // YYYY-MM-DD
