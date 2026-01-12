@@ -94,22 +94,41 @@ export default function BinLabelsPage() {
                 >
                   Clear All
                 </button>
-                <button
-                  onClick={handlePrint}
-                  disabled={!labels.some(l => l.locationId)}
-                  className={`px-6 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
-                    labels.some(l => l.locationId)
-                      ? isDark
-                        ? "bg-cyan-500 hover:bg-cyan-400 text-white"
-                        : "bg-blue-600 hover:bg-blue-700 text-white"
-                      : "bg-gray-300 text-gray-500 cursor-not-allowed"
-                  }`}
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                  </svg>
-                  Print Labels
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handlePrint}
+                    disabled={!labels.some(l => l.locationId)}
+                    className={`px-6 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+                      labels.some(l => l.locationId)
+                        ? isDark
+                          ? "bg-cyan-500 hover:bg-cyan-400 text-white"
+                          : "bg-blue-600 hover:bg-blue-700 text-white"
+                        : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                    }`}
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                    </svg>
+                    Print Labels
+                  </button>
+                  <div className="relative group">
+                    <button className={`p-2 rounded-lg ${isDark ? "text-slate-400 hover:text-white hover:bg-slate-700" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"}`}>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </button>
+                    <div className={`absolute right-0 top-full mt-2 w-72 p-4 rounded-lg shadow-xl border z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all ${isDark ? "bg-slate-800 border-slate-600" : "bg-white border-gray-200"}`}>
+                      <p className={`font-semibold mb-2 ${isDark ? "text-white" : "text-gray-900"}`}>Print Setup Tips:</p>
+                      <ol className={`text-sm space-y-1.5 ${isDark ? "text-slate-300" : "text-gray-600"}`}>
+                        <li>1. Select your label printer</li>
+                        <li>2. Set paper size to <strong>6" × 2"</strong></li>
+                        <li>3. Set margins to <strong>None</strong></li>
+                        <li>4. Disable headers/footers</li>
+                        <li>5. Set scale to <strong>100%</strong></li>
+                      </ol>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </header>
