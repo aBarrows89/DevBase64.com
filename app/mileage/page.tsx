@@ -201,101 +201,44 @@ function MileageContent() {
         {/* Print styles */}
         <style jsx global>{`
           @media print {
-            body * { visibility: hidden; }
-            .print-area, .print-area * { visibility: visible; }
-            .print-area {
-              position: absolute;
-              left: 0;
-              top: 0;
-              width: 100%;
-              background: white !important;
-              color: black !important;
-              padding: 0.4in;
-            }
-            .no-print { display: none !important; }
-            .print-only { display: block !important; }
             @page {
-              margin: 0.4in;
+              margin: 0.5in;
               size: letter;
             }
-            table {
-              border-collapse: collapse;
-              width: 100%;
-              font-size: 9pt;
-              margin-top: 16px;
+
+            body {
+              margin: 0 !important;
+              padding: 0 !important;
+              background: white !important;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
             }
-            th, td {
-              border: 1px solid #555;
-              padding: 5px 6px;
-              text-align: left;
+
+            /* Hide everything except print area */
+            .no-print,
+            header,
+            aside {
+              display: none !important;
             }
-            th {
-              background: #e5e7eb !important;
-              font-weight: 600;
-              color: #111 !important;
-              text-transform: uppercase;
-              font-size: 8pt;
+
+            .print-area {
+              position: absolute !important;
+              left: 0 !important;
+              top: 0 !important;
+              width: 100% !important;
+              background: white !important;
+              color: black !important;
+              padding: 0 !important;
+              font-family: Arial, sans-serif !important;
             }
-            td {
-              color: #333 !important;
+
+            .print-only {
+              display: block !important;
             }
-            tfoot td {
-              background: #f3f4f6 !important;
-              font-weight: bold;
-            }
-            .print-header {
-              border-bottom: 3px solid #111;
-              padding-bottom: 12px;
-              margin-bottom: 0;
-            }
-            .print-header h1 {
-              font-size: 18pt;
-              letter-spacing: 1px;
-            }
-            .print-summary {
-              background: #f9fafb !important;
-              border: 2px solid #333;
-              padding: 10px;
-              margin-top: 12px;
-              border-radius: 4px;
-            }
-            .print-summary p {
-              margin: 0;
-            }
-            .print-footer {
-              margin-top: 24px;
-              page-break-inside: avoid;
-            }
-            .signature-line {
-              border-top: 1px solid #333;
-              width: 100%;
-              max-width: 280px;
-              margin-top: 50px;
-              padding-top: 4px;
-            }
-            .grid {
-              display: grid !important;
-            }
-            .grid-cols-2 {
-              grid-template-columns: repeat(2, 1fr) !important;
-            }
-            .grid-cols-3 {
-              grid-template-columns: repeat(3, 1fr) !important;
-            }
-            .gap-4 {
-              gap: 16px !important;
-            }
-            .gap-8 {
-              gap: 32px !important;
-            }
-            .text-center {
-              text-align: center !important;
-            }
-            .text-right {
-              text-align: right !important;
-            }
-            strong {
-              font-weight: 700 !important;
+
+            * {
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
             }
           }
         `}</style>
@@ -345,39 +288,123 @@ function MileageContent() {
         </header>
 
         <div className="p-4 sm:p-8 print-area" ref={printRef}>
-          {/* Print Header */}
-          <div className="hidden print:block print-header">
-            <div className="text-center mb-4">
-              <h1 className="text-2xl font-bold mb-1">MILEAGE REIMBURSEMENT REQUEST</h1>
-              <p className="text-sm text-gray-500">Business Travel Expense Report</p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 mt-4 text-sm">
+          {/* Print Header - Invoice Style */}
+          <div className="hidden print:block print-only" style={{ fontFamily: 'Arial, sans-serif' }}>
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '30px', paddingBottom: '20px', borderBottom: '3px solid #1e293b' }}>
               <div>
-                <p><strong>Employee:</strong> {user?.name || "N/A"}</p>
-                <p><strong>Email:</strong> {user?.email || "N/A"}</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <img src="/logo.gif" alt="IE Tires" style={{ height: '50px', width: 'auto' }} />
+                </div>
+                <div style={{ marginTop: '8px', fontSize: '11px', color: '#64748b' }}>
+                  <p style={{ margin: 0 }}>Import Export Tire Co.</p>
+                  <p style={{ margin: 0 }}>Mileage Reimbursement Request</p>
+                </div>
               </div>
-              <div className="text-right">
-                <p><strong>Period:</strong> {selectedMonth ? months.find((m) => m.value === selectedMonth)?.label : "All Months"} {selectedYear}</p>
-                <p><strong>IRS Standard Rate:</strong> ${currentRate?.toFixed(3)}/mile</p>
+              <div style={{ textAlign: 'right' }}>
+                <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 'bold', color: '#1e293b', letterSpacing: '2px' }}>MILEAGE REPORT</h1>
+                <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#64748b' }}>
+                  IRS Rate: ${currentRate?.toFixed(3)}/mile
+                </p>
               </div>
             </div>
 
-            <div className="print-summary mt-4">
-              <div className="grid grid-cols-3 gap-4 text-center">
-                <div>
-                  <p className="text-xs text-gray-500 uppercase">Total Entries</p>
-                  <p className="text-lg font-bold">{summary?.totalEntries || 0}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 uppercase">Total Miles</p>
-                  <p className="text-lg font-bold">{summary?.totalMiles?.toFixed(1) || 0}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 uppercase">Total Reimbursement</p>
-                  <p className="text-lg font-bold">{formatCurrency(summary?.totalReimbursement || 0)}</p>
+            {/* Employee & Period Info */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px', marginBottom: '25px' }}>
+              <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                <p style={{ margin: '0 0 3px 0', fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase', fontWeight: '600', letterSpacing: '0.5px' }}>Submitted By</p>
+                <p style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: '600', color: '#1e293b' }}>{user?.name || '________________________'}</p>
+                <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>Email: {user?.email || '____________'}</p>
+              </div>
+              <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                <p style={{ margin: '0 0 3px 0', fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase', fontWeight: '600', letterSpacing: '0.5px' }}>Report Period</p>
+                <p style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: '600', color: '#1e293b' }}>
+                  {selectedMonth ? months.find((m) => m.value === selectedMonth)?.label : "All Months"} {selectedYear}
+                </p>
+                <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>Generated: {new Date().toLocaleDateString()}</p>
+              </div>
+            </div>
+
+            {/* Summary Box */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '20px' }}>
+              <div style={{ width: '100%', background: '#1e293b', padding: '15px 20px', borderRadius: '6px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px', textAlign: 'center' }}>
+                  <div>
+                    <p style={{ margin: 0, color: '#94a3b8', fontSize: '10px', textTransform: 'uppercase', fontWeight: '600', letterSpacing: '0.5px' }}>Total Entries</p>
+                    <p style={{ margin: '4px 0 0 0', color: 'white', fontSize: '20px', fontWeight: 'bold' }}>{summary?.totalEntries || 0}</p>
+                  </div>
+                  <div>
+                    <p style={{ margin: 0, color: '#94a3b8', fontSize: '10px', textTransform: 'uppercase', fontWeight: '600', letterSpacing: '0.5px' }}>Total Miles</p>
+                    <p style={{ margin: '4px 0 0 0', color: 'white', fontSize: '20px', fontWeight: 'bold' }}>{summary?.totalMiles?.toFixed(1) || 0}</p>
+                  </div>
+                  <div>
+                    <p style={{ margin: 0, color: '#94a3b8', fontSize: '10px', textTransform: 'uppercase', fontWeight: '600', letterSpacing: '0.5px' }}>Total Reimbursement</p>
+                    <p style={{ margin: '4px 0 0 0', color: 'white', fontSize: '20px', fontWeight: 'bold' }}>{formatCurrency(summary?.totalReimbursement || 0)}</p>
+                  </div>
                 </div>
               </div>
+            </div>
+
+            {/* Table */}
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px', fontSize: '11px' }}>
+              <thead>
+                <tr style={{ background: '#1e293b' }}>
+                  <th style={{ padding: '10px 8px', textAlign: 'left', color: 'white', fontWeight: '600', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Date</th>
+                  <th style={{ padding: '10px 8px', textAlign: 'left', color: 'white', fontWeight: '600', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>From</th>
+                  <th style={{ padding: '10px 8px', textAlign: 'left', color: 'white', fontWeight: '600', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>To</th>
+                  <th style={{ padding: '10px 8px', textAlign: 'center', color: 'white', fontWeight: '600', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Miles</th>
+                  <th style={{ padding: '10px 8px', textAlign: 'left', color: 'white', fontWeight: '600', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Purpose</th>
+                  <th style={{ padding: '10px 8px', textAlign: 'right', color: 'white', fontWeight: '600', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {entries?.map((entry, index) => (
+                  <tr key={entry._id} style={{ background: index % 2 === 0 ? '#ffffff' : '#f8fafc' }}>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '11px' }}>{formatDate(entry.date)}</td>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', color: '#64748b' }}>{entry.fromLocation}</td>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '11px' }}>{entry.toLocation}</td>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', textAlign: 'center' }}>{entry.miles}{entry.isRoundTrip ? ' (RT)' : ''}</td>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', color: '#64748b', maxWidth: '150px' }}>{entry.purpose}</td>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', textAlign: 'right', fontWeight: '500' }}>{formatCurrency(entry.reimbursementAmount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr style={{ background: '#f1f5f9' }}>
+                  <td colSpan={3} style={{ padding: '10px 8px', fontWeight: 'bold', fontSize: '11px', textAlign: 'right' }}>TOTALS:</td>
+                  <td style={{ padding: '10px 8px', fontWeight: 'bold', fontSize: '11px', textAlign: 'center' }}>{summary?.totalMiles?.toFixed(1)}</td>
+                  <td style={{ padding: '10px 8px' }}></td>
+                  <td style={{ padding: '10px 8px', fontWeight: 'bold', fontSize: '11px', textAlign: 'right' }}>{formatCurrency(summary?.totalReimbursement || 0)}</td>
+                </tr>
+              </tfoot>
+            </table>
+
+            {/* Certification & Signatures */}
+            <div style={{ marginTop: '30px', padding: '15px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
+              <p style={{ margin: 0, fontSize: '11px', color: '#64748b' }}>
+                <strong style={{ color: '#1e293b' }}>EMPLOYEE CERTIFICATION:</strong> I certify that the above mileage was incurred in the performance
+                of official business duties and that I have not been reimbursed from any other source.
+              </p>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '50px', marginTop: '40px' }}>
+              <div>
+                <div style={{ borderTop: '1px solid #1e293b', paddingTop: '8px', marginTop: '50px' }}>
+                  <p style={{ margin: 0, fontSize: '11px', fontWeight: '600', color: '#1e293b' }}>Employee Signature</p>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '10px', color: '#94a3b8' }}>Date: ____________________</p>
+                </div>
+              </div>
+              <div>
+                <div style={{ borderTop: '1px solid #1e293b', paddingTop: '8px', marginTop: '50px' }}>
+                  <p style={{ margin: 0, fontSize: '11px', fontWeight: '600', color: '#1e293b' }}>Supervisor Approval</p>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '10px', color: '#94a3b8' }}>Date: ____________________</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div style={{ marginTop: '40px', paddingTop: '15px', borderTop: '1px solid #e2e8f0', textAlign: 'center' }}>
+              <p style={{ margin: 0, fontSize: '10px', color: '#94a3b8' }}>This document is for internal use only. Submit to Accounting for reimbursement processing.</p>
             </div>
           </div>
 
@@ -566,33 +593,6 @@ function MileageContent() {
             </table>
           </div>
 
-          {/* Print Footer with Signatures */}
-          <div className="hidden print:block print-footer">
-            <div className="mt-6 p-4 border border-gray-300 bg-gray-50">
-              <p className="text-xs text-gray-600 mb-2">
-                <strong>EMPLOYEE CERTIFICATION:</strong> I certify that the above mileage was incurred in the performance
-                of official business duties and that I have not been reimbursed from any other source.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-8 mt-8">
-              <div>
-                <div className="signature-line"></div>
-                <p className="text-sm"><strong>Employee Signature</strong></p>
-                <p className="text-xs text-gray-500 mt-1">Date: ________________</p>
-              </div>
-              <div>
-                <div className="signature-line"></div>
-                <p className="text-sm"><strong>Supervisor Approval</strong></p>
-                <p className="text-xs text-gray-500 mt-1">Date: ________________</p>
-              </div>
-            </div>
-
-            <div className="mt-8 pt-4 border-t border-gray-300 text-xs text-gray-400 text-center">
-              <p>Report Generated: {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}</p>
-              <p className="mt-1">This document is for internal use only.</p>
-            </div>
-          </div>
         </div>
 
         {/* Add/Edit Modal */}
