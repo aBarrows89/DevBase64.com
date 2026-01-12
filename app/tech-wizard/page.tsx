@@ -356,7 +356,7 @@ export default function TechWizardPage() {
                 </button>
               </div>
               <p className={`text-xs mt-2 text-center ${isDark ? "text-slate-500" : "text-gray-400"}`}>
-                Powered by Claude • Press Enter to send, Shift+Enter for new line
+                Powered by Tire Dust • Press Enter to send, Shift+Enter for new line
               </p>
             </div>
           </div>
