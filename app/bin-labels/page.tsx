@@ -25,13 +25,13 @@ export default function BinLabelsPage() {
         try {
           JsBarcode(barcodeRefs.current[index], label.locationId, {
             format: "CODE128",
-            width: 2,
-            height: 80,
+            width: 3,
+            height: 60,
             displayValue: true,
-            fontSize: 14,
+            fontSize: 16,
             font: "monospace",
             textMargin: 5,
-            margin: 10,
+            margin: 5,
           });
         } catch (e) {
           console.error("Barcode generation error:", e);
@@ -84,7 +84,7 @@ export default function BinLabelsPage() {
                   Bin Label Printer
                 </h1>
                 <p className={`text-sm mt-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                  Generate Code 128 barcode labels for warehouse bins (2" x 6" thermal labels)
+                  Generate Code 128 barcode labels for warehouse bins (6" × 2" thermal labels)
                 </p>
               </div>
               <div className="flex items-center gap-3">
@@ -209,13 +209,13 @@ export default function BinLabelsPage() {
                   Print Preview ({labelsWithCopies.filter(l => l.locationId).length} label{labelsWithCopies.filter(l => l.locationId).length !== 1 ? "s" : ""})
                 </h2>
                 <span className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                  Actual size: 2" × 6"
+                  Actual size: 6" × 2" (horizontal)
                 </span>
               </div>
 
               {labels.some(l => l.locationId) ? (
                 <div className={`p-8 rounded-lg ${isDark ? "bg-slate-900/50" : "bg-gray-100"}`}>
-                  <div className="flex flex-wrap gap-8 justify-center">
+                  <div className="flex flex-col gap-6 items-center">
                     {labels.map((label, index) => (
                       label.locationId && (
                         <div key={index} className="flex flex-col items-center">
@@ -224,12 +224,12 @@ export default function BinLabelsPage() {
                             Label #{index + 1} {copies > 1 && `(×${copies})`}
                           </span>
 
-                          {/* Thermal label mockup - scaled to fit screen */}
+                          {/* Thermal label mockup - HORIZONTAL 6" x 2" */}
                           <div
                             className="relative bg-white shadow-xl rounded-sm"
                             style={{
-                              width: "192px",  // 2 inches at 96dpi
-                              height: "576px", // 6 inches at 96dpi
+                              width: "576px",  // 6 inches at 96dpi
+                              height: "192px", // 2 inches at 96dpi
                               boxShadow: "0 4px 20px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05)"
                             }}
                           >
@@ -237,29 +237,29 @@ export default function BinLabelsPage() {
                             <div
                               className="absolute inset-0 rounded-sm"
                               style={{
-                                background: "linear-gradient(to bottom, #fafafa 0%, #ffffff 5%, #ffffff 95%, #f5f5f5 100%)",
+                                background: "linear-gradient(to right, #fafafa 0%, #ffffff 2%, #ffffff 98%, #f5f5f5 100%)",
                               }}
                             />
 
-                            {/* Label content */}
-                            <div className="relative h-full flex flex-col items-center justify-center p-4 text-black">
+                            {/* Label content - horizontal layout */}
+                            <div className="relative h-full flex items-center justify-center gap-6 px-6 text-black">
                               {/* Barcode */}
                               <svg
                                 ref={(el) => { barcodeRefs.current[index] = el; }}
-                                className="w-full"
+                                className="flex-shrink-0"
                               />
 
                               {/* Location name */}
                               {label.locationName && (
-                                <div className="text-center mt-4 px-2">
-                                  <p className="text-xl font-bold leading-tight text-black">{label.locationName}</p>
+                                <div className="text-center flex-shrink-0">
+                                  <p className="text-2xl font-bold leading-tight text-black">{label.locationName}</p>
                                 </div>
                               )}
                             </div>
 
                             {/* Subtle perforation line indicators */}
-                            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent" />
-                            <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent" />
+                            <div className="absolute left-0 top-0 bottom-0 w-px bg-gradient-to-b from-transparent via-gray-200 to-transparent" />
+                            <div className="absolute right-0 top-0 bottom-0 w-px bg-gradient-to-b from-transparent via-gray-200 to-transparent" />
                           </div>
                         </div>
                       )
@@ -289,14 +289,13 @@ export default function BinLabelsPage() {
                     key={index}
                     className="print-label"
                     style={{
-                      width: "2in",
-                      height: "6in",
+                      width: "6in",
+                      height: "2in",
                       pageBreakAfter: "always",
                       display: "flex",
-                      flexDirection: "column",
                       alignItems: "center",
                       justifyContent: "center",
-                      padding: "0.25in",
+                      padding: "0.15in",
                       boxSizing: "border-box",
                     }}
                   >
@@ -313,7 +312,7 @@ export default function BinLabelsPage() {
       <style jsx global>{`
         @media print {
           @page {
-            size: 2in 6in;
+            size: 6in 2in;
             margin: 0;
           }
 
@@ -323,8 +322,8 @@ export default function BinLabelsPage() {
           }
 
           .print-label {
-            width: 2in !important;
-            height: 6in !important;
+            width: 6in !important;
+            height: 2in !important;
             page-break-after: always;
             page-break-inside: avoid;
           }
@@ -346,23 +345,23 @@ function PrintBarcode({ locationId, locationName }: { locationId: string; locati
     if (svgRef.current && locationId) {
       JsBarcode(svgRef.current, locationId, {
         format: "CODE128",
-        width: 2,
-        height: 100,
+        width: 3,
+        height: 70,
         displayValue: true,
-        fontSize: 16,
+        fontSize: 18,
         font: "monospace",
-        textMargin: 8,
-        margin: 10,
+        textMargin: 5,
+        margin: 5,
       });
     }
   }, [locationId]);
 
   return (
-    <div className="flex flex-col items-center justify-center h-full text-black">
-      <svg ref={svgRef} className="max-w-full" />
+    <div className="flex items-center justify-center gap-8 h-full text-black w-full">
+      <svg ref={svgRef} className="flex-shrink-0" />
       {locationName && (
-        <div className="text-center mt-4 px-2">
-          <p style={{ fontSize: "18px", fontWeight: "bold", lineHeight: 1.2 }}>{locationName}</p>
+        <div className="text-center flex-shrink-0">
+          <p style={{ fontSize: "24px", fontWeight: "bold", lineHeight: 1.2 }}>{locationName}</p>
         </div>
       )}
     </div>
