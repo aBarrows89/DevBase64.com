@@ -394,6 +394,7 @@ function PersonnelDetailContent() {
     phone: "",
     position: "",
     department: "",
+    locationId: "",
     hourlyRate: 0,
     notes: "",
     hireDate: "",
@@ -417,6 +418,7 @@ function PersonnelDetailContent() {
         phone: personnel.phone,
         position: personnel.position,
         department: personnel.department,
+        locationId: personnel.locationId || "",
         hourlyRate: personnel.hourlyRate || 0,
         notes: personnel.notes || "",
         hireDate: personnel.hireDate,
@@ -592,6 +594,11 @@ function PersonnelDetailContent() {
       // Allow admins to edit hire date
       if (editPersonnelForm.hireDate) {
         updateData.hireDate = editPersonnelForm.hireDate;
+      }
+
+      // Add locationId if provided
+      if (editPersonnelForm.locationId) {
+        (updateData as any).locationId = editPersonnelForm.locationId;
       }
 
       // Add emergency contact if provided
@@ -825,6 +832,9 @@ function PersonnelDetailContent() {
                   </h1>
                   <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                     {personnel.position} • {personnel.department}
+                    {personnel.locationId && locations?.find(l => l._id === personnel.locationId) && (
+                      <span> • {locations.find(l => l._id === personnel.locationId)?.name}</span>
+                    )}
                   </p>
                 </div>
               </div>
@@ -2749,6 +2759,26 @@ function PersonnelDetailContent() {
                     <option value="Administration">Administration</option>
                     <option value="Delivery">Delivery</option>
                   </select>
+                </div>
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    Location / Company
+                  </label>
+                  <select
+                    value={editPersonnelForm.locationId}
+                    onChange={(e) => setEditPersonnelForm({ ...editPersonnelForm, locationId: e.target.value })}
+                    className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"} border focus:outline-none`}
+                  >
+                    <option value="">Select Location</option>
+                    {locations?.map((location) => (
+                      <option key={location._id} value={location._id}>
+                        {location.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className={`text-xs mt-1 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                    Used for payroll separation by company
+                  </p>
                 </div>
                 <div>
                   <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
