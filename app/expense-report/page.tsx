@@ -359,104 +359,111 @@ export default function ExpenseReportPage() {
               </div>
             </div>
 
-            {/* Printable Report */}
-            <div ref={printRef} className="hidden print:block print-report">
-              {/* Header with Logo */}
-              <div className="flex items-start justify-between mb-8 pb-4 border-b-2 border-gray-800">
+            {/* Printable Report - Invoice Style */}
+            <div ref={printRef} className="hidden print:block print-report" style={{ fontFamily: 'Arial, sans-serif' }}>
+              {/* Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '30px', paddingBottom: '20px', borderBottom: '3px solid #1e293b' }}>
                 <div>
-                  <div className="flex items-center gap-3">
-                    <div className="w-16 h-16 bg-slate-800 rounded-lg flex items-center justify-center">
-                      <span className="text-cyan-400 font-bold text-xl">IE</span>
-                    </div>
-                    <div>
-                      <h1 className="text-2xl font-bold text-gray-900">IE Central</h1>
-                      <p className="text-sm text-gray-600">Industrial Equipment Central</p>
-                    </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <img src="/logo.gif" alt="IE Tires" style={{ height: '50px', width: 'auto' }} />
+                  </div>
+                  <div style={{ marginTop: '8px', fontSize: '11px', color: '#64748b' }}>
+                    <p style={{ margin: 0 }}>Import Export Tire Co.</p>
+                    <p style={{ margin: 0 }}>Employee Expense Reimbursement</p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <h2 className="text-xl font-bold text-gray-900">EXPENSE REPORT</h2>
-                  <p className="text-sm text-gray-600">
-                    Report Date: {reportInfo.reportDate ? new Date(reportInfo.reportDate).toLocaleDateString() : "_______________"}
+                <div style={{ textAlign: 'right' }}>
+                  <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 'bold', color: '#1e293b', letterSpacing: '2px' }}>EXPENSE REPORT</h1>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#64748b' }}>
+                    Date: {reportInfo.reportDate ? new Date(reportInfo.reportDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '_______________'}
                   </p>
                 </div>
               </div>
 
-              {/* Employee Info */}
-              <div className="grid grid-cols-2 gap-8 mb-6">
-                <div>
-                  <p className="text-sm"><strong>Employee Name:</strong> {reportInfo.employeeName || "___________________________"}</p>
-                  <p className="text-sm mt-2"><strong>Department:</strong> {reportInfo.department || "___________________________"}</p>
+              {/* Submitted By & Period Info */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px', marginBottom: '25px' }}>
+                <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                  <p style={{ margin: '0 0 3px 0', fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase', fontWeight: '600', letterSpacing: '0.5px' }}>Submitted By</p>
+                  <p style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: '600', color: '#1e293b' }}>{reportInfo.employeeName || '________________________'}</p>
+                  <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>Department: {reportInfo.department || '____________'}</p>
                 </div>
-                <div>
-                  <p className="text-sm"><strong>Period:</strong> {reportInfo.periodStart ? new Date(reportInfo.periodStart).toLocaleDateString() : "___________"} to {reportInfo.periodEnd ? new Date(reportInfo.periodEnd).toLocaleDateString() : "___________"}</p>
-                  <p className="text-sm mt-2"><strong>Business Purpose:</strong> {reportInfo.purpose || "___________________________"}</p>
+                <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                  <p style={{ margin: '0 0 3px 0', fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase', fontWeight: '600', letterSpacing: '0.5px' }}>Expense Period</p>
+                  <p style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: '600', color: '#1e293b' }}>
+                    {reportInfo.periodStart ? new Date(reportInfo.periodStart).toLocaleDateString() : '___________'} — {reportInfo.periodEnd ? new Date(reportInfo.periodEnd).toLocaleDateString() : '___________'}
+                  </p>
+                  <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>Purpose: {reportInfo.purpose || '____________________'}</p>
                 </div>
               </div>
 
               {/* Expense Table */}
-              <table className="w-full border-collapse mb-6">
+              <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px', fontSize: '12px' }}>
                 <thead>
-                  <tr className="bg-gray-100">
-                    <th className="border border-gray-400 px-3 py-2 text-left text-sm font-semibold">#</th>
-                    <th className="border border-gray-400 px-3 py-2 text-left text-sm font-semibold">Date</th>
-                    <th className="border border-gray-400 px-3 py-2 text-left text-sm font-semibold">Description</th>
-                    <th className="border border-gray-400 px-3 py-2 text-left text-sm font-semibold">Category</th>
-                    <th className="border border-gray-400 px-3 py-2 text-right text-sm font-semibold">Amount</th>
-                    <th className="border border-gray-400 px-3 py-2 text-center text-sm font-semibold">Receipt</th>
+                  <tr style={{ background: '#1e293b' }}>
+                    <th style={{ padding: '10px 12px', textAlign: 'left', color: 'white', fontWeight: '600', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>#</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'left', color: 'white', fontWeight: '600', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Date</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'left', color: 'white', fontWeight: '600', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Description</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'left', color: 'white', fontWeight: '600', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Category</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'center', color: 'white', fontWeight: '600', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Receipt</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'right', color: 'white', fontWeight: '600', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Amount</th>
                   </tr>
                 </thead>
                 <tbody>
                   {expenses.map((expense, index) => (
-                    <tr key={expense.id}>
-                      <td className="border border-gray-400 px-3 py-2 text-sm">{index + 1}</td>
-                      <td className="border border-gray-400 px-3 py-2 text-sm">{expense.date ? new Date(expense.date).toLocaleDateString() : ""}</td>
-                      <td className="border border-gray-400 px-3 py-2 text-sm">{expense.description}</td>
-                      <td className="border border-gray-400 px-3 py-2 text-sm">{expense.category}</td>
-                      <td className="border border-gray-400 px-3 py-2 text-sm text-right">${expense.amount.toFixed(2)}</td>
-                      <td className="border border-gray-400 px-3 py-2 text-sm text-center">{expense.receipt ? "Yes" : "No"}</td>
+                    <tr key={expense.id} style={{ background: index % 2 === 0 ? '#ffffff' : '#f8fafc' }}>
+                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #e2e8f0', color: '#64748b' }}>{index + 1}</td>
+                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #e2e8f0' }}>{expense.date ? new Date(expense.date).toLocaleDateString() : ''}</td>
+                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #e2e8f0' }}>{expense.description}</td>
+                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #e2e8f0', color: '#64748b' }}>{expense.category}</td>
+                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #e2e8f0', textAlign: 'center' }}>{expense.receipt ? '✓' : '—'}</td>
+                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #e2e8f0', textAlign: 'right', fontWeight: '500' }}>${expense.amount.toFixed(2)}</td>
                     </tr>
                   ))}
-                  {/* Empty rows for handwriting */}
-                  {Array.from({ length: Math.max(0, 8 - expenses.length) }).map((_, i) => (
-                    <tr key={`empty-${i}`}>
-                      <td className="border border-gray-400 px-3 py-2 text-sm">&nbsp;</td>
-                      <td className="border border-gray-400 px-3 py-2 text-sm">&nbsp;</td>
-                      <td className="border border-gray-400 px-3 py-2 text-sm">&nbsp;</td>
-                      <td className="border border-gray-400 px-3 py-2 text-sm">&nbsp;</td>
-                      <td className="border border-gray-400 px-3 py-2 text-sm">&nbsp;</td>
-                      <td className="border border-gray-400 px-3 py-2 text-sm">&nbsp;</td>
+                  {/* Empty rows */}
+                  {Array.from({ length: Math.max(0, 6 - expenses.length) }).map((_, i) => (
+                    <tr key={`empty-${i}`} style={{ background: (expenses.length + i) % 2 === 0 ? '#ffffff' : '#f8fafc' }}>
+                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #e2e8f0' }}>&nbsp;</td>
+                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #e2e8f0' }}>&nbsp;</td>
+                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #e2e8f0' }}>&nbsp;</td>
+                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #e2e8f0' }}>&nbsp;</td>
+                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #e2e8f0' }}>&nbsp;</td>
+                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #e2e8f0' }}>&nbsp;</td>
                     </tr>
                   ))}
-                  <tr className="bg-gray-100 font-bold">
-                    <td colSpan={4} className="border border-gray-400 px-3 py-2 text-sm text-right">TOTAL:</td>
-                    <td className="border border-gray-400 px-3 py-2 text-sm text-right">${total.toFixed(2)}</td>
-                    <td className="border border-gray-400 px-3 py-2 text-sm"></td>
-                  </tr>
                 </tbody>
               </table>
 
+              {/* Total Section */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '30px' }}>
+                <div style={{ width: '280px', background: '#1e293b', padding: '15px 20px', borderRadius: '6px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: '#94a3b8', fontSize: '12px', textTransform: 'uppercase', fontWeight: '600', letterSpacing: '0.5px' }}>Total Reimbursement</span>
+                    <span style={{ color: 'white', fontSize: '22px', fontWeight: 'bold' }}>${total.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+
               {/* Signatures */}
-              <div className="grid grid-cols-2 gap-8 mt-12">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '50px', marginTop: '40px' }}>
                 <div>
-                  <p className="text-sm mb-12">I certify that the above expenses were incurred for legitimate business purposes.</p>
-                  <div className="border-t border-gray-400 pt-2">
-                    <p className="text-sm"><strong>Employee Signature</strong></p>
-                    <p className="text-xs text-gray-500">Date: _______________</p>
+                  <p style={{ margin: '0 0 40px 0', fontSize: '11px', color: '#64748b' }}>I certify that the above expenses were incurred for legitimate business purposes and are accurate.</p>
+                  <div style={{ borderTop: '1px solid #1e293b', paddingTop: '8px' }}>
+                    <p style={{ margin: 0, fontSize: '11px', fontWeight: '600', color: '#1e293b' }}>Employee Signature</p>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '10px', color: '#94a3b8' }}>Date: ____________________</p>
                   </div>
                 </div>
                 <div>
-                  <p className="text-sm mb-12">Approved for reimbursement:</p>
-                  <div className="border-t border-gray-400 pt-2">
-                    <p className="text-sm"><strong>Manager Signature</strong></p>
-                    <p className="text-xs text-gray-500">Date: _______________</p>
+                  <p style={{ margin: '0 0 40px 0', fontSize: '11px', color: '#64748b' }}>Approved for payment:</p>
+                  <div style={{ borderTop: '1px solid #1e293b', paddingTop: '8px' }}>
+                    <p style={{ margin: 0, fontSize: '11px', fontWeight: '600', color: '#1e293b' }}>Manager Approval</p>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '10px', color: '#94a3b8' }}>Date: ____________________</p>
                   </div>
                 </div>
               </div>
 
               {/* Footer */}
-              <div className="mt-8 pt-4 border-t border-gray-300 text-xs text-gray-500 text-center">
-                <p>Please attach all receipts to this report. Submit to Accounting within 30 days of expense.</p>
+              <div style={{ marginTop: '40px', paddingTop: '15px', borderTop: '1px solid #e2e8f0', textAlign: 'center' }}>
+                <p style={{ margin: 0, fontSize: '10px', color: '#94a3b8' }}>Please attach all receipts to this report. Submit to Accounting within 30 days of expense date.</p>
               </div>
             </div>
           </div>
