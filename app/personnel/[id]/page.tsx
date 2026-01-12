@@ -311,6 +311,7 @@ function PersonnelDetailContent() {
   const equipmentAgreements = useQuery(api.equipment.getPersonnelAgreements, { personnelId });
   const locations = useQuery(api.locations.list);
   const safetyCompletions = useQuery(api.safetyChecklist.getPersonnelCompletions, { personnelId, limit: 20 });
+  const portalLogin = useQuery(api.auth.getPersonnelPortalLogin, { personnelId });
 
   // Get linked application if exists
   const linkedApplication = useQuery(
@@ -335,6 +336,7 @@ function PersonnelDetailContent() {
   const toggleTraining = useMutation(api.personnel.toggleTraining);
   const recordTenureCheckIn = useMutation(api.personnel.recordTenureCheckIn);
   const dismissTenureNotifications = useMutation(api.notifications.dismissTenureCheckInNotifications);
+  const createEmployeePortalLogin = useMutation(api.auth.createEmployeePortalLogin);
 
   // File upload state
   const [uploadingWriteUpId, setUploadingWriteUpId] = useState<Id<"writeUps"> | null>(null);
@@ -350,6 +352,11 @@ function PersonnelDetailContent() {
 
   // Edit personnel loading state
   const [isSavingPersonnel, setIsSavingPersonnel] = useState(false);
+
+  // Portal login state
+  const [isCreatingPortalLogin, setIsCreatingPortalLogin] = useState(false);
+  const [showTempPasswordModal, setShowTempPasswordModal] = useState(false);
+  const [tempPassword, setTempPassword] = useState("");
 
   // Form states
   const [writeUpForm, setWriteUpForm] = useState({
@@ -946,6 +953,95 @@ function PersonnelDetailContent() {
                     </div>
                   )}
                 </div>
+              </div>
+
+              {/* Portal Login Section */}
+              <div className={`rounded-xl p-6 ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                      portalLogin
+                        ? isDark ? "bg-green-500/20" : "bg-green-100"
+                        : isDark ? "bg-slate-700" : "bg-gray-100"
+                    }`}>
+                      <svg className={`w-5 h-5 ${portalLogin ? "text-green-500" : isDark ? "text-slate-400" : "text-gray-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                        Employee Portal Access
+                      </h2>
+                      <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                        {portalLogin
+                          ? `Active login: ${portalLogin.email}`
+                          : "No portal login created yet"
+                        }
+                      </p>
+                    </div>
+                  </div>
+                  {!portalLogin && canManagePersonnel && personnel.email && (
+                    <button
+                      onClick={async () => {
+                        setIsCreatingPortalLogin(true);
+                        try {
+                          const result = await createEmployeePortalLogin({ personnelId });
+                          if (result.success) {
+                            if (result.tempPassword) {
+                              setTempPassword(result.tempPassword);
+                              setShowTempPasswordModal(true);
+                            } else if (result.alreadyExists) {
+                              alert(result.message || "Account linked successfully");
+                            }
+                          } else {
+                            alert(result.error || "Failed to create portal login");
+                          }
+                        } catch (error) {
+                          console.error("Failed to create portal login:", error);
+                          alert("An error occurred while creating portal login");
+                        } finally {
+                          setIsCreatingPortalLogin(false);
+                        }
+                      }}
+                      disabled={isCreatingPortalLogin}
+                      className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+                        isDark
+                          ? "bg-cyan-500 hover:bg-cyan-400 text-white"
+                          : "bg-blue-600 hover:bg-blue-700 text-white"
+                      } disabled:opacity-50`}
+                    >
+                      {isCreatingPortalLogin ? (
+                        <>
+                          <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                          Creating...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                          </svg>
+                          Create Portal Login
+                        </>
+                      )}
+                    </button>
+                  )}
+                  {portalLogin && (
+                    <span className={`px-3 py-1 text-sm font-medium rounded border ${
+                      portalLogin.isActive
+                        ? "bg-green-500/20 text-green-400 border-green-500/30"
+                        : "bg-red-500/20 text-red-400 border-red-500/30"
+                    }`}>
+                      {portalLogin.isActive ? "Active" : "Inactive"}
+                    </span>
+                  )}
+                </div>
+                {!personnel.email && !portalLogin && (
+                  <p className={`mt-3 text-sm ${isDark ? "text-amber-400" : "text-amber-600"}`}>
+                    Add an email address to this personnel record to enable portal login creation.
+                  </p>
+                )}
               </div>
 
               {/* Training Badges Section - IE Tire Badges of Honor */}
@@ -2846,6 +2942,66 @@ function PersonnelDetailContent() {
                   Close
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Temporary Password Modal */}
+        {showTempPasswordModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className={`w-full max-w-md rounded-xl p-6 ${isDark ? "bg-slate-800" : "bg-white"}`}>
+              <div className="text-center mb-6">
+                <div className={`w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4 ${isDark ? "bg-green-500/20" : "bg-green-100"}`}>
+                  <svg className="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <h2 className={`text-xl font-bold mb-2 ${isDark ? "text-white" : "text-gray-900"}`}>
+                  Portal Login Created!
+                </h2>
+                <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                  Give this temporary password to the employee. They will be required to change it on first login.
+                </p>
+              </div>
+
+              <div className={`p-4 rounded-lg mb-6 ${isDark ? "bg-slate-700" : "bg-gray-100"}`}>
+                <p className={`text-xs font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                  Temporary Password
+                </p>
+                <div className="flex items-center gap-2">
+                  <code className={`text-2xl font-mono font-bold flex-1 ${isDark ? "text-cyan-400" : "text-blue-600"}`}>
+                    {tempPassword}
+                  </code>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(tempPassword);
+                      alert("Password copied to clipboard!");
+                    }}
+                    className={`p-2 rounded-lg transition-colors ${isDark ? "hover:bg-slate-600 text-slate-400" : "hover:bg-gray-200 text-gray-500"}`}
+                    title="Copy to clipboard"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <div className={`p-3 rounded-lg mb-6 border ${isDark ? "bg-amber-500/10 border-amber-500/30" : "bg-amber-50 border-amber-200"}`}>
+                <p className={`text-sm ${isDark ? "text-amber-400" : "text-amber-700"}`}>
+                  <strong>Important:</strong> This password will not be shown again. Make sure to save it or share it with the employee now.
+                </p>
+              </div>
+
+              <button
+                onClick={() => {
+                  setShowTempPasswordModal(false);
+                  setTempPassword("");
+                }}
+                className={`w-full px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-cyan-500 hover:bg-cyan-400 text-white" : "bg-blue-600 hover:bg-blue-700 text-white"}`}
+              >
+                Done
+              </button>
             </div>
           </div>
         )}

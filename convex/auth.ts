@@ -393,3 +393,96 @@ export const deleteUser = mutation({
     return { success: true };
   },
 });
+
+// Generate a random temporary password
+function generateTempPassword(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+  let password = "";
+  for (let i = 0; i < 10; i++) {
+    password += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return password;
+}
+
+// Create employee portal login from personnel record
+export const createEmployeePortalLogin = mutation({
+  args: {
+    personnelId: v.id("personnel"),
+  },
+  handler: async (ctx, args) => {
+    // Get the personnel record
+    const personnel = await ctx.db.get(args.personnelId);
+    if (!personnel) {
+      return { success: false, error: "Personnel record not found" };
+    }
+
+    if (!personnel.email) {
+      return { success: false, error: "Personnel record has no email address" };
+    }
+
+    // Check if user already exists with this email
+    const existingUser = await ctx.db
+      .query("users")
+      .withIndex("by_email", (q) => q.eq("email", personnel.email!.toLowerCase()))
+      .first();
+
+    if (existingUser) {
+      // If user exists but not linked, link them
+      if (!existingUser.personnelId) {
+        await ctx.db.patch(existingUser._id, {
+          personnelId: args.personnelId,
+          role: "employee",
+        });
+        return {
+          success: true,
+          userId: existingUser._id,
+          message: "Existing account linked to personnel record",
+          alreadyExists: true,
+        };
+      }
+      return { success: false, error: "A portal login already exists for this email" };
+    }
+
+    // Generate temporary password
+    const tempPassword = generateTempPassword();
+    const passwordHash = await hashPassword(tempPassword);
+
+    // Create the user account
+    const userId = await ctx.db.insert("users", {
+      email: personnel.email.toLowerCase(),
+      passwordHash,
+      name: `${personnel.firstName} ${personnel.lastName}`,
+      role: "employee",
+      isActive: true,
+      forcePasswordChange: true,
+      personnelId: args.personnelId,
+      createdAt: Date.now(),
+    });
+
+    return {
+      success: true,
+      userId,
+      tempPassword,
+      message: "Portal login created successfully",
+    };
+  },
+});
+
+// Check if personnel has portal login
+export const getPersonnelPortalLogin = query({
+  args: {
+    personnelId: v.id("personnel"),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_personnel", (q) => q.eq("personnelId", args.personnelId))
+      .first();
+
+    return user ? {
+      userId: user._id,
+      email: user.email,
+      isActive: user.isActive,
+    } : null;
+  },
+});
