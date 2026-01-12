@@ -116,7 +116,7 @@ export default function ExpenseReportPage() {
         <Sidebar />
         <main className="flex-1 overflow-auto print:overflow-visible">
           {/* Header - Hidden when printing */}
-          <header className={`sticky top-0 z-10 p-6 border-b print:hidden ${isDark ? "bg-slate-900/95 backdrop-blur border-slate-700" : "bg-[#f2f2f7]/95 backdrop-blur border-gray-200"}`}>
+          <header className={`sticky top-0 z-10 p-6 border-b print:hidden print-hide ${isDark ? "bg-slate-900/95 backdrop-blur border-slate-700" : "bg-[#f2f2f7]/95 backdrop-blur border-gray-200"}`}>
             <div className="flex items-center justify-between">
               <div>
                 <h1 className={`text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
@@ -148,7 +148,7 @@ export default function ExpenseReportPage() {
 
           <div className="p-6 print:p-0">
             {/* Input Form - Hidden when printing */}
-            <div className="print:hidden space-y-6">
+            <div className="print:hidden print-hide space-y-6">
               {/* Report Info */}
               <div className={`rounded-xl p-6 ${isDark ? "bg-slate-800 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
                 <h2 className={`text-lg font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
@@ -479,18 +479,52 @@ export default function ExpenseReportPage() {
           }
 
           body {
-            margin: 0;
-            padding: 0;
+            margin: 0 !important;
+            padding: 0 !important;
             background: white !important;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
 
+          /* Hide everything except the print report */
+          .print\\:hidden,
+          header,
+          nav,
+          aside,
+          .print-hide {
+            display: none !important;
+          }
+
+          /* Show the print report */
           .print-report {
             display: block !important;
-            font-family: Arial, sans-serif;
-            color: #000;
-            background: #fff;
+            font-family: Arial, sans-serif !important;
+            color: #000 !important;
+            background: #fff !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            padding: 0 !important;
+            margin: 0 !important;
+          }
+
+          /* Hide the sidebar */
+          aside {
+            display: none !important;
+          }
+
+          /* Make main take full width */
+          main {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+          }
+
+          /* Ensure colors print */
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
         }
       `}</style>
