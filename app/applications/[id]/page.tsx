@@ -27,6 +27,22 @@ const RECOMMENDED_ACTION_STYLES: Record<string, string> = {
   likely_pass: "bg-red-500/20 text-red-400 border-red-500/30",
 };
 
+// Helper to format schedule times for display
+function getScheduleDisplay(template: { departments?: { startTime: string; endTime: string }[] }): string {
+  if (template.departments && template.departments.length > 0) {
+    const dept = template.departments[0];
+    const formatTime = (time: string) => {
+      const [hours, minutes] = time.split(":");
+      const h = parseInt(hours);
+      const ampm = h >= 12 ? "PM" : "AM";
+      const h12 = h % 12 || 12;
+      return `${h12}:${minutes} ${ampm}`;
+    };
+    return `${formatTime(dept.startTime)} - ${formatTime(dept.endTime)}`;
+  }
+  return "No times set";
+}
+
 function ApplicationDetailContent({ id }: { id: string }) {
   const router = useRouter();
   const { user } = useAuth();
@@ -1571,7 +1587,7 @@ function ApplicationDetailContent({ id }: { id: string }) {
                       <option value="">No schedule assigned</option>
                       {scheduleTemplates?.map((template) => (
                         <option key={template._id} value={template._id}>
-                          {template.name} ({template.locationName})
+                          {template.name} ({getScheduleDisplay(template)})
                         </option>
                       ))}
                     </select>

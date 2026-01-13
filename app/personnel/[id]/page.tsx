@@ -97,6 +97,24 @@ const meritTypeColors: Record<string, string> = {
   bonus: "bg-amber-500/20 text-amber-400 border-amber-500/30",
 };
 
+// Helper to format schedule times
+function formatScheduleTime(time: string): string {
+  const [hours, minutes] = time.split(":");
+  const h = parseInt(hours);
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 || 12;
+  return `${h12}:${minutes} ${ampm}`;
+}
+
+// Helper to get schedule display string from template
+function getScheduleDisplay(template: { departments?: { startTime: string; endTime: string }[] }): string {
+  if (template.departments && template.departments.length > 0) {
+    const dept = template.departments[0];
+    return `${formatScheduleTime(dept.startTime)} - ${formatScheduleTime(dept.endTime)}`;
+  }
+  return "No times set";
+}
+
 // Training areas
 const TRAINING_AREAS = [
   "Picker Training Video",
@@ -1170,7 +1188,7 @@ function PersonnelDetailContent() {
                           {assignedScheduleTemplate.name}
                         </p>
                         <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                          {assignedScheduleTemplate.departments?.length || 0} shifts configured
+                          {getScheduleDisplay(assignedScheduleTemplate)}
                         </p>
                       </div>
                       {canManagePersonnel && (
@@ -3346,7 +3364,7 @@ function PersonnelDetailContent() {
                           {template.name}
                         </p>
                         <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                          {template.locationName} - {template.departments?.length || 0} shifts
+                          {getScheduleDisplay(template)}
                         </p>
                       </div>
                       {selectedScheduleTemplateId === template._id && (
