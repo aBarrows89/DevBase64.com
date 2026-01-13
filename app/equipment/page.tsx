@@ -11,7 +11,7 @@ import { Id } from "@/convex/_generated/dataModel";
 import SignaturePad from "@/components/SignaturePad";
 import QRCodeModal from "@/components/QRCodeModal";
 
-type EquipmentType = "scanners" | "pickers" | "vehicles";
+type EquipmentType = "scanners" | "pickers" | "vehicles" | "computers";
 
 // Equipment value for agreements
 const EQUIPMENT_VALUE = 100;
@@ -123,6 +123,7 @@ function EquipmentContent() {
   const vehicles = useQuery(api.equipment.listVehicles,
     selectedLocation === "all" ? {} : { locationId: selectedLocation }
   );
+  const computers = useQuery(api.equipment.listComputers, {});
   const personnel = useQuery(api.personnel.list, {});
   const activePersonnel = useQuery(api.equipment.listActivePersonnel);
   const safetyCompletions = useQuery(
@@ -152,6 +153,9 @@ function EquipmentContent() {
   const updateVehicle = useMutation(api.equipment.updateVehicle);
   const retireVehicle = useMutation(api.equipment.retireVehicle);
   const deleteVehicleMutation = useMutation(api.equipment.deleteVehicle);
+  const createComputer = useMutation(api.equipment.createComputer);
+  const updateComputer = useMutation(api.equipment.updateComputer);
+  const deleteComputerMutation = useMutation(api.equipment.deleteComputer);
 
   // Delete modal state (superuser only)
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -700,6 +704,16 @@ By signing below, the Employee acknowledges that they have read, understand, and
               >
                 Vehicles ({vehicles?.length ?? 0})
               </button>
+              <button
+                onClick={() => setActiveTab("computers")}
+                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                  activeTab === "computers"
+                    ? isDark ? "bg-cyan-500 text-white" : "bg-white text-gray-900 shadow-sm"
+                    : isDark ? "text-slate-400 hover:text-white" : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                Computers ({computers?.length ?? 0})
+              </button>
             </div>
 
             {/* Location Filter */}
@@ -729,9 +743,183 @@ By signing below, the Employee acknowledges that they have read, understand, and
             <div className={`text-center py-12 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
               Loading...
             </div>
-          ) : currentItems.length === 0 ? (
+          ) : currentItems.length === 0 && activeTab !== "computers" ? (
             <div className={`text-center py-12 border rounded-xl ${isDark ? "bg-slate-800/50 border-slate-700 text-slate-400" : "bg-white border-gray-200 text-gray-500"}`}>
               No {activeTab} found. Add your first {activeTab === "scanners" ? "scanner" : activeTab === "pickers" ? "picker" : "vehicle"}.
+            </div>
+          ) : activeTab === "computers" ? (
+            /* Computers Grid with Remote Access */
+            <div className="space-y-6">
+              {/* Remote Access Computers */}
+              <div>
+                <h3 className={`text-lg font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
+                  Remote Access Computers
+                </h3>
+                {computers?.filter(c => c.remoteAccessEnabled).length === 0 ? (
+                  <div className={`text-center py-8 border rounded-xl ${isDark ? "bg-slate-800/50 border-slate-700 text-slate-400" : "bg-white border-gray-200 text-gray-500"}`}>
+                    No computers with remote access enabled. Add a computer with Chrome Remote Desktop ID.
+                  </div>
+                ) : (
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {computers?.filter(c => c.remoteAccessEnabled).map((comp) => (
+                      <div
+                        key={comp._id}
+                        className={`border rounded-xl p-5 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}
+                      >
+                        <div className="flex items-start justify-between gap-3 mb-4">
+                          <div className="min-w-0">
+                            <h3 className={`font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                              {comp.name}
+                            </h3>
+                            <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                              {comp.manufacturer} {comp.model}
+                            </p>
+                          </div>
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                            comp.status === "active"
+                              ? isDark ? "bg-green-500/20 text-green-400" : "bg-green-100 text-green-700"
+                              : isDark ? "bg-yellow-500/20 text-yellow-400" : "bg-yellow-100 text-yellow-700"
+                          }`}>
+                            {comp.status}
+                          </span>
+                        </div>
+
+                        <div className={`space-y-2 text-sm ${isDark ? "text-slate-300" : "text-gray-600"}`}>
+                          {comp.operatingSystem && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-slate-500">OS:</span> {comp.operatingSystem}
+                            </div>
+                          )}
+                          {comp.assignedToName && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-slate-500">Assigned:</span> {comp.assignedToName}
+                            </div>
+                          )}
+                          {comp.department && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-slate-500">Dept:</span> {comp.department}
+                            </div>
+                          )}
+                          {comp.ipAddress && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-slate-500">IP:</span> {comp.ipAddress}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Remote Access Button */}
+                        {comp.chromeRemoteUrl && (
+                          <a
+                            href={comp.chromeRemoteUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`mt-4 w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+                              isDark
+                                ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/30"
+                                : "bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100"
+                            }`}
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                            </svg>
+                            Connect via Chrome Remote
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* All Computers */}
+              <div>
+                <h3 className={`text-lg font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
+                  All Computers ({computers?.length ?? 0})
+                </h3>
+                {!computers || computers.length === 0 ? (
+                  <div className={`text-center py-8 border rounded-xl ${isDark ? "bg-slate-800/50 border-slate-700 text-slate-400" : "bg-white border-gray-200 text-gray-500"}`}>
+                    No computers found. Add your first computer.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className={`w-full text-sm ${isDark ? "text-slate-300" : "text-gray-600"}`}>
+                      <thead>
+                        <tr className={isDark ? "border-b border-slate-700" : "border-b border-gray-200"}>
+                          <th className="px-4 py-3 text-left font-medium">Name</th>
+                          <th className="px-4 py-3 text-left font-medium">Type</th>
+                          <th className="px-4 py-3 text-left font-medium">OS</th>
+                          <th className="px-4 py-3 text-left font-medium">Assigned To</th>
+                          <th className="px-4 py-3 text-left font-medium">Department</th>
+                          <th className="px-4 py-3 text-left font-medium">Remote</th>
+                          <th className="px-4 py-3 text-left font-medium">Status</th>
+                          <th className="px-4 py-3 text-left font-medium">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {computers.map((comp) => (
+                          <tr key={comp._id} className={isDark ? "border-b border-slate-700/50" : "border-b border-gray-100"}>
+                            <td className={`px-4 py-3 font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                              {comp.name}
+                            </td>
+                            <td className="px-4 py-3 capitalize">{comp.type}</td>
+                            <td className="px-4 py-3">{comp.operatingSystem || "-"}</td>
+                            <td className="px-4 py-3">{comp.assignedToName || "-"}</td>
+                            <td className="px-4 py-3">{comp.department || "-"}</td>
+                            <td className="px-4 py-3">
+                              {comp.remoteAccessEnabled ? (
+                                <span className={`px-2 py-1 text-xs rounded-full ${isDark ? "bg-green-500/20 text-green-400" : "bg-green-100 text-green-700"}`}>
+                                  Enabled
+                                </span>
+                              ) : (
+                                <span className={`px-2 py-1 text-xs rounded-full ${isDark ? "bg-slate-500/20 text-slate-400" : "bg-gray-100 text-gray-500"}`}>
+                                  Disabled
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                comp.status === "active"
+                                  ? isDark ? "bg-green-500/20 text-green-400" : "bg-green-100 text-green-700"
+                                  : comp.status === "in_repair"
+                                  ? isDark ? "bg-yellow-500/20 text-yellow-400" : "bg-yellow-100 text-yellow-700"
+                                  : isDark ? "bg-slate-500/20 text-slate-400" : "bg-gray-100 text-gray-500"
+                              }`}>
+                                {comp.status}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                {comp.chromeRemoteUrl && (
+                                  <a
+                                    href={comp.chromeRemoteUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className={`px-2 py-1 text-xs rounded ${isDark ? "bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30" : "bg-blue-50 text-blue-600 hover:bg-blue-100"}`}
+                                  >
+                                    Connect
+                                  </a>
+                                )}
+                                {isSuperuser && (
+                                  <button
+                                    onClick={async () => {
+                                      if (confirm(`Delete ${comp.name}?`)) {
+                                        await deleteComputerMutation({ computerId: comp._id });
+                                      }
+                                    }}
+                                    className="text-red-400 hover:text-red-300 text-xs"
+                                  >
+                                    Delete
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
           ) : activeTab === "vehicles" ? (
             /* Vehicles Grid */

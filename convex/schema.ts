@@ -7,7 +7,7 @@ export default defineSchema({
     email: v.string(),
     passwordHash: v.string(),
     name: v.string(),
-    role: v.string(), // "super_admin" | "admin" | "warehouse_director" | "warehouse_manager" | "department_manager" | "employee" | "member"
+    role: v.string(), // "super_admin" | "admin" | "warehouse_director" | "warehouse_manager" | "department_manager" | "payroll_manager" | "employee" | "member"
     isActive: v.boolean(),
     forcePasswordChange: v.boolean(),
     // Role-specific fields
@@ -361,6 +361,7 @@ export default defineSchema({
     department: v.string(), // "Warehouse", "Sales", "Management", etc.
     locationId: v.optional(v.id("locations")), // Assigned work location
     employeeType: v.string(), // "full_time" | "part_time" | "seasonal"
+    positionType: v.optional(v.string()), // "hourly" | "salaried" | "management" - Execs/salaried only visible to payroll_manager
     hireDate: v.string(), // YYYY-MM-DD
     hourlyRate: v.optional(v.number()),
     status: v.string(), // "active" | "on_leave" | "terminated"
@@ -1445,6 +1446,40 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_user_status", ["userId", "status"])
     .index("by_user_unread", ["userId", "isRead"]),
+
+  // ============ EQUIPMENT / COMPUTERS ============
+  // Track company computers and equipment with remote access
+  equipment: defineTable({
+    name: v.string(), // Computer name or equipment identifier
+    type: v.string(), // "computer" | "laptop" | "printer" | "phone" | "other"
+    serialNumber: v.optional(v.string()),
+    manufacturer: v.optional(v.string()), // Dell, HP, etc.
+    model: v.optional(v.string()),
+    // For computers
+    operatingSystem: v.optional(v.string()), // "Windows 11" | "Windows 10" | "macOS" | "Linux"
+    ipAddress: v.optional(v.string()),
+    macAddress: v.optional(v.string()),
+    // Chrome Remote Desktop
+    chromeRemoteId: v.optional(v.string()), // Chrome Remote Desktop access code/ID
+    remoteAccessEnabled: v.boolean(),
+    // Assignment
+    assignedTo: v.optional(v.id("personnel")),
+    department: v.optional(v.string()),
+    location: v.optional(v.string()),
+    // Status
+    status: v.string(), // "active" | "in_repair" | "retired" | "storage"
+    lastSeenOnline: v.optional(v.number()),
+    purchaseDate: v.optional(v.string()),
+    warrantyExpiration: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_type", ["type"])
+    .index("by_status", ["status"])
+    .index("by_assigned", ["assignedTo"])
+    .index("by_department", ["department"]),
 
   // ============ QUICKBOOKS DESKTOP INTEGRATION ============
   // QuickBooks connection configuration

@@ -92,8 +92,12 @@ function TimeClockContent() {
   const allCorrections = useQuery(api.timeClock.getCorrections, {});
   const personnel = useQuery(api.personnel.list, { status: "active" });
   const activePersonnel = personnel || [];
-  const liveAttendance = useQuery(api.attendance.getTodayLive);
-  const attendanceIssues = useQuery(api.attendance.getIssues, {});
+  const liveAttendance = useQuery(api.attendance.getTodayLive, {
+    userId: user?._id as Id<"users"> | undefined,
+  });
+  const attendanceIssues = useQuery(api.attendance.getIssues, {
+    userId: user?._id as Id<"users"> | undefined,
+  });
 
   // Mutations
   const addMissedEntry = useMutation(api.timeClock.addMissedEntry);

@@ -612,6 +612,160 @@ export const clearScheduledInterview = mutation({
   },
 });
 
+// Add attendees to an existing scheduled interview
+export const addInterviewAttendees = mutation({
+  args: {
+    applicationId: v.id("applications"),
+    attendeeIds: v.array(v.id("users")),
+    userId: v.optional(v.id("users")), // User performing the action (for event creation if needed)
+  },
+  handler: async (ctx, args) => {
+    const application = await ctx.db.get(args.applicationId);
+    if (!application) throw new Error("Application not found");
+
+    // Check if there's a scheduled interview
+    if (!application.scheduledInterviewDate) {
+      throw new Error("No interview scheduled for this application");
+    }
+
+    const now = Date.now();
+    let eventId = application.scheduledInterviewEventId;
+
+    // If there's a scheduled date but no event ID, create the calendar event
+    if (!eventId) {
+      // Get the user who's adding attendees to create the event
+      const creatorId = args.userId || args.attendeeIds[0];
+      const creator = await ctx.db.get(creatorId);
+
+      // Parse interview time to create proper event timestamps
+      const interviewDate = application.scheduledInterviewDate;
+      const interviewTime = application.scheduledInterviewTime || "09:00";
+      const startTime = new Date(`${interviewDate}T${interviewTime}:00`).getTime();
+      const endTime = startTime + 60 * 60 * 1000; // 1 hour interview
+
+      eventId = await ctx.db.insert("events", {
+        title: `Interview: ${application.firstName} ${application.lastName}`,
+        description: `Job Interview for ${application.appliedJobTitle}\n\nCandidate: ${application.firstName} ${application.lastName}\nEmail: ${application.email}\nPhone: ${application.phone}`,
+        startTime,
+        endTime,
+        isAllDay: false,
+        location: application.scheduledInterviewLocation,
+        meetingType: application.scheduledInterviewLocation === "Video" ? "video" :
+                     application.scheduledInterviewLocation === "Phone" ? "phone" : "in-person",
+        createdBy: creatorId,
+        createdByName: creator?.name ?? "Unknown",
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      // Update application with the new event ID
+      await ctx.db.patch(args.applicationId, {
+        scheduledInterviewEventId: eventId,
+        updatedAt: now,
+      });
+    }
+
+    const event = await ctx.db.get(eventId);
+    if (!event) throw new Error("Interview event not found");
+
+    if (event.isCancelled) {
+      throw new Error("Cannot add attendees to a cancelled interview");
+    }
+
+    // Get existing invites for this event to avoid duplicates
+    const existingInvites = await ctx.db
+      .query("eventInvites")
+      .withIndex("by_event", (q) => q.eq("eventId", eventId!))
+      .collect();
+
+    const existingUserIds = new Set(existingInvites.map((inv) => inv.userId));
+
+    // Add new invites for attendees not already invited
+    const addedAttendees: string[] = [];
+    for (const attendeeId of args.attendeeIds) {
+      if (!existingUserIds.has(attendeeId)) {
+        await ctx.db.insert("eventInvites", {
+          eventId: eventId!,
+          userId: attendeeId,
+          status: "accepted", // Auto-accept for interview attendees
+          isRead: true,
+          notifiedAt: now,
+          createdAt: now,
+        });
+
+        const user = await ctx.db.get(attendeeId);
+        if (user) {
+          addedAttendees.push(user.name);
+        }
+      }
+    }
+
+    return {
+      addedCount: addedAttendees.length,
+      addedAttendees,
+    };
+  },
+});
+
+// Get attendees for a scheduled interview
+export const getInterviewAttendees = query({
+  args: {
+    applicationId: v.id("applications"),
+  },
+  handler: async (ctx, args) => {
+    const application = await ctx.db.get(args.applicationId);
+    if (!application) return [];
+
+    if (!application.scheduledInterviewEventId) return [];
+
+    const invites = await ctx.db
+      .query("eventInvites")
+      .withIndex("by_event", (q) => q.eq("eventId", application.scheduledInterviewEventId!))
+      .collect();
+
+    const attendees = await Promise.all(
+      invites.map(async (invite) => {
+        const user = await ctx.db.get(invite.userId);
+        return user ? {
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          status: invite.status,
+        } : null;
+      })
+    );
+
+    return attendees.filter(Boolean);
+  },
+});
+
+// Remove an attendee from a scheduled interview
+export const removeInterviewAttendee = mutation({
+  args: {
+    applicationId: v.id("applications"),
+    attendeeId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const application = await ctx.db.get(args.applicationId);
+    if (!application) throw new Error("Application not found");
+
+    if (!application.scheduledInterviewEventId) {
+      throw new Error("No interview scheduled for this application");
+    }
+
+    // Find and delete the invite
+    const invites = await ctx.db
+      .query("eventInvites")
+      .withIndex("by_event", (q) => q.eq("eventId", application.scheduledInterviewEventId!))
+      .collect();
+
+    const inviteToRemove = invites.find((inv) => inv.userId === args.attendeeId);
+    if (inviteToRemove) {
+      await ctx.db.delete(inviteToRemove._id);
+    }
+  },
+});
+
 // Get upcoming interviews (for dashboard)
 export const getUpcomingInterviews = query({
   args: {},

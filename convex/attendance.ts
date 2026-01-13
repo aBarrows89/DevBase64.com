@@ -318,16 +318,47 @@ export const getAttachmentUrl = query({
 // ============ LIVE ATTENDANCE ============
 
 // Get today's attendance with tardiness status for live view
+// ONLY shows employees who are currently clocked in
+// Filters by user role: warehouse_manager only sees their flock, execs only visible to payroll_manager
 export const getTodayLive = query({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    userId: v.optional(v.id("users")),
+  },
+  handler: async (ctx, args) => {
     const today = new Date().toISOString().split("T")[0];
 
+    // Get user for role-based filtering
+    let userRole: string | null = null;
+    let managedLocationIds: string[] = [];
+    if (args.userId) {
+      const user = await ctx.db.get(args.userId);
+      if (user) {
+        userRole = user.role;
+        managedLocationIds = (user.managedLocationIds || []) as string[];
+      }
+    }
+
     // Get all active personnel
-    const personnel = await ctx.db
+    let personnel = await ctx.db
       .query("personnel")
       .withIndex("by_status", (q) => q.eq("status", "active"))
       .collect();
+
+    // Role-based filtering
+    if (userRole === "warehouse_manager") {
+      // Warehouse managers only see:
+      // 1. Hourly employees (not salaried/management)
+      // 2. Employees in their managed locations
+      personnel = personnel.filter((p) => {
+        const isHourly = !p.positionType || p.positionType === "hourly";
+        const inManagedLocation = !p.locationId || managedLocationIds.length === 0 || managedLocationIds.includes(p.locationId as string);
+        return isHourly && inManagedLocation;
+      });
+    } else if (userRole !== "super_admin" && userRole !== "admin" && userRole !== "payroll_manager") {
+      // Non-admin roles (except payroll_manager) can't see salaried/management
+      personnel = personnel.filter((p) => !p.positionType || p.positionType === "hourly");
+    }
+    // super_admin, admin, payroll_manager can see everyone
 
     // Get today's attendance records
     const attendanceRecords = await ctx.db
@@ -341,7 +372,7 @@ export const getTodayLive = query({
       .withIndex("by_date", (q) => q.eq("date", today))
       .collect();
 
-    // Build live attendance data
+    // Build live attendance data - ONLY for clocked in employees
     const liveData = await Promise.all(
       personnel.map(async (person) => {
         const attendance = attendanceRecords.find((a) => a.personnelId === person._id);
@@ -366,6 +397,9 @@ export const getTodayLive = query({
             isOnBreak = false;
           }
         }
+
+        // ONLY include if currently clocked in
+        if (!isClockedIn) return null;
 
         // Get schedule info
         let scheduledStart: string | undefined;
@@ -394,8 +428,11 @@ export const getTodayLive = query({
       })
     );
 
+    // Filter out nulls (non-clocked-in employees) and sort
+    const clockedInOnly = liveData.filter((d): d is NonNullable<typeof d> => d !== null);
+
     // Sort: late first, then by name
-    return liveData.sort((a, b) => {
+    return clockedInOnly.sort((a, b) => {
       // Late employees first
       if (a.attendanceStatus === "late" && b.attendanceStatus !== "late") return -1;
       if (a.attendanceStatus !== "late" && b.attendanceStatus === "late") return 1;
@@ -411,20 +448,60 @@ export const getTodayLive = query({
 // ============ ATTENDANCE ISSUES ============
 
 // Get attendance issues (late, no-show) with write-up recommendation
+// EXCLUDES terminated employees
+// Filters by user role: warehouse_manager only sees their flock, execs only visible to payroll_manager
 export const getIssues = query({
   args: {
     personnelId: v.optional(v.id("personnel")),
     startDate: v.optional(v.string()),
     endDate: v.optional(v.string()),
     status: v.optional(v.string()), // Filter by status type
+    userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
+    // Get user for role-based filtering
+    let userRole: string | null = null;
+    let managedLocationIds: string[] = [];
+    if (args.userId) {
+      const user = await ctx.db.get(args.userId);
+      if (user) {
+        userRole = user.role;
+        managedLocationIds = (user.managedLocationIds || []) as string[];
+      }
+    }
+
+    // Get all active personnel first
+    let activePersonnel = await ctx.db
+      .query("personnel")
+      .withIndex("by_status", (q) => q.eq("status", "active"))
+      .collect();
+
+    // Role-based filtering
+    if (userRole === "warehouse_manager") {
+      // Warehouse managers only see:
+      // 1. Hourly employees (not salaried/management)
+      // 2. Employees in their managed locations
+      activePersonnel = activePersonnel.filter((p) => {
+        const isHourly = !p.positionType || p.positionType === "hourly";
+        const inManagedLocation = !p.locationId || managedLocationIds.length === 0 || managedLocationIds.includes(p.locationId as string);
+        return isHourly && inManagedLocation;
+      });
+    } else if (userRole !== "super_admin" && userRole !== "admin" && userRole !== "payroll_manager") {
+      // Non-admin roles (except payroll_manager) can't see salaried/management
+      activePersonnel = activePersonnel.filter((p) => !p.positionType || p.positionType === "hourly");
+    }
+    // super_admin, admin, payroll_manager can see everyone
+
+    const activePersonnelIds = new Set(activePersonnel.map((p) => p._id));
+
     // Get attendance records with issues
     let records = await ctx.db.query("attendance").collect();
 
-    // Filter to only issues (late, no_call_no_show)
+    // Filter to only issues (late, no_call_no_show) AND only active personnel
     records = records.filter(
-      (r) => r.status === "late" || r.status === "no_call_no_show"
+      (r) =>
+        (r.status === "late" || r.status === "no_call_no_show") &&
+        activePersonnelIds.has(r.personnelId)
     );
 
     if (args.personnelId) {
@@ -460,6 +537,7 @@ export const getIssues = query({
         );
 
         // Determine recommended write-up severity based on progression
+        // 1st = Verbal, 2nd = Written, 3rd = 3-Day Suspension, 4th = Termination
         let recommendedSeverity: string;
         let writeUpCount = recentWriteUps.length;
 
@@ -468,9 +546,9 @@ export const getIssues = query({
         } else if (writeUpCount === 1) {
           recommendedSeverity = "written_warning";
         } else if (writeUpCount === 2) {
-          recommendedSeverity = "final_warning";
-        } else {
           recommendedSeverity = "suspension";
+        } else {
+          recommendedSeverity = "termination";
         }
 
         return {
@@ -486,8 +564,8 @@ export const getIssues = query({
           severityLabel: {
             verbal_warning: "Verbal Warning (1st offense)",
             written_warning: "Written Warning (2nd offense)",
-            final_warning: "Final Warning (3rd offense)",
-            suspension: "Suspension (4th+ offense)",
+            suspension: "3-Day Suspension (3rd offense)",
+            termination: "Termination (4th offense)",
           }[recommendedSeverity],
         };
       })
@@ -656,6 +734,7 @@ export const createWriteUpFromAttendance = mutation({
     );
 
     // Determine severity based on progression
+    // 1st = Verbal, 2nd = Written, 3rd = 3-Day Suspension, 4th = Termination
     let severity: string;
     const writeUpCount = recentWriteUps.length;
 
@@ -664,9 +743,9 @@ export const createWriteUpFromAttendance = mutation({
     } else if (writeUpCount === 1) {
       severity = "written_warning";
     } else if (writeUpCount === 2) {
-      severity = "final_warning";
-    } else {
       severity = "suspension";
+    } else {
+      severity = "termination";
     }
 
     // Build description
@@ -695,7 +774,7 @@ export const createWriteUpFromAttendance = mutation({
       category: "attendance",
       severity,
       description,
-      followUpRequired: severity === "final_warning" || severity === "suspension",
+      followUpRequired: severity === "suspension" || severity === "termination",
       issuedBy: args.userId,
       createdAt: now,
     });

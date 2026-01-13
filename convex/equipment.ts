@@ -1632,3 +1632,320 @@ export const deleteVehicle = mutation({
     return { success: true };
   },
 });
+
+// ============ COMPUTER / REMOTE ACCESS ============
+
+// List all computers with remote access
+export const listComputers = query({
+  args: {
+    status: v.optional(v.string()),
+    department: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    let computers = await ctx.db
+      .query("equipment")
+      .filter((q) =>
+        q.or(
+          q.eq(q.field("type"), "computer"),
+          q.eq(q.field("type"), "laptop")
+        )
+      )
+      .collect();
+
+    if (args.status) {
+      computers = computers.filter((c) => c.status === args.status);
+    }
+    if (args.department) {
+      computers = computers.filter((c) => c.department === args.department);
+    }
+
+    // Enrich with assigned personnel name and remote URL
+    const enriched = await Promise.all(
+      computers.map(async (comp) => {
+        let assignedToName = null;
+        if (comp.assignedTo) {
+          const person = await ctx.db.get(comp.assignedTo);
+          assignedToName = person ? `${person.firstName} ${person.lastName}` : null;
+        }
+        return {
+          ...comp,
+          assignedToName,
+          // Chrome Remote Desktop URL
+          chromeRemoteUrl: comp.chromeRemoteId && comp.remoteAccessEnabled
+            ? `https://remotedesktop.google.com/access/session/${comp.chromeRemoteId}`
+            : null,
+        };
+      })
+    );
+
+    return enriched.sort((a, b) => a.name.localeCompare(b.name));
+  },
+});
+
+// Get computers with active remote access
+export const getRemoteAccessComputers = query({
+  args: {},
+  handler: async (ctx) => {
+    const computers = await ctx.db
+      .query("equipment")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("remoteAccessEnabled"), true),
+          q.or(
+            q.eq(q.field("type"), "computer"),
+            q.eq(q.field("type"), "laptop")
+          )
+        )
+      )
+      .collect();
+
+    // Enrich with assigned personnel name
+    const enriched = await Promise.all(
+      computers.map(async (comp) => {
+        let assignedToName = null;
+        if (comp.assignedTo) {
+          const person = await ctx.db.get(comp.assignedTo);
+          assignedToName = person ? `${person.firstName} ${person.lastName}` : null;
+        }
+        return {
+          ...comp,
+          assignedToName,
+          chromeRemoteUrl: comp.chromeRemoteId
+            ? `https://remotedesktop.google.com/access/session/${comp.chromeRemoteId}`
+            : null,
+        };
+      })
+    );
+
+    return enriched.sort((a, b) => a.name.localeCompare(b.name));
+  },
+});
+
+// Create a new computer
+export const createComputer = mutation({
+  args: {
+    name: v.string(),
+    type: v.string(), // "computer" | "laptop"
+    serialNumber: v.optional(v.string()),
+    manufacturer: v.optional(v.string()),
+    model: v.optional(v.string()),
+    operatingSystem: v.optional(v.string()),
+    ipAddress: v.optional(v.string()),
+    macAddress: v.optional(v.string()),
+    chromeRemoteId: v.optional(v.string()),
+    remoteAccessEnabled: v.boolean(),
+    assignedTo: v.optional(v.id("personnel")),
+    department: v.optional(v.string()),
+    location: v.optional(v.string()),
+    purchaseDate: v.optional(v.string()),
+    warrantyExpiration: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+
+    const computerId = await ctx.db.insert("equipment", {
+      name: args.name,
+      type: args.type,
+      serialNumber: args.serialNumber,
+      manufacturer: args.manufacturer,
+      model: args.model,
+      operatingSystem: args.operatingSystem,
+      ipAddress: args.ipAddress,
+      macAddress: args.macAddress,
+      chromeRemoteId: args.chromeRemoteId,
+      remoteAccessEnabled: args.remoteAccessEnabled,
+      assignedTo: args.assignedTo,
+      department: args.department,
+      location: args.location,
+      status: "active",
+      purchaseDate: args.purchaseDate,
+      warrantyExpiration: args.warrantyExpiration,
+      notes: args.notes,
+      createdBy: args.userId,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return computerId;
+  },
+});
+
+// Update computer
+export const updateComputer = mutation({
+  args: {
+    computerId: v.id("equipment"),
+    name: v.optional(v.string()),
+    serialNumber: v.optional(v.string()),
+    manufacturer: v.optional(v.string()),
+    model: v.optional(v.string()),
+    operatingSystem: v.optional(v.string()),
+    ipAddress: v.optional(v.string()),
+    macAddress: v.optional(v.string()),
+    chromeRemoteId: v.optional(v.string()),
+    remoteAccessEnabled: v.optional(v.boolean()),
+    assignedTo: v.optional(v.id("personnel")),
+    department: v.optional(v.string()),
+    location: v.optional(v.string()),
+    status: v.optional(v.string()),
+    purchaseDate: v.optional(v.string()),
+    warrantyExpiration: v.optional(v.string()),
+    notes: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { computerId, ...updates } = args;
+
+    // Filter out undefined values
+    const filteredUpdates: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(updates)) {
+      if (value !== undefined) {
+        filteredUpdates[key] = value;
+      }
+    }
+
+    await ctx.db.patch(computerId, {
+      ...filteredUpdates,
+      updatedAt: Date.now(),
+    });
+
+    return computerId;
+  },
+});
+
+// Update Chrome Remote Desktop settings
+export const updateChromeRemote = mutation({
+  args: {
+    computerId: v.id("equipment"),
+    chromeRemoteId: v.string(),
+    remoteAccessEnabled: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.computerId, {
+      chromeRemoteId: args.chromeRemoteId,
+      remoteAccessEnabled: args.remoteAccessEnabled,
+      updatedAt: Date.now(),
+    });
+
+    return args.computerId;
+  },
+});
+
+// Delete computer
+export const deleteComputer = mutation({
+  args: { computerId: v.id("equipment") },
+  handler: async (ctx, args) => {
+    const computer = await ctx.db.get(args.computerId);
+    if (!computer) {
+      throw new Error("Computer not found");
+    }
+
+    await ctx.db.delete(args.computerId);
+    return { success: true };
+  },
+});
+
+// ============ MOBILE APP - EMPLOYEE EQUIPMENT ============
+
+// Get all equipment assigned to an employee with agreements and full details
+export const getMyEquipment = query({
+  args: { personnelId: v.id("personnel") },
+  handler: async (ctx, args) => {
+    // Get assigned scanners
+    const scanners = await ctx.db
+      .query("scanners")
+      .withIndex("by_assigned", (q) => q.eq("assignedTo", args.personnelId))
+      .collect();
+
+    // Get assigned pickers
+    const pickers = await ctx.db
+      .query("pickers")
+      .withIndex("by_assigned", (q) => q.eq("assignedTo", args.personnelId))
+      .collect();
+
+    // Get all agreements for this personnel
+    const agreements = await ctx.db
+      .query("equipmentAgreements")
+      .withIndex("by_personnel", (q) => q.eq("personnelId", args.personnelId))
+      .collect();
+
+    // Enrich scanners with their agreements
+    const enrichedScanners = await Promise.all(
+      scanners.map(async (scanner) => {
+        const location = await ctx.db.get(scanner.locationId);
+        // Find the active agreement for this scanner
+        const agreement = agreements.find(
+          (a) =>
+            a.equipmentType === "scanner" &&
+            a.equipmentId === scanner._id &&
+            !a.revokedAt
+        );
+        return {
+          _id: scanner._id,
+          type: "scanner" as const,
+          number: scanner.number,
+          pin: scanner.pin,
+          model: scanner.model,
+          serialNumber: scanner.serialNumber,
+          locationName: location?.name ?? "Unknown",
+          assignedAt: scanner.assignedAt,
+          conditionNotes: scanner.conditionNotes,
+          status: scanner.status,
+          agreement: agreement
+            ? {
+                _id: agreement._id,
+                agreementText: agreement.agreementText,
+                signedAt: agreement.signedAt,
+                signatureData: agreement.signatureData,
+                equipmentValue: agreement.equipmentValue,
+                witnessedByName: agreement.witnessedByName,
+              }
+            : null,
+        };
+      })
+    );
+
+    // Enrich pickers with their agreements
+    const enrichedPickers = await Promise.all(
+      pickers.map(async (picker) => {
+        const location = await ctx.db.get(picker.locationId);
+        // Find the active agreement for this picker
+        const agreement = agreements.find(
+          (a) =>
+            a.equipmentType === "picker" &&
+            a.equipmentId === picker._id &&
+            !a.revokedAt
+        );
+        return {
+          _id: picker._id,
+          type: "picker" as const,
+          number: picker.number,
+          pin: picker.pin,
+          model: picker.model,
+          serialNumber: picker.serialNumber,
+          locationName: location?.name ?? "Unknown",
+          assignedAt: picker.assignedAt,
+          conditionNotes: picker.conditionNotes,
+          status: picker.status,
+          agreement: agreement
+            ? {
+                _id: agreement._id,
+                agreementText: agreement.agreementText,
+                signedAt: agreement.signedAt,
+                signatureData: agreement.signatureData,
+                equipmentValue: agreement.equipmentValue,
+                witnessedByName: agreement.witnessedByName,
+              }
+            : null,
+        };
+      })
+    );
+
+    // Combine and sort by assignment date (most recent first)
+    const allEquipment = [...enrichedScanners, ...enrichedPickers].sort(
+      (a, b) => (b.assignedAt ?? 0) - (a.assignedAt ?? 0)
+    );
+
+    return allEquipment;
+  },
+});

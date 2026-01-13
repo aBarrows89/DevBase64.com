@@ -89,6 +89,17 @@ function ApplicationDetailContent({ id }: { id: string }) {
   const scheduleInterview = useMutation(api.applications.scheduleInterview);
   const clearScheduledInterview = useMutation(api.applications.clearScheduledInterview);
   const createPersonnel = useMutation(api.personnel.createFromApplication);
+  const addInterviewAttendees = useMutation(api.applications.addInterviewAttendees);
+  const removeInterviewAttendee = useMutation(api.applications.removeInterviewAttendee);
+
+  // Get interview attendees
+  const interviewAttendees = useQuery(
+    api.applications.getInterviewAttendees,
+    application?.scheduledInterviewEventId ? { applicationId: id as Id<"applications"> } : "skip"
+  );
+
+  // Get all users for attendee selection
+  const allUsers = useQuery(api.auth.getAllUsers, {});
 
   // Check if personnel record already exists for this application
   const existingPersonnel = useQuery(api.personnel.getByApplicationId, {
@@ -109,6 +120,8 @@ function ApplicationDetailContent({ id }: { id: string }) {
   const [scheduleTime, setScheduleTime] = useState("");
   const [scheduleLocation, setScheduleLocation] = useState("In-person");
   const [isScheduling, setIsScheduling] = useState(false);
+  const [showAttendeeDropdown, setShowAttendeeDropdown] = useState(false);
+  const [isAddingAttendee, setIsAddingAttendee] = useState(false);
 
   // Hiring state
   const [showHireModal, setShowHireModal] = useState(false);
@@ -1407,6 +1420,95 @@ function ApplicationDetailContent({ id }: { id: string }) {
                   >
                     Clear
                   </button>
+                </div>
+              </div>
+
+              {/* Attendees Section */}
+              <div className="mt-4 pt-4 border-t border-orange-500/20">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-medium text-orange-300">Interview Attendees</h3>
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowAttendeeDropdown(!showAttendeeDropdown)}
+                      className="px-3 py-1.5 bg-orange-500/20 text-orange-400 border border-orange-500/30 rounded-lg hover:bg-orange-500/30 transition-colors text-sm flex items-center gap-1"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      Add Attendee
+                    </button>
+                    {showAttendeeDropdown && (
+                      <div className="absolute right-0 mt-2 w-64 bg-slate-800 border border-slate-600 rounded-lg shadow-xl z-10 max-h-60 overflow-y-auto">
+                        {allUsers?.filter(u =>
+                          !interviewAttendees?.some(a => a?._id === u._id)
+                        ).map(u => (
+                          <button
+                            key={u._id}
+                            onClick={async () => {
+                              setIsAddingAttendee(true);
+                              try {
+                                await addInterviewAttendees({
+                                  applicationId: application._id,
+                                  attendeeIds: [u._id],
+                                  userId: user?._id,
+                                });
+                                setShowAttendeeDropdown(false);
+                              } catch (error) {
+                                console.error("Failed to add attendee:", error);
+                                alert("Failed to add attendee: " + (error as Error).message);
+                              } finally {
+                                setIsAddingAttendee(false);
+                              }
+                            }}
+                            disabled={isAddingAttendee}
+                            className="w-full px-4 py-2 text-left text-white hover:bg-slate-700 transition-colors text-sm disabled:opacity-50"
+                          >
+                            {u.name}
+                            <span className="text-slate-400 text-xs ml-2">({u.email})</span>
+                          </button>
+                        ))}
+                        {allUsers?.filter(u => !interviewAttendees?.some(a => a?._id === u._id)).length === 0 && (
+                          <div className="px-4 py-3 text-slate-400 text-sm text-center">
+                            All users already added
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {interviewAttendees && interviewAttendees.length > 0 ? (
+                    interviewAttendees.map(attendee => attendee && (
+                      <div
+                        key={attendee._id}
+                        className="flex items-center gap-2 bg-slate-700/50 px-3 py-1.5 rounded-lg"
+                      >
+                        <div className="w-6 h-6 rounded-full bg-orange-500/30 flex items-center justify-center text-xs text-orange-300 font-medium">
+                          {attendee.name.split(" ").map(n => n[0]).join("")}
+                        </div>
+                        <span className="text-white text-sm">{attendee.name}</span>
+                        <button
+                          onClick={async () => {
+                            try {
+                              await removeInterviewAttendee({
+                                applicationId: application._id,
+                                attendeeId: attendee._id,
+                              });
+                            } catch (error) {
+                              console.error("Failed to remove attendee:", error);
+                            }
+                          }}
+                          className="text-slate-400 hover:text-red-400 transition-colors ml-1"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <span className="text-slate-400 text-sm">No attendees assigned yet</span>
+                  )}
                 </div>
               </div>
             </div>

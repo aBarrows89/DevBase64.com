@@ -36,7 +36,6 @@ function OvertimeContent() {
     startTime: "06:00",
     endTime: "14:30",
     maxSlots: "",
-    payRate: "1.5x",
     targetType: "all" as "all" | "department" | "location",
     department: "",
     locationId: "" as string,
@@ -91,7 +90,6 @@ function OvertimeContent() {
         startTime: offerForm.startTime,
         endTime: offerForm.endTime,
         maxSlots: offerForm.maxSlots ? parseInt(offerForm.maxSlots) : undefined,
-        payRate: offerForm.payRate || undefined,
         targetType: offerForm.targetType,
         department: offerForm.targetType === "department" ? offerForm.department : undefined,
         locationId: offerForm.targetType === "location" ? offerForm.locationId as Id<"locations"> : undefined,
@@ -106,7 +104,6 @@ function OvertimeContent() {
         startTime: "06:00",
         endTime: "14:30",
         maxSlots: "",
-        payRate: "1.5x",
         targetType: "all",
         department: "",
         locationId: "",
@@ -338,17 +335,11 @@ function OvertimeContent() {
 
                   {/* Details */}
                   <div className={`p-6 border-b ${isDark ? "border-slate-700" : "border-gray-200"}`}>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                       <div>
                         <p className={`text-xs uppercase tracking-wide ${isDark ? "text-slate-500" : "text-gray-400"}`}>Time</p>
                         <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
                           {selectedOfferDetails.startTime} - {selectedOfferDetails.endTime}
-                        </p>
-                      </div>
-                      <div>
-                        <p className={`text-xs uppercase tracking-wide ${isDark ? "text-slate-500" : "text-gray-400"}`}>Pay Rate</p>
-                        <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
-                          {selectedOfferDetails.payRate || "Standard"}
                         </p>
                       </div>
                       <div>
@@ -366,6 +357,9 @@ function OvertimeContent() {
                         </p>
                       </div>
                     </div>
+                    <p className={`mt-3 text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                      Overtime rate: 1.5x for hours over 40/week
+                    </p>
                     {selectedOfferDetails.description && (
                       <p className={`mt-4 ${isDark ? "text-slate-400" : "text-gray-600"}`}>
                         {selectedOfferDetails.description}
@@ -542,39 +536,24 @@ function OvertimeContent() {
                   </div>
                 </div>
 
-                {/* Pay Rate & Max Slots */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
-                      Pay Rate
-                    </label>
-                    <select
-                      value={offerForm.payRate}
-                      onChange={(e) => setOfferForm({ ...offerForm, payRate: e.target.value })}
-                      className={`w-full px-4 py-2 rounded-lg border ${
-                        isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-white border-gray-300 text-gray-900"
-                      }`}
-                    >
-                      <option value="1.5x">1.5x (Time and a half)</option>
-                      <option value="2x">2x (Double time)</option>
-                      <option value="Regular">Regular rate</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
-                      Max Slots (optional)
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={offerForm.maxSlots}
-                      onChange={(e) => setOfferForm({ ...offerForm, maxSlots: e.target.value })}
-                      placeholder="Unlimited"
-                      className={`w-full px-4 py-2 rounded-lg border ${
-                        isDark ? "bg-slate-700 border-slate-600 text-white placeholder-slate-400" : "bg-white border-gray-300 text-gray-900"
-                      }`}
-                    />
-                  </div>
+                {/* Max Slots */}
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                    Max Slots (optional)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={offerForm.maxSlots}
+                    onChange={(e) => setOfferForm({ ...offerForm, maxSlots: e.target.value })}
+                    placeholder="Unlimited"
+                    className={`w-full px-4 py-2 rounded-lg border ${
+                      isDark ? "bg-slate-700 border-slate-600 text-white placeholder-slate-400" : "bg-white border-gray-300 text-gray-900"
+                    }`}
+                  />
+                  <p className={`mt-1 text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                    Overtime is calculated as 1.5x for hours over 40/week
+                  </p>
                 </div>
 
                 {/* Target */}

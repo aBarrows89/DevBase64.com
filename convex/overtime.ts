@@ -228,6 +228,7 @@ export const getEmployeeOvertimeHistory = query({
 // ============ MUTATIONS ============
 
 // Create a new overtime offer
+// Note: Pay rate is not needed - overtime is calculated as hours over 40/week
 export const createOffer = mutation({
   args: {
     date: v.string(),
@@ -238,7 +239,6 @@ export const createOffer = mutation({
     locationId: v.optional(v.id("locations")),
     department: v.optional(v.string()),
     maxSlots: v.optional(v.number()),
-    payRate: v.optional(v.string()),
     targetType: v.string(),
     targetPersonnelIds: v.optional(v.array(v.id("personnel"))),
     sendNotification: v.boolean(),
@@ -257,7 +257,6 @@ export const createOffer = mutation({
       locationId: args.locationId,
       department: args.department,
       maxSlots: args.maxSlots,
-      payRate: args.payRate,
       targetType: args.targetType,
       targetPersonnelIds: args.targetPersonnelIds,
       status: "open",
@@ -357,6 +356,10 @@ export const respondToOffer = mutation({
       }
     }
 
+    // Get personnel info for notifications
+    const personnel = await ctx.db.get(args.personnelId);
+    const personnelName = personnel ? `${personnel.firstName} ${personnel.lastName}` : "Unknown";
+
     // Check if response already exists
     const existingResponse = await ctx.db
       .query("overtimeResponses")
@@ -364,6 +367,8 @@ export const respondToOffer = mutation({
         q.eq("offerId", args.offerId).eq("personnelId", args.personnelId)
       )
       .first();
+
+    let responseId: Id<"overtimeResponses">;
 
     if (existingResponse) {
       // Update existing response
@@ -373,10 +378,10 @@ export const respondToOffer = mutation({
         notes: args.notes,
         updatedAt: now,
       });
-      return existingResponse._id;
+      responseId = existingResponse._id;
     } else {
       // Create new response
-      const responseId = await ctx.db.insert("overtimeResponses", {
+      responseId = await ctx.db.insert("overtimeResponses", {
         offerId: args.offerId,
         personnelId: args.personnelId,
         response: args.response,
@@ -385,8 +390,40 @@ export const respondToOffer = mutation({
         createdAt: now,
         updatedAt: now,
       });
-      return responseId;
     }
+
+    // Send notifications to management when someone ACCEPTS overtime
+    if (args.response === "accepted") {
+      // Get all users who should be notified about overtime
+      const users = await ctx.db.query("users").collect();
+      const managementRoles = ["super_admin", "admin", "payroll_manager", "warehouse_director", "warehouse_manager"];
+      const managementUsers = users.filter(
+        (u) => u.isActive && managementRoles.includes(u.role)
+      );
+
+      // Format date for display
+      const offerDate = new Date(offer.date + "T00:00:00").toLocaleDateString("en-US", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+      });
+
+      for (const manager of managementUsers) {
+        await ctx.db.insert("notifications", {
+          userId: manager._id,
+          type: "overtime_accepted",
+          title: "Overtime Accepted",
+          message: `${personnelName} accepted overtime for ${offerDate} (${offer.startTime} - ${offer.endTime})`,
+          link: `/overtime`,
+          relatedPersonnelId: args.personnelId,
+          isRead: false,
+          isDismissed: false,
+          createdAt: now,
+        });
+      }
+    }
+
+    return responseId;
   },
 });
 
