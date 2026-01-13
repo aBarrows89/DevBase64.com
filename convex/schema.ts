@@ -466,12 +466,20 @@ export default defineSchema({
   attendance: defineTable({
     personnelId: v.id("personnel"),
     date: v.string(), // YYYY-MM-DD
-    status: v.string(), // "present" | "absent" | "late" | "excused" | "no_call_no_show"
+    status: v.string(), // "present" | "on_time" | "grace_period" | "late" | "absent" | "excused" | "no_call_no_show"
     scheduledStart: v.optional(v.string()), // HH:MM
     scheduledEnd: v.optional(v.string()), // HH:MM
     actualStart: v.optional(v.string()), // HH:MM
     actualEnd: v.optional(v.string()), // HH:MM
     hoursWorked: v.optional(v.number()),
+    // Tardiness tracking
+    minutesLate: v.optional(v.number()), // 0 = on time, positive = late
+    wasWithinGrace: v.optional(v.boolean()), // True if was 1-5 min late (grace period)
+    // Shift info
+    shiftId: v.optional(v.id("shifts")), // If assigned to a specific shift
+    timeEntryId: v.optional(v.id("timeEntries")), // Link to clock-in entry
+    // Write-up tracking
+    linkedWriteUpId: v.optional(v.id("writeUps")), // If converted to write-up
     notes: v.optional(v.string()),
     // Document attachments (doctor's notes, etc.)
     attachments: v.optional(v.array(v.object({
@@ -485,7 +493,8 @@ export default defineSchema({
   })
     .index("by_personnel", ["personnelId"])
     .index("by_date", ["date"])
-    .index("by_personnel_date", ["personnelId", "date"]),
+    .index("by_personnel_date", ["personnelId", "date"])
+    .index("by_status", ["status"]),
 
   // Merits / Commendations
   merits: defineTable({

@@ -314,3 +314,410 @@ export const getAttachmentUrl = query({
     return await ctx.storage.getUrl(args.storageId);
   },
 });
+
+// ============ LIVE ATTENDANCE ============
+
+// Get today's attendance with tardiness status for live view
+export const getTodayLive = query({
+  args: {},
+  handler: async (ctx) => {
+    const today = new Date().toISOString().split("T")[0];
+
+    // Get all active personnel
+    const personnel = await ctx.db
+      .query("personnel")
+      .withIndex("by_status", (q) => q.eq("status", "active"))
+      .collect();
+
+    // Get today's attendance records
+    const attendanceRecords = await ctx.db
+      .query("attendance")
+      .withIndex("by_date", (q) => q.eq("date", today))
+      .collect();
+
+    // Get today's time entries
+    const timeEntries = await ctx.db
+      .query("timeEntries")
+      .withIndex("by_date", (q) => q.eq("date", today))
+      .collect();
+
+    // Build live attendance data
+    const liveData = await Promise.all(
+      personnel.map(async (person) => {
+        const attendance = attendanceRecords.find((a) => a.personnelId === person._id);
+        const entries = timeEntries.filter((e) => e.personnelId === person._id);
+
+        // Determine current status
+        const sorted = entries.sort((a, b) => a.timestamp - b.timestamp);
+        let isClockedIn = false;
+        let isOnBreak = false;
+        let clockInTime: number | undefined;
+
+        for (const entry of sorted) {
+          if (entry.type === "clock_in") {
+            isClockedIn = true;
+            isOnBreak = false;
+            clockInTime = entry.timestamp;
+          } else if (entry.type === "clock_out") {
+            isClockedIn = false;
+          } else if (entry.type === "break_start") {
+            isOnBreak = true;
+          } else if (entry.type === "break_end") {
+            isOnBreak = false;
+          }
+        }
+
+        // Get schedule info
+        let scheduledStart: string | undefined;
+        if (person.defaultScheduleTemplateId) {
+          const template = await ctx.db.get(person.defaultScheduleTemplateId);
+          if (template?.departments?.[0]?.startTime) {
+            scheduledStart = template.departments[0].startTime;
+          }
+        }
+
+        return {
+          personnelId: person._id,
+          name: `${person.firstName} ${person.lastName}`,
+          department: person.department,
+          position: person.position,
+          isClockedIn,
+          isOnBreak,
+          clockInTime,
+          scheduledStart,
+          // Attendance status
+          attendanceStatus: attendance?.status || null,
+          minutesLate: attendance?.minutesLate || 0,
+          wasWithinGrace: attendance?.wasWithinGrace || false,
+          actualStart: attendance?.actualStart,
+        };
+      })
+    );
+
+    // Sort: late first, then by name
+    return liveData.sort((a, b) => {
+      // Late employees first
+      if (a.attendanceStatus === "late" && b.attendanceStatus !== "late") return -1;
+      if (a.attendanceStatus !== "late" && b.attendanceStatus === "late") return 1;
+      // Then grace period
+      if (a.attendanceStatus === "grace_period" && b.attendanceStatus !== "grace_period") return -1;
+      if (a.attendanceStatus !== "grace_period" && b.attendanceStatus === "grace_period") return 1;
+      // Then by name
+      return a.name.localeCompare(b.name);
+    });
+  },
+});
+
+// ============ ATTENDANCE ISSUES ============
+
+// Get attendance issues (late, no-show) with write-up recommendation
+export const getIssues = query({
+  args: {
+    personnelId: v.optional(v.id("personnel")),
+    startDate: v.optional(v.string()),
+    endDate: v.optional(v.string()),
+    status: v.optional(v.string()), // Filter by status type
+  },
+  handler: async (ctx, args) => {
+    // Get attendance records with issues
+    let records = await ctx.db.query("attendance").collect();
+
+    // Filter to only issues (late, no_call_no_show)
+    records = records.filter(
+      (r) => r.status === "late" || r.status === "no_call_no_show"
+    );
+
+    if (args.personnelId) {
+      records = records.filter((r) => r.personnelId === args.personnelId);
+    }
+    if (args.status) {
+      records = records.filter((r) => r.status === args.status);
+    }
+    if (args.startDate) {
+      records = records.filter((r) => r.date >= args.startDate!);
+    }
+    if (args.endDate) {
+      records = records.filter((r) => r.date <= args.endDate!);
+    }
+
+    // Enrich with personnel info and write-up count
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    const sixMonthsAgoStr = sixMonthsAgo.toISOString().split("T")[0];
+
+    const enriched = await Promise.all(
+      records.map(async (record) => {
+        const personnel = await ctx.db.get(record.personnelId);
+
+        // Count attendance write-ups in last 6 months
+        const writeUps = await ctx.db
+          .query("writeUps")
+          .withIndex("by_personnel", (q) => q.eq("personnelId", record.personnelId))
+          .collect();
+
+        const recentWriteUps = writeUps.filter(
+          (w) => w.category === "attendance" && w.date >= sixMonthsAgoStr && !w.isArchived
+        );
+
+        // Determine recommended write-up severity based on progression
+        let recommendedSeverity: string;
+        let writeUpCount = recentWriteUps.length;
+
+        if (writeUpCount === 0) {
+          recommendedSeverity = "verbal_warning";
+        } else if (writeUpCount === 1) {
+          recommendedSeverity = "written_warning";
+        } else if (writeUpCount === 2) {
+          recommendedSeverity = "final_warning";
+        } else {
+          recommendedSeverity = "suspension";
+        }
+
+        return {
+          ...record,
+          personnelName: personnel
+            ? `${personnel.firstName} ${personnel.lastName}`
+            : "Unknown",
+          department: personnel?.department || "Unknown",
+          // Write-up info
+          hasLinkedWriteUp: !!record.linkedWriteUpId,
+          writeUpsIn6Months: writeUpCount,
+          recommendedSeverity,
+          severityLabel: {
+            verbal_warning: "Verbal Warning (1st offense)",
+            written_warning: "Written Warning (2nd offense)",
+            final_warning: "Final Warning (3rd offense)",
+            suspension: "Suspension (4th+ offense)",
+          }[recommendedSeverity],
+        };
+      })
+    );
+
+    return enriched.sort((a, b) => b.date.localeCompare(a.date));
+  },
+});
+
+// ============ MISSED SHIFT DETECTION ============
+
+// Check for missed shifts and create no-show records
+export const detectMissedShifts = mutation({
+  args: {
+    date: v.optional(v.string()), // Default to today
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const targetDate = args.date || new Date().toISOString().split("T")[0];
+    const currentDate = new Date();
+    const currentHour = currentDate.getHours();
+    const dayOfWeek = currentDate.getDay();
+
+    // Skip weekends
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      return { checked: 0, missedShifts: 0 };
+    }
+
+    // Only run after 10am (give people time to arrive)
+    if (currentHour < 10) {
+      return { checked: 0, missedShifts: 0, message: "Too early to check" };
+    }
+
+    // Get all active personnel with schedules
+    const personnel = await ctx.db
+      .query("personnel")
+      .withIndex("by_status", (q) => q.eq("status", "active"))
+      .collect();
+
+    let checked = 0;
+    let missedShifts = 0;
+
+    for (const person of personnel) {
+      if (!person.defaultScheduleTemplateId) continue;
+
+      const template = await ctx.db.get(person.defaultScheduleTemplateId);
+      if (!template?.departments?.[0]?.startTime) continue;
+
+      const scheduledStart = template.departments[0].startTime;
+      checked++;
+
+      // Check if they have an attendance record for today
+      const attendance = await ctx.db
+        .query("attendance")
+        .withIndex("by_personnel_date", (q) =>
+          q.eq("personnelId", person._id).eq("date", targetDate)
+        )
+        .first();
+
+      // Check if they called off or have approved time off
+      const callOff = await ctx.db
+        .query("callOffs")
+        .withIndex("by_personnel", (q) => q.eq("personnelId", person._id))
+        .filter((q) => q.eq(q.field("date"), targetDate))
+        .first();
+
+      const timeOff = await ctx.db
+        .query("timeOffRequests")
+        .withIndex("by_personnel", (q) => q.eq("personnelId", person._id))
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("status"), "approved"),
+            q.lte(q.field("startDate"), targetDate),
+            q.gte(q.field("endDate"), targetDate)
+          )
+        )
+        .first();
+
+      // If no attendance record and no valid excuse, they missed their shift
+      if (!attendance && !callOff && !timeOff) {
+        // Check if their scheduled time has passed (with buffer)
+        const [hours, minutes] = scheduledStart.split(":").map(Number);
+        const scheduledTime = new Date(currentDate);
+        scheduledTime.setHours(hours, minutes, 0, 0);
+
+        // Add 2 hour buffer (they're really late at this point)
+        const bufferTime = new Date(scheduledTime.getTime() + 2 * 60 * 60 * 1000);
+
+        if (currentDate > bufferTime) {
+          // Create no_call_no_show attendance record
+          await ctx.db.insert("attendance", {
+            personnelId: person._id,
+            date: targetDate,
+            status: "no_call_no_show",
+            scheduledStart,
+            notes: "Auto-detected: Employee did not clock in or call off",
+            createdAt: now,
+            updatedAt: now,
+          });
+
+          missedShifts++;
+
+          // Notify managers
+          const users = await ctx.db.query("users").collect();
+          const managers = users.filter(
+            (u) => u.isActive && ["super_admin", "admin", "warehouse_manager"].includes(u.role)
+          );
+
+          for (const manager of managers) {
+            await ctx.db.insert("notifications", {
+              userId: manager._id,
+              type: "no_call_no_show",
+              title: "No Call/No Show",
+              message: `${person.firstName} ${person.lastName} did not clock in or call off (scheduled: ${scheduledStart})`,
+              link: `/personnel/${person._id}`,
+              relatedPersonnelId: person._id,
+              isRead: false,
+              isDismissed: false,
+              createdAt: now,
+            });
+          }
+        }
+      }
+    }
+
+    return { checked, missedShifts };
+  },
+});
+
+// ============ WRITE-UP CREATION ============
+
+// Create write-up from attendance issue
+export const createWriteUpFromAttendance = mutation({
+  args: {
+    attendanceId: v.id("attendance"),
+    userId: v.id("users"),
+    notes: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+
+    const attendance = await ctx.db.get(args.attendanceId);
+    if (!attendance) throw new Error("Attendance record not found");
+
+    if (attendance.linkedWriteUpId) {
+      throw new Error("Write-up already exists for this attendance issue");
+    }
+
+    const personnel = await ctx.db.get(attendance.personnelId);
+    if (!personnel) throw new Error("Personnel not found");
+
+    const user = await ctx.db.get(args.userId);
+
+    // Get write-up count for severity progression
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    const sixMonthsAgoStr = sixMonthsAgo.toISOString().split("T")[0];
+
+    const existingWriteUps = await ctx.db
+      .query("writeUps")
+      .withIndex("by_personnel", (q) => q.eq("personnelId", attendance.personnelId))
+      .collect();
+
+    const recentWriteUps = existingWriteUps.filter(
+      (w) => w.category === "attendance" && w.date >= sixMonthsAgoStr && !w.isArchived
+    );
+
+    // Determine severity based on progression
+    let severity: string;
+    const writeUpCount = recentWriteUps.length;
+
+    if (writeUpCount === 0) {
+      severity = "verbal_warning";
+    } else if (writeUpCount === 1) {
+      severity = "written_warning";
+    } else if (writeUpCount === 2) {
+      severity = "final_warning";
+    } else {
+      severity = "suspension";
+    }
+
+    // Build description
+    let description: string;
+    if (attendance.status === "late") {
+      description = `Tardy: Employee arrived ${attendance.minutesLate} minutes late on ${attendance.date}. ` +
+        `Scheduled start: ${attendance.scheduledStart}, Actual arrival: ${attendance.actualStart}. ` +
+        `This is attendance offense #${writeUpCount + 1} in the last 6 months.`;
+    } else if (attendance.status === "no_call_no_show") {
+      description = `No Call/No Show: Employee did not report to work or call off on ${attendance.date}. ` +
+        `Scheduled start: ${attendance.scheduledStart}. ` +
+        `This is attendance offense #${writeUpCount + 1} in the last 6 months.`;
+    } else {
+      description = `Attendance issue on ${attendance.date}: ${attendance.status}. ` +
+        `This is attendance offense #${writeUpCount + 1} in the last 6 months.`;
+    }
+
+    if (args.notes) {
+      description += `\n\nAdditional notes: ${args.notes}`;
+    }
+
+    // Create write-up
+    const writeUpId = await ctx.db.insert("writeUps", {
+      personnelId: attendance.personnelId,
+      date: attendance.date,
+      category: "attendance",
+      severity,
+      description,
+      followUpRequired: severity === "final_warning" || severity === "suspension",
+      issuedBy: args.userId,
+      createdAt: now,
+    });
+
+    // Link write-up to attendance record
+    await ctx.db.patch(args.attendanceId, {
+      linkedWriteUpId: writeUpId,
+      updatedAt: now,
+    });
+
+    // Log the action
+    await ctx.db.insert("auditLogs", {
+      action: "Attendance write-up created",
+      actionType: "create",
+      resourceType: "writeUps",
+      resourceId: writeUpId,
+      userId: args.userId,
+      userEmail: user?.email || "unknown",
+      details: `Created ${severity.replace(/_/g, " ")} for ${personnel.firstName} ${personnel.lastName}: ${attendance.status}`,
+      timestamp: now,
+    });
+
+    return writeUpId;
+  },
+});

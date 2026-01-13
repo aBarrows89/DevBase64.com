@@ -624,31 +624,54 @@ export const clockIn = mutation({
       createdAt: now,
     });
 
-    // Check for late arrival and notify managers
+    // Format time helper
+    const formatTimeFromDate = (d: Date) =>
+      `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+
+    // Check for late arrival, create attendance record, and notify managers
     const personnel = await ctx.db.get(args.personnelId);
+    let scheduledStartTime: string | undefined;
+    let minutesLate = 0;
+    let attendanceStatus: "on_time" | "grace_period" | "late" = "on_time";
+    let wasWithinGrace = false;
+
     if (personnel && personnel.defaultScheduleTemplateId) {
       const scheduleTemplate = await ctx.db.get(personnel.defaultScheduleTemplateId);
-      if (scheduleTemplate && scheduleTemplate.departments) {
-        // Find today's schedule
-        const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-        const todayName = dayNames[dayOfWeek];
+      if (scheduleTemplate && scheduleTemplate.departments && scheduleTemplate.departments.length > 0) {
+        // Get the first department's schedule (simplified schedule system)
+        const dept = scheduleTemplate.departments[0];
 
-        for (const dept of scheduleTemplate.departments) {
-          // Check if this employee is assigned to this department
-          if (dept.assignedPersonnel.includes(args.personnelId) && dept.startTime) {
-            // Skip weekends for schedule checking (templates typically apply to weekdays)
-            if (dayOfWeek === 0 || dayOfWeek === 6) continue;
+        if (dept.startTime) {
+          // Skip weekends for schedule checking
+          if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+            scheduledStartTime = dept.startTime;
 
-            // Parse scheduled start time from the department
+            // Parse scheduled start time
             const [hours, minutes] = dept.startTime.split(":").map(Number);
             const scheduledStart = new Date(currentDate);
             scheduledStart.setHours(hours, minutes, 0, 0);
 
-            // Calculate minutes late (with 5-minute grace period)
-            const minutesLate = Math.floor((now - scheduledStart.getTime()) / (1000 * 60)) - 5;
+            // Calculate minutes difference
+            const minutesDiff = Math.floor((now - scheduledStart.getTime()) / (1000 * 60));
 
-            if (minutesLate > 0) {
-              // Format times for notification
+            // Determine status based on 5-minute grace period
+            if (minutesDiff <= 0) {
+              // On time or early
+              attendanceStatus = "on_time";
+              minutesLate = 0;
+            } else if (minutesDiff <= 5) {
+              // Within grace period (1-5 minutes late)
+              attendanceStatus = "grace_period";
+              minutesLate = minutesDiff;
+              wasWithinGrace = true;
+            } else {
+              // Late (more than 5 minutes)
+              attendanceStatus = "late";
+              minutesLate = minutesDiff;
+            }
+
+            // Notify managers if late (beyond grace period)
+            if (attendanceStatus === "late") {
               const formatTime = (d: Date) => d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
               const actualTime = formatTime(new Date(now));
               const scheduledTime = formatTime(scheduledStart);
@@ -665,7 +688,7 @@ export const clockIn = mutation({
                   userId: manager._id,
                   type: "late_arrival",
                   title: "Late Arrival",
-                  message: `${personnel.firstName} ${personnel.lastName} arrived ${minutesLate + 5} minutes late (scheduled: ${scheduledTime}, arrived: ${actualTime})`,
+                  message: `${personnel.firstName} ${personnel.lastName} arrived ${minutesLate} minutes late (scheduled: ${scheduledTime}, arrived: ${actualTime})`,
                   link: `/personnel/${args.personnelId}`,
                   relatedPersonnelId: args.personnelId,
                   isRead: false,
@@ -674,10 +697,45 @@ export const clockIn = mutation({
                 });
               }
             }
-            break; // Found assigned department, no need to continue
           }
         }
       }
+    }
+
+    // Create attendance record for this clock-in
+    const existingAttendance = await ctx.db
+      .query("attendance")
+      .withIndex("by_personnel_date", (q) =>
+        q.eq("personnelId", args.personnelId).eq("date", today)
+      )
+      .first();
+
+    const actualStartTime = formatTimeFromDate(new Date(now));
+
+    if (existingAttendance) {
+      // Update existing attendance record
+      await ctx.db.patch(existingAttendance._id, {
+        status: attendanceStatus,
+        actualStart: actualStartTime,
+        minutesLate,
+        wasWithinGrace,
+        timeEntryId: entryId,
+        updatedAt: now,
+      });
+    } else {
+      // Create new attendance record
+      await ctx.db.insert("attendance", {
+        personnelId: args.personnelId,
+        date: today,
+        status: attendanceStatus,
+        scheduledStart: scheduledStartTime,
+        actualStart: actualStartTime,
+        minutesLate,
+        wasWithinGrace,
+        timeEntryId: entryId,
+        createdAt: now,
+        updatedAt: now,
+      });
     }
 
     return entryId;
