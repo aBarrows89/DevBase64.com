@@ -1591,6 +1591,7 @@ function ApplicationDetailContent({ id }: { id: string }) {
                         employeeType: "full_time",
                         hireDate: new Date().toISOString().split("T")[0],
                         hourlyRate: "",
+                        scheduleTemplateId: "",
                       });
                     }}
                     disabled={isHiring}
