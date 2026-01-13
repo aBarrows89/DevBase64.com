@@ -193,6 +193,7 @@ export const createFromApplication = mutation({
     hourlyRate: v.optional(v.number()),
     notes: v.optional(v.string()),
     userId: v.optional(v.id("users")),
+    defaultScheduleTemplateId: v.optional(v.id("shiftTemplates")),
   },
   handler: async (ctx, args) => {
     // Get the application data
@@ -227,6 +228,7 @@ export const createFromApplication = mutation({
       hourlyRate: args.hourlyRate,
       status: "active",
       notes: args.notes,
+      defaultScheduleTemplateId: args.defaultScheduleTemplateId,
       createdAt: now,
       updatedAt: now,
     });
@@ -346,6 +348,7 @@ export const update = mutation({
     ),
     notes: v.optional(v.string()),
     locationId: v.optional(v.id("locations")),
+    defaultScheduleTemplateId: v.optional(v.id("shiftTemplates")),
     userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
@@ -957,6 +960,429 @@ export const deleteCallLog = mutation({
   },
   handler: async (ctx, args) => {
     await ctx.db.delete(args.callLogId);
+    return { success: true };
+  },
+});
+
+// ============ SCHEDULE ASSIGNMENT ============
+
+// Update schedule assignment for an employee
+export const updateScheduleAssignment = mutation({
+  args: {
+    personnelId: v.id("personnel"),
+    defaultScheduleTemplateId: v.optional(v.id("shiftTemplates")),
+    schedulePreferences: v.optional(v.object({
+      maxHoursPerWeek: v.optional(v.number()),
+      preferredShifts: v.optional(v.array(v.string())),
+      unavailableDays: v.optional(v.array(v.string())),
+      notes: v.optional(v.string()),
+    })),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const { personnelId, userId, ...updates } = args;
+
+    const existing = await ctx.db.get(personnelId);
+    if (!existing) {
+      throw new Error("Personnel not found");
+    }
+
+    const now = Date.now();
+    const updateData: Record<string, unknown> = { updatedAt: now };
+
+    if (updates.defaultScheduleTemplateId !== undefined) {
+      updateData.defaultScheduleTemplateId = updates.defaultScheduleTemplateId;
+    }
+
+    if (updates.schedulePreferences !== undefined) {
+      updateData.schedulePreferences = updates.schedulePreferences;
+    }
+
+    await ctx.db.patch(personnelId, updateData);
+
+    // Log the update
+    const user = await ctx.db.get(userId);
+    await ctx.db.insert("auditLogs", {
+      action: "Updated schedule assignment",
+      actionType: "update",
+      resourceType: "personnel",
+      resourceId: personnelId,
+      userId,
+      userEmail: user?.email ?? "unknown",
+      details: `Updated schedule for ${existing.firstName} ${existing.lastName}`,
+      timestamp: now,
+    });
+
+    return personnelId;
+  },
+});
+
+// Clear schedule assignment (remove from template)
+export const clearScheduleAssignment = mutation({
+  args: {
+    personnelId: v.id("personnel"),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db.get(args.personnelId);
+    if (!existing) {
+      throw new Error("Personnel not found");
+    }
+
+    const now = Date.now();
+
+    await ctx.db.patch(args.personnelId, {
+      defaultScheduleTemplateId: undefined,
+      updatedAt: now,
+    });
+
+    // Log the update
+    const user = await ctx.db.get(args.userId);
+    await ctx.db.insert("auditLogs", {
+      action: "Cleared schedule assignment",
+      actionType: "update",
+      resourceType: "personnel",
+      resourceId: args.personnelId,
+      userId: args.userId,
+      userEmail: user?.email ?? "unknown",
+      details: `Cleared schedule for ${existing.firstName} ${existing.lastName}`,
+      timestamp: now,
+    });
+
+    return args.personnelId;
+  },
+});
+
+// Get employees by schedule template
+export const getByScheduleTemplate = query({
+  args: {
+    templateId: v.id("shiftTemplates"),
+  },
+  handler: async (ctx, args) => {
+    const personnel = await ctx.db
+      .query("personnel")
+      .withIndex("by_schedule_template", (q) => q.eq("defaultScheduleTemplateId", args.templateId))
+      .collect();
+
+    return personnel
+      .filter((p) => p.status === "active")
+      .sort((a, b) => a.lastName.localeCompare(b.lastName));
+  },
+});
+
+// Bulk assign schedule template to multiple employees
+export const bulkAssignSchedule = mutation({
+  args: {
+    personnelIds: v.array(v.id("personnel")),
+    templateId: v.id("shiftTemplates"),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const template = await ctx.db.get(args.templateId);
+    if (!template) {
+      throw new Error("Schedule template not found");
+    }
+
+    for (const personnelId of args.personnelIds) {
+      await ctx.db.patch(personnelId, {
+        defaultScheduleTemplateId: args.templateId,
+        updatedAt: now,
+      });
+    }
+
+    // Log the bulk update
+    const user = await ctx.db.get(args.userId);
+    await ctx.db.insert("auditLogs", {
+      action: "Bulk schedule assignment",
+      actionType: "update",
+      resourceType: "personnel",
+      resourceId: args.templateId,
+      userId: args.userId,
+      userEmail: user?.email ?? "unknown",
+      details: `Assigned ${args.personnelIds.length} employees to schedule template "${template.name}"`,
+      timestamp: now,
+    });
+
+    return { success: true, count: args.personnelIds.length };
+  },
+});
+
+// ============ SCHEDULE OVERRIDES ============
+
+// Get schedule overrides for a personnel
+export const getScheduleOverrides = query({
+  args: {
+    personnelId: v.id("personnel"),
+    startDate: v.optional(v.string()),
+    endDate: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    let overrides = await ctx.db
+      .query("scheduleOverrides")
+      .withIndex("by_personnel", (q) => q.eq("personnelId", args.personnelId))
+      .collect();
+
+    // Filter by date range if provided
+    if (args.startDate) {
+      overrides = overrides.filter((o) => o.date >= args.startDate!);
+    }
+    if (args.endDate) {
+      overrides = overrides.filter((o) => o.date <= args.endDate!);
+    }
+
+    // Enrich with swap personnel name if applicable
+    const enriched = await Promise.all(
+      overrides.map(async (override) => {
+        let swapWithName: string | undefined;
+        if (override.swapWithPersonnelId) {
+          const swapPerson = await ctx.db.get(override.swapWithPersonnelId);
+          if (swapPerson) {
+            swapWithName = `${swapPerson.firstName} ${swapPerson.lastName}`;
+          }
+        }
+        return {
+          ...override,
+          swapWithName,
+        };
+      })
+    );
+
+    return enriched.sort((a, b) => a.date.localeCompare(b.date));
+  },
+});
+
+// Get all pending schedule overrides (for approval)
+export const getPendingScheduleOverrides = query({
+  args: {},
+  handler: async (ctx) => {
+    const overrides = await ctx.db
+      .query("scheduleOverrides")
+      .withIndex("by_status", (q) => q.eq("status", "pending"))
+      .collect();
+
+    // Enrich with personnel names
+    const enriched = await Promise.all(
+      overrides.map(async (override) => {
+        const personnel = await ctx.db.get(override.personnelId);
+        let swapWithName: string | undefined;
+        if (override.swapWithPersonnelId) {
+          const swapPerson = await ctx.db.get(override.swapWithPersonnelId);
+          if (swapPerson) {
+            swapWithName = `${swapPerson.firstName} ${swapPerson.lastName}`;
+          }
+        }
+        return {
+          ...override,
+          personnelName: personnel
+            ? `${personnel.firstName} ${personnel.lastName}`
+            : "Unknown",
+          swapWithName,
+        };
+      })
+    );
+
+    return enriched.sort((a, b) => a.date.localeCompare(b.date));
+  },
+});
+
+// Create a schedule override
+export const createScheduleOverride = mutation({
+  args: {
+    personnelId: v.id("personnel"),
+    date: v.string(),
+    overrideType: v.string(), // "day_off" | "modified_hours" | "extra_shift" | "swap"
+    startTime: v.optional(v.string()),
+    endTime: v.optional(v.string()),
+    swapWithPersonnelId: v.optional(v.id("personnel")),
+    originalShiftId: v.optional(v.id("shifts")),
+    reason: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    autoApprove: v.optional(v.boolean()), // If admin creates it, auto-approve
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const personnel = await ctx.db.get(args.personnelId);
+    if (!personnel) {
+      throw new Error("Personnel not found");
+    }
+
+    // Validate override type
+    const validTypes = ["day_off", "modified_hours", "extra_shift", "swap"];
+    if (!validTypes.includes(args.overrideType)) {
+      throw new Error(`Invalid override type: ${args.overrideType}`);
+    }
+
+    // For modified_hours and extra_shift, require times
+    if (
+      (args.overrideType === "modified_hours" ||
+        args.overrideType === "extra_shift") &&
+      (!args.startTime || !args.endTime)
+    ) {
+      throw new Error("Start and end times are required for this override type");
+    }
+
+    // For swap, require swap partner
+    if (args.overrideType === "swap" && !args.swapWithPersonnelId) {
+      throw new Error("Swap partner is required for swap overrides");
+    }
+
+    const status = args.autoApprove ? "approved" : "pending";
+
+    const overrideId = await ctx.db.insert("scheduleOverrides", {
+      personnelId: args.personnelId,
+      date: args.date,
+      overrideType: args.overrideType,
+      startTime: args.startTime,
+      endTime: args.endTime,
+      swapWithPersonnelId: args.swapWithPersonnelId,
+      originalShiftId: args.originalShiftId,
+      status,
+      reason: args.reason,
+      requestedBy: args.autoApprove ? undefined : args.userId,
+      approvedBy: args.autoApprove ? args.userId : undefined,
+      approvedAt: args.autoApprove ? now : undefined,
+      notes: args.notes,
+      createdBy: args.userId,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // Log the action
+    const user = await ctx.db.get(args.userId);
+    await ctx.db.insert("auditLogs", {
+      action: `Schedule override created (${args.overrideType})`,
+      actionType: "create",
+      resourceType: "scheduleOverrides",
+      resourceId: overrideId,
+      userId: args.userId,
+      userEmail: user?.email ?? "unknown",
+      details: `Created ${args.overrideType} override for ${personnel.firstName} ${personnel.lastName} on ${args.date}`,
+      timestamp: now,
+    });
+
+    return overrideId;
+  },
+});
+
+// Approve a schedule override
+export const approveScheduleOverride = mutation({
+  args: {
+    overrideId: v.id("scheduleOverrides"),
+    userId: v.id("users"),
+    notes: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const override = await ctx.db.get(args.overrideId);
+    if (!override) {
+      throw new Error("Override not found");
+    }
+
+    if (override.status !== "pending") {
+      throw new Error("Only pending overrides can be approved");
+    }
+
+    await ctx.db.patch(args.overrideId, {
+      status: "approved",
+      approvedBy: args.userId,
+      approvedAt: now,
+      notes: args.notes ?? override.notes,
+      updatedAt: now,
+    });
+
+    // Log the action
+    const user = await ctx.db.get(args.userId);
+    const personnel = await ctx.db.get(override.personnelId);
+    await ctx.db.insert("auditLogs", {
+      action: "Schedule override approved",
+      actionType: "update",
+      resourceType: "scheduleOverrides",
+      resourceId: args.overrideId,
+      userId: args.userId,
+      userEmail: user?.email ?? "unknown",
+      details: `Approved ${override.overrideType} override for ${personnel?.firstName ?? "Unknown"} ${personnel?.lastName ?? ""} on ${override.date}`,
+      timestamp: now,
+    });
+
+    return { success: true };
+  },
+});
+
+// Deny a schedule override
+export const denyScheduleOverride = mutation({
+  args: {
+    overrideId: v.id("scheduleOverrides"),
+    userId: v.id("users"),
+    denialReason: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const override = await ctx.db.get(args.overrideId);
+    if (!override) {
+      throw new Error("Override not found");
+    }
+
+    if (override.status !== "pending") {
+      throw new Error("Only pending overrides can be denied");
+    }
+
+    await ctx.db.patch(args.overrideId, {
+      status: "denied",
+      approvedBy: args.userId,
+      approvedAt: now,
+      denialReason: args.denialReason,
+      updatedAt: now,
+    });
+
+    // Log the action
+    const user = await ctx.db.get(args.userId);
+    const personnel = await ctx.db.get(override.personnelId);
+    await ctx.db.insert("auditLogs", {
+      action: "Schedule override denied",
+      actionType: "update",
+      resourceType: "scheduleOverrides",
+      resourceId: args.overrideId,
+      userId: args.userId,
+      userEmail: user?.email ?? "unknown",
+      details: `Denied ${override.overrideType} override for ${personnel?.firstName ?? "Unknown"} ${personnel?.lastName ?? ""} on ${override.date}. Reason: ${args.denialReason}`,
+      timestamp: now,
+    });
+
+    return { success: true };
+  },
+});
+
+// Delete a schedule override
+export const deleteScheduleOverride = mutation({
+  args: {
+    overrideId: v.id("scheduleOverrides"),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const override = await ctx.db.get(args.overrideId);
+    if (!override) {
+      throw new Error("Override not found");
+    }
+
+    await ctx.db.delete(args.overrideId);
+
+    // Log the action
+    const user = await ctx.db.get(args.userId);
+    const personnel = await ctx.db.get(override.personnelId);
+    await ctx.db.insert("auditLogs", {
+      action: "Schedule override deleted",
+      actionType: "delete",
+      resourceType: "scheduleOverrides",
+      resourceId: args.overrideId,
+      userId: args.userId,
+      userEmail: user?.email ?? "unknown",
+      details: `Deleted ${override.overrideType} override for ${personnel?.firstName ?? "Unknown"} ${personnel?.lastName ?? ""} on ${override.date}`,
+      timestamp: now,
+    });
+
     return { success: true };
   },
 });

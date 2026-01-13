@@ -510,3 +510,362 @@ export const markAnnouncementRead = mutation({
     return readId;
   },
 });
+
+// ============ TIME CLOCK (Mobile App) ============
+
+// Get current time entry status for today
+export const getCurrentTimeEntry = query({
+  args: { personnelId: v.id("personnel") },
+  handler: async (ctx, args) => {
+    const today = new Date().toISOString().split("T")[0];
+
+    // Get all time entries for today for this employee
+    const entries = await ctx.db
+      .query("timeEntries")
+      .withIndex("by_personnel_date", (q) =>
+        q.eq("personnelId", args.personnelId).eq("date", today)
+      )
+      .collect();
+
+    if (entries.length === 0) {
+      return null; // Not clocked in today
+    }
+
+    // Sort by timestamp
+    const sorted = entries.sort((a, b) => a.timestamp - b.timestamp);
+
+    // Find the latest clock_in that doesn't have a clock_out after it
+    let clockInTime: number | null = null;
+    let clockOutTime: number | null = null;
+    let breakStartTime: number | null = null;
+    let breakEndTime: number | null = null;
+
+    for (const entry of sorted) {
+      if (entry.type === "clock_in") {
+        clockInTime = entry.timestamp;
+        clockOutTime = null; // Reset clock out
+        breakStartTime = null;
+        breakEndTime = null;
+      } else if (entry.type === "clock_out") {
+        clockOutTime = entry.timestamp;
+      } else if (entry.type === "break_start") {
+        breakStartTime = entry.timestamp;
+        breakEndTime = null;
+      } else if (entry.type === "break_end") {
+        breakEndTime = entry.timestamp;
+      }
+    }
+
+    // If we have a clock_in without a clock_out, we're clocked in
+    if (clockInTime && !clockOutTime) {
+      return {
+        _id: sorted[sorted.length - 1]._id, // Return the latest entry ID
+        personnelId: args.personnelId,
+        date: today,
+        clockInTime,
+        clockOutTime: null,
+        breakStartTime: breakEndTime ? null : breakStartTime, // Only show if currently on break
+        breakEndTime: null,
+      };
+    }
+
+    return null; // Clocked out or no valid entry
+  },
+});
+
+// Clock in
+export const clockIn = mutation({
+  args: {
+    personnelId: v.id("personnel"),
+    locationId: v.optional(v.id("locations")),
+    gpsCoordinates: v.optional(v.object({
+      lat: v.number(),
+      lng: v.number(),
+    })),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const today = new Date().toISOString().split("T")[0];
+    const currentDate = new Date();
+    const dayOfWeek = currentDate.getDay(); // 0 = Sunday
+
+    // Check if already clocked in today
+    const existingEntries = await ctx.db
+      .query("timeEntries")
+      .withIndex("by_personnel_date", (q) =>
+        q.eq("personnelId", args.personnelId).eq("date", today)
+      )
+      .collect();
+
+    // Check if there's an active clock-in (no clock-out after it)
+    const sorted = existingEntries.sort((a, b) => a.timestamp - b.timestamp);
+    let isCurrentlyClockedIn = false;
+
+    for (const entry of sorted) {
+      if (entry.type === "clock_in") {
+        isCurrentlyClockedIn = true;
+      } else if (entry.type === "clock_out") {
+        isCurrentlyClockedIn = false;
+      }
+    }
+
+    if (isCurrentlyClockedIn) {
+      throw new Error("Already clocked in");
+    }
+
+    const entryId = await ctx.db.insert("timeEntries", {
+      personnelId: args.personnelId,
+      date: today,
+      type: "clock_in",
+      timestamp: now,
+      source: "mobile",
+      locationId: args.locationId,
+      gpsCoordinates: args.gpsCoordinates,
+      createdAt: now,
+    });
+
+    // Check for late arrival and notify managers
+    const personnel = await ctx.db.get(args.personnelId);
+    if (personnel && personnel.defaultScheduleTemplateId) {
+      const scheduleTemplate = await ctx.db.get(personnel.defaultScheduleTemplateId);
+      if (scheduleTemplate && scheduleTemplate.departments) {
+        // Find today's schedule
+        const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+        const todayName = dayNames[dayOfWeek];
+
+        for (const dept of scheduleTemplate.departments) {
+          // Check if this employee is assigned to this department
+          if (dept.assignedPersonnel.includes(args.personnelId) && dept.startTime) {
+            // Skip weekends for schedule checking (templates typically apply to weekdays)
+            if (dayOfWeek === 0 || dayOfWeek === 6) continue;
+
+            // Parse scheduled start time from the department
+            const [hours, minutes] = dept.startTime.split(":").map(Number);
+            const scheduledStart = new Date(currentDate);
+            scheduledStart.setHours(hours, minutes, 0, 0);
+
+            // Calculate minutes late (with 5-minute grace period)
+            const minutesLate = Math.floor((now - scheduledStart.getTime()) / (1000 * 60)) - 5;
+
+            if (minutesLate > 0) {
+              // Format times for notification
+              const formatTime = (d: Date) => d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+              const actualTime = formatTime(new Date(now));
+              const scheduledTime = formatTime(scheduledStart);
+
+              // Get all managers
+              const users = await ctx.db.query("users").collect();
+              const managers = users.filter(
+                (u) => u.isActive && ["super_admin", "admin", "warehouse_manager"].includes(u.role)
+              );
+
+              // Create notification for each manager
+              for (const manager of managers) {
+                await ctx.db.insert("notifications", {
+                  userId: manager._id,
+                  type: "late_arrival",
+                  title: "Late Arrival",
+                  message: `${personnel.firstName} ${personnel.lastName} arrived ${minutesLate + 5} minutes late (scheduled: ${scheduledTime}, arrived: ${actualTime})`,
+                  link: `/personnel/${args.personnelId}`,
+                  relatedPersonnelId: args.personnelId,
+                  isRead: false,
+                  isDismissed: false,
+                  createdAt: now,
+                });
+              }
+            }
+            break; // Found assigned department, no need to continue
+          }
+        }
+      }
+    }
+
+    return entryId;
+  },
+});
+
+// Clock out
+export const clockOut = mutation({
+  args: {
+    personnelId: v.id("personnel"),
+    locationId: v.optional(v.id("locations")),
+    gpsCoordinates: v.optional(v.object({
+      lat: v.number(),
+      lng: v.number(),
+    })),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const today = new Date().toISOString().split("T")[0];
+
+    // Verify clocked in
+    const existingEntries = await ctx.db
+      .query("timeEntries")
+      .withIndex("by_personnel_date", (q) =>
+        q.eq("personnelId", args.personnelId).eq("date", today)
+      )
+      .collect();
+
+    const sorted = existingEntries.sort((a, b) => a.timestamp - b.timestamp);
+    let isCurrentlyClockedIn = false;
+    let isOnBreak = false;
+
+    for (const entry of sorted) {
+      if (entry.type === "clock_in") {
+        isCurrentlyClockedIn = true;
+        isOnBreak = false;
+      } else if (entry.type === "clock_out") {
+        isCurrentlyClockedIn = false;
+      } else if (entry.type === "break_start") {
+        isOnBreak = true;
+      } else if (entry.type === "break_end") {
+        isOnBreak = false;
+      }
+    }
+
+    if (!isCurrentlyClockedIn) {
+      throw new Error("Not clocked in");
+    }
+
+    if (isOnBreak) {
+      throw new Error("Cannot clock out while on break. End break first.");
+    }
+
+    const entryId = await ctx.db.insert("timeEntries", {
+      personnelId: args.personnelId,
+      date: today,
+      type: "clock_out",
+      timestamp: now,
+      source: "mobile",
+      locationId: args.locationId,
+      gpsCoordinates: args.gpsCoordinates,
+      createdAt: now,
+    });
+
+    return entryId;
+  },
+});
+
+// Start break
+export const startBreak = mutation({
+  args: {
+    personnelId: v.id("personnel"),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const today = new Date().toISOString().split("T")[0];
+
+    // Verify clocked in and not on break
+    const existingEntries = await ctx.db
+      .query("timeEntries")
+      .withIndex("by_personnel_date", (q) =>
+        q.eq("personnelId", args.personnelId).eq("date", today)
+      )
+      .collect();
+
+    const sorted = existingEntries.sort((a, b) => a.timestamp - b.timestamp);
+    let isCurrentlyClockedIn = false;
+    let isOnBreak = false;
+
+    for (const entry of sorted) {
+      if (entry.type === "clock_in") {
+        isCurrentlyClockedIn = true;
+        isOnBreak = false;
+      } else if (entry.type === "clock_out") {
+        isCurrentlyClockedIn = false;
+      } else if (entry.type === "break_start") {
+        isOnBreak = true;
+      } else if (entry.type === "break_end") {
+        isOnBreak = false;
+      }
+    }
+
+    if (!isCurrentlyClockedIn) {
+      throw new Error("Must be clocked in to start break");
+    }
+
+    if (isOnBreak) {
+      throw new Error("Already on break");
+    }
+
+    const entryId = await ctx.db.insert("timeEntries", {
+      personnelId: args.personnelId,
+      date: today,
+      type: "break_start",
+      timestamp: now,
+      source: "mobile",
+      createdAt: now,
+    });
+
+    return entryId;
+  },
+});
+
+// End break
+export const endBreak = mutation({
+  args: {
+    personnelId: v.id("personnel"),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const today = new Date().toISOString().split("T")[0];
+
+    // Verify on break
+    const existingEntries = await ctx.db
+      .query("timeEntries")
+      .withIndex("by_personnel_date", (q) =>
+        q.eq("personnelId", args.personnelId).eq("date", today)
+      )
+      .collect();
+
+    const sorted = existingEntries.sort((a, b) => a.timestamp - b.timestamp);
+    let isCurrentlyClockedIn = false;
+    let isOnBreak = false;
+
+    for (const entry of sorted) {
+      if (entry.type === "clock_in") {
+        isCurrentlyClockedIn = true;
+        isOnBreak = false;
+      } else if (entry.type === "clock_out") {
+        isCurrentlyClockedIn = false;
+      } else if (entry.type === "break_start") {
+        isOnBreak = true;
+      } else if (entry.type === "break_end") {
+        isOnBreak = false;
+      }
+    }
+
+    if (!isCurrentlyClockedIn) {
+      throw new Error("Not clocked in");
+    }
+
+    if (!isOnBreak) {
+      throw new Error("Not on break");
+    }
+
+    const entryId = await ctx.db.insert("timeEntries", {
+      personnelId: args.personnelId,
+      date: today,
+      type: "break_end",
+      timestamp: now,
+      source: "mobile",
+      createdAt: now,
+    });
+
+    return entryId;
+  },
+});
+
+// Register push notification token for mobile notifications
+export const registerPushToken = mutation({
+  args: {
+    userId: v.id("users"),
+    expoPushToken: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.userId, {
+      expoPushToken: args.expoPushToken,
+    });
+    return true;
+  },
+});

@@ -14,6 +14,8 @@ export default defineSchema({
     managedDepartments: v.optional(v.array(v.string())), // For department_manager - which departments they manage
     managedLocationIds: v.optional(v.array(v.id("locations"))), // For warehouse_manager - which locations they manage
     personnelId: v.optional(v.id("personnel")), // For employee role - links to their personnel record
+    // Push notification token for mobile app
+    expoPushToken: v.optional(v.string()),
     createdAt: v.number(),
     lastLoginAt: v.optional(v.number()),
   })
@@ -400,12 +402,22 @@ export default defineSchema({
       summary: v.string(),
       analyzedAt: v.number(),
     })),
+    // Schedule assignment - link to default schedule template
+    defaultScheduleTemplateId: v.optional(v.id("shiftTemplates")),
+    // Schedule preferences for this employee
+    schedulePreferences: v.optional(v.object({
+      maxHoursPerWeek: v.optional(v.number()), // Maximum hours they want to work
+      preferredShifts: v.optional(v.array(v.string())), // "morning" | "afternoon" | "evening" | "night"
+      unavailableDays: v.optional(v.array(v.string())), // Days they can't work (e.g., "sunday", "monday")
+      notes: v.optional(v.string()), // Additional scheduling notes
+    })),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_department", ["department"])
     .index("by_status", ["status"])
-    .index("by_email", ["email"]),
+    .index("by_email", ["email"])
+    .index("by_schedule_template", ["defaultScheduleTemplateId"]),
 
   // Phone call logs for personnel
   personnelCallLogs: defineTable({
@@ -549,6 +561,35 @@ export default defineSchema({
   })
     .index("by_date", ["date"])
     .index("by_date_department", ["date", "department"]),
+
+  // Schedule Overrides - One-off changes to an employee's regular schedule
+  scheduleOverrides: defineTable({
+    personnelId: v.id("personnel"),
+    date: v.string(), // YYYY-MM-DD - the date this override applies to
+    overrideType: v.string(), // "day_off" | "modified_hours" | "extra_shift" | "swap"
+    // For modified_hours or extra_shift:
+    startTime: v.optional(v.string()), // HH:MM
+    endTime: v.optional(v.string()), // HH:MM
+    // For swaps:
+    swapWithPersonnelId: v.optional(v.id("personnel")),
+    originalShiftId: v.optional(v.id("shifts")), // The shift being swapped from
+    // Status
+    status: v.string(), // "pending" | "approved" | "denied"
+    reason: v.optional(v.string()), // Why the override is needed
+    // Approval
+    requestedBy: v.optional(v.id("users")), // If requested by someone other than admin
+    approvedBy: v.optional(v.id("users")),
+    approvedAt: v.optional(v.number()),
+    denialReason: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_personnel", ["personnelId"])
+    .index("by_date", ["date"])
+    .index("by_personnel_date", ["personnelId", "date"])
+    .index("by_status", ["status"]),
 
   // Performance Reviews
   performanceReviews: defineTable({
@@ -978,6 +1019,53 @@ export default defineSchema({
     .index("by_date", ["date"]),
 
   // ============ EMPLOYEE PORTAL ============
+
+  // Overtime Offers (optional Saturday overtime)
+  overtimeOffers: defineTable({
+    date: v.string(), // YYYY-MM-DD - the Saturday being offered
+    title: v.string(), // e.g., "Saturday Overtime - January 18th"
+    description: v.optional(v.string()), // Additional details
+    startTime: v.string(), // HH:MM
+    endTime: v.string(), // HH:MM
+    locationId: v.optional(v.id("locations")),
+    department: v.optional(v.string()), // Target department (or all)
+    maxSlots: v.optional(v.number()), // Max number of employees needed (null = unlimited)
+    payRate: v.optional(v.string()), // e.g., "1.5x", "2x", "Regular + $5/hr"
+    // Targeting
+    targetType: v.string(), // "all" | "department" | "location" | "specific"
+    targetPersonnelIds: v.optional(v.array(v.id("personnel"))), // If specific employees
+    // Status
+    status: v.string(), // "open" | "closed" | "cancelled"
+    // Notification tracking
+    notificationSentAt: v.optional(v.number()),
+    // Created by
+    createdBy: v.id("users"),
+    createdByName: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_date", ["date"])
+    .index("by_status", ["status"])
+    .index("by_location", ["locationId"]),
+
+  // Overtime Responses (employee accepts/declines)
+  overtimeResponses: defineTable({
+    offerId: v.id("overtimeOffers"),
+    personnelId: v.id("personnel"),
+    response: v.string(), // "accepted" | "declined" | "pending"
+    respondedAt: v.optional(v.number()),
+    notes: v.optional(v.string()), // Employee can add a note
+    // Notification tracking
+    notifiedAt: v.optional(v.number()), // When push notification was sent
+    reminderSentAt: v.optional(v.number()), // If reminder was sent
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_offer", ["offerId"])
+    .index("by_personnel", ["personnelId"])
+    .index("by_offer_personnel", ["offerId", "personnelId"])
+    .index("by_response", ["response"]),
+
   // Time Off Requests
   timeOffRequests: defineTable({
     personnelId: v.id("personnel"),
@@ -1481,4 +1569,47 @@ export default defineSchema({
     .index("by_date", ["date"])
     .index("by_status", ["status"])
     .index("by_created_by", ["createdBy"]),
+
+  // ============ ONBOARDING DOCUMENTS ============
+  // Documents that employees must read and sign (e.g., employee handbook)
+  onboardingDocuments: defineTable({
+    title: v.string(), // e.g., "Employee Handbook"
+    description: v.optional(v.string()),
+    documentType: v.string(), // "handbook" | "policy" | "agreement" | "form"
+    // File storage
+    storageId: v.id("_storage"), // PDF file in Convex storage
+    fileName: v.string(),
+    fileSize: v.number(), // bytes
+    pageCount: v.optional(v.number()),
+    // Settings
+    requiresSignature: v.boolean(), // Must be signed by employees
+    isRequired: v.boolean(), // Required for all employees
+    isActive: v.boolean(), // Currently in use
+    version: v.string(), // e.g., "1.0", "2024-01"
+    effectiveDate: v.string(), // When this version became effective
+    // Tracking
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_type", ["documentType"])
+    .index("by_active", ["isActive"]),
+
+  // Employee signatures on documents
+  documentSignatures: defineTable({
+    documentId: v.id("onboardingDocuments"),
+    personnelId: v.id("personnel"),
+    userId: v.optional(v.id("users")), // The user account that signed
+    // Signature details
+    signedAt: v.number(),
+    signatureData: v.optional(v.string()), // Base64 signature image if captured
+    ipAddress: v.optional(v.string()),
+    deviceInfo: v.optional(v.string()), // Device/browser info
+    // Acknowledgment text they agreed to
+    acknowledgmentText: v.string(), // e.g., "I have read and agree to the Employee Handbook"
+    documentVersion: v.string(), // Version of document at time of signing
+  })
+    .index("by_document", ["documentId"])
+    .index("by_personnel", ["personnelId"])
+    .index("by_document_personnel", ["documentId", "personnelId"]),
 });

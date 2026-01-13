@@ -486,3 +486,52 @@ export const getPersonnelPortalLogin = query({
     } : null;
   },
 });
+
+// Reset employee portal password (generates new temp password, forces change)
+export const resetEmployeePortalPassword = mutation({
+  args: {
+    personnelId: v.id("personnel"),
+    adminUserId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    // Find the user linked to this personnel
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_personnel", (q) => q.eq("personnelId", args.personnelId))
+      .first();
+
+    if (!user) {
+      return { success: false, error: "No portal login found for this employee" };
+    }
+
+    // Generate new temporary password
+    const tempPassword = generateTempPassword();
+    const passwordHash = await hashPassword(tempPassword);
+
+    // Update the user with new password and force change
+    await ctx.db.patch(user._id, {
+      passwordHash,
+      forcePasswordChange: true,
+    });
+
+    // Log the action
+    const admin = await ctx.db.get(args.adminUserId);
+    const personnel = await ctx.db.get(args.personnelId);
+    await ctx.db.insert("auditLogs", {
+      action: "Reset employee portal password",
+      actionType: "update",
+      resourceType: "users",
+      resourceId: user._id,
+      userId: args.adminUserId,
+      userEmail: admin?.email ?? "unknown",
+      details: `Reset portal password for ${personnel?.firstName ?? "Unknown"} ${personnel?.lastName ?? ""}`,
+      timestamp: Date.now(),
+    });
+
+    return {
+      success: true,
+      tempPassword,
+      message: "Password reset successfully. Employee will need to change it on next login.",
+    };
+  },
+});

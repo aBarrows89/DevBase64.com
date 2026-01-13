@@ -144,6 +144,43 @@ export const createTenureCheckInReminders = mutation({
   },
 });
 
+// Create late arrival notification for warehouse managers and above
+export const createLateArrivalNotification = mutation({
+  args: {
+    personnelId: v.id("personnel"),
+    personnelName: v.string(),
+    scheduledTime: v.string(),
+    actualTime: v.string(),
+    minutesLate: v.number(),
+  },
+  handler: async (ctx, args) => {
+    // Get all users who are warehouse managers or above
+    const users = await ctx.db.query("users").collect();
+    const managers = users.filter(
+      (u) => u.isActive && ["super_admin", "admin", "warehouse_manager"].includes(u.role)
+    );
+
+    const notificationIds: Id<"notifications">[] = [];
+
+    for (const manager of managers) {
+      const notificationId = await ctx.db.insert("notifications", {
+        userId: manager._id,
+        type: "late_arrival",
+        title: "Late Arrival",
+        message: `${args.personnelName} arrived ${args.minutesLate} minutes late (scheduled: ${args.scheduledTime}, arrived: ${args.actualTime})`,
+        link: `/personnel/${args.personnelId}`,
+        relatedPersonnelId: args.personnelId,
+        isRead: false,
+        isDismissed: false,
+        createdAt: Date.now(),
+      });
+      notificationIds.push(notificationId);
+    }
+
+    return notificationIds;
+  },
+});
+
 // Dismiss tenure check-in notifications when the check-in is completed
 export const dismissTenureCheckInNotifications = mutation({
   args: {

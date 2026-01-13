@@ -79,6 +79,9 @@ function ApplicationDetailContent({ id }: { id: string }) {
     applicationId: id as Id<"applications">,
   });
 
+  // Schedule templates for hire modal
+  const scheduleTemplates = useQuery(api.shiftTemplates.list, {});
+
   // Notes state
   const [notesInput, setNotesInput] = useState("");
   const [isEditingNotes, setIsEditingNotes] = useState(false);
@@ -100,6 +103,7 @@ function ApplicationDetailContent({ id }: { id: string }) {
     employeeType: "full_time",
     hireDate: new Date().toISOString().split("T")[0],
     hourlyRate: "",
+    scheduleTemplateId: "" as string,
   });
 
   const handleDelete = async () => {
@@ -127,6 +131,7 @@ function ApplicationDetailContent({ id }: { id: string }) {
         hireDate: hireForm.hireDate,
         hourlyRate: hireForm.hourlyRate ? parseFloat(hireForm.hourlyRate) : undefined,
         userId: user?._id,
+        defaultScheduleTemplateId: hireForm.scheduleTemplateId ? hireForm.scheduleTemplateId as Id<"shiftTemplates"> : undefined,
       });
       setShowHireModal(false);
       // Navigate to the new personnel record
@@ -1554,6 +1559,25 @@ function ApplicationDetailContent({ id }: { id: string }) {
                         className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-cyan-500"
                       />
                     </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-2">Schedule Template</label>
+                    <select
+                      value={hireForm.scheduleTemplateId}
+                      onChange={(e) => setHireForm({ ...hireForm, scheduleTemplateId: e.target.value })}
+                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-cyan-500"
+                    >
+                      <option value="">No schedule assigned</option>
+                      {scheduleTemplates?.map((template) => (
+                        <option key={template._id} value={template._id}>
+                          {template.name} ({template.locationName})
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Assign a default schedule template for this employee
+                    </p>
                   </div>
                 </div>
 

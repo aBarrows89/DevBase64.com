@@ -58,6 +58,10 @@ function ReportsContent() {
     endDate: endDate || undefined,
   });
   const equipmentReport = useQuery(api.reports.getEquipmentReport);
+  const attendanceReport = useQuery(
+    api.reports.getAttendanceReport,
+    startDate && endDate ? { startDate, endDate } : "skip"
+  );
 
   const reportTypes: { id: ReportType; label: string; icon: string; description: string }[] = [
     {
@@ -65,6 +69,12 @@ function ReportsContent() {
       label: "Personnel",
       icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z",
       description: "Export all personnel records with contact info, departments, and status",
+    },
+    {
+      id: "attendance",
+      label: "Attendance",
+      icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z",
+      description: "View attendance records, late arrivals, and time tracking data",
     },
     {
       id: "applications",
@@ -90,6 +100,9 @@ function ReportsContent() {
     switch (activeReport) {
       case "personnel":
         if (personnel) exportToCSV(personnel, "personnel_export");
+        break;
+      case "attendance":
+        if (attendanceReport) exportToCSV(attendanceReport.records, "attendance_export");
         break;
       case "applications":
         if (applications) exportToCSV(applications, "applications_export");
@@ -128,7 +141,7 @@ function ReportsContent() {
 
         <div className="p-4 sm:p-8 space-y-6">
           {/* Report Type Selection */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             {reportTypes.map((report) => (
               <button
                 key={report.id}
@@ -172,7 +185,7 @@ function ReportsContent() {
           </div>
 
           {/* Filters */}
-          {(activeReport === "applications" || activeReport === "hiring") && (
+          {(activeReport === "applications" || activeReport === "hiring" || activeReport === "attendance") && (
             <div className={`border rounded-xl p-4 sm:p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200"}`}>
               <h3 className={`font-medium mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
                 Filters
@@ -508,6 +521,98 @@ function ReportsContent() {
                   <p className={`text-sm ${isDark ? "text-slate-500" : "text-gray-400"}`}>
                     Showing 15 of {equipmentReport.equipment.length} records. Export to see all.
                   </p>
+                )}
+              </div>
+            )}
+
+            {/* Attendance Report */}
+            {activeReport === "attendance" && (
+              <div className="space-y-6">
+                {!startDate || !endDate ? (
+                  <div className={`text-center py-8 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    <svg className="w-12 h-12 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <p>Select a date range to view attendance records</p>
+                  </div>
+                ) : attendanceReport ? (
+                  <>
+                    {/* Summary Cards */}
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                      {attendanceReport.summary.map((s) => (
+                        <div key={s.name} className={`p-4 rounded-lg ${isDark ? "bg-slate-900/50" : "bg-gray-50"}`}>
+                          <p className={`font-medium truncate ${isDark ? "text-white" : "text-gray-900"}`}>{s.name}</p>
+                          <div className="flex items-center gap-2 mt-2">
+                            <span className="text-green-400 text-sm">{s.present}P</span>
+                            <span className="text-amber-400 text-sm">{s.late}L</span>
+                            <span className="text-red-400 text-sm">{s.absent}A</span>
+                          </div>
+                          <p className={`text-xs mt-1 ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                            {s.attendanceRate}% attendance
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Records Table */}
+                    <div className="overflow-x-auto">
+                      <p className={`mb-4 ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                        {attendanceReport.records.length} attendance records
+                      </p>
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className={isDark ? "text-slate-400" : "text-gray-500"}>
+                            <th className="text-left py-2 px-3">Date</th>
+                            <th className="text-left py-2 px-3">Employee</th>
+                            <th className="text-left py-2 px-3">Status</th>
+                            <th className="text-left py-2 px-3">Scheduled</th>
+                            <th className="text-left py-2 px-3">Actual</th>
+                            <th className="text-left py-2 px-3">Hours</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {attendanceReport.records.slice(0, 20).map((r) => (
+                            <tr key={r.id} className={`border-t ${isDark ? "border-slate-700" : "border-gray-100"}`}>
+                              <td className={`py-2 px-3 ${isDark ? "text-white" : "text-gray-900"}`}>
+                                {r.date}
+                              </td>
+                              <td className={`py-2 px-3 ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                                {r.personnelName}
+                              </td>
+                              <td className="py-2 px-3">
+                                <span className={`px-2 py-0.5 text-xs rounded-full ${
+                                  r.status === "present" ? "bg-green-500/20 text-green-400" :
+                                  r.status === "late" ? "bg-amber-500/20 text-amber-400" :
+                                  r.status === "excused" ? "bg-blue-500/20 text-blue-400" :
+                                  "bg-red-500/20 text-red-400"
+                                }`}>
+                                  {r.status.replace("_", " ")}
+                                </span>
+                              </td>
+                              <td className={`py-2 px-3 ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                                {r.scheduledStart} - {r.scheduledEnd}
+                              </td>
+                              <td className={`py-2 px-3 ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                                {r.actualStart || "-"} - {r.actualEnd || "-"}
+                              </td>
+                              <td className={`py-2 px-3 ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                                {r.hoursWorked.toFixed(1)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {attendanceReport.records.length > 20 && (
+                        <p className={`mt-4 text-sm ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                          Showing 20 of {attendanceReport.records.length} records. Export to see all.
+                        </p>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500"></div>
+                  </div>
                 )}
               </div>
             )}

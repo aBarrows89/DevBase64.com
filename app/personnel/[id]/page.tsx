@@ -313,6 +313,13 @@ function PersonnelDetailContent() {
   const safetyCompletions = useQuery(api.safetyChecklist.getPersonnelCompletions, { personnelId, limit: 20 });
   const portalLogin = useQuery(api.auth.getPersonnelPortalLogin, { personnelId });
 
+  // Schedule templates
+  const scheduleTemplates = useQuery(api.shiftTemplates.list, {});
+  const assignedScheduleTemplate = useQuery(
+    api.shiftTemplates.getById,
+    personnel?.defaultScheduleTemplateId ? { templateId: personnel.defaultScheduleTemplateId } : "skip"
+  );
+
   // Get linked application if exists
   const linkedApplication = useQuery(
     api.applications.getById,
@@ -337,6 +344,17 @@ function PersonnelDetailContent() {
   const recordTenureCheckIn = useMutation(api.personnel.recordTenureCheckIn);
   const dismissTenureNotifications = useMutation(api.notifications.dismissTenureCheckInNotifications);
   const createEmployeePortalLogin = useMutation(api.auth.createEmployeePortalLogin);
+  const resetEmployeePortalPassword = useMutation(api.auth.resetEmployeePortalPassword);
+  const updateScheduleAssignment = useMutation(api.personnel.updateScheduleAssignment);
+  const clearScheduleAssignment = useMutation(api.personnel.clearScheduleAssignment);
+  const createScheduleOverride = useMutation(api.personnel.createScheduleOverride);
+  const deleteScheduleOverride = useMutation(api.personnel.deleteScheduleOverride);
+
+  // Schedule overrides query - get upcoming 30 days
+  const scheduleOverrides = useQuery(api.personnel.getScheduleOverrides, {
+    personnelId,
+    startDate: new Date().toISOString().split("T")[0],
+  });
 
   // File upload state
   const [uploadingWriteUpId, setUploadingWriteUpId] = useState<Id<"writeUps"> | null>(null);
@@ -355,8 +373,20 @@ function PersonnelDetailContent() {
 
   // Portal login state
   const [isCreatingPortalLogin, setIsCreatingPortalLogin] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [showTempPasswordModal, setShowTempPasswordModal] = useState(false);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [selectedScheduleTemplateId, setSelectedScheduleTemplateId] = useState<Id<"shiftTemplates"> | null>(null);
   const [tempPassword, setTempPassword] = useState("");
+  const [showOverrideModal, setShowOverrideModal] = useState(false);
+  const [overrideForm, setOverrideForm] = useState({
+    date: new Date().toISOString().split("T")[0],
+    overrideType: "day_off" as "day_off" | "modified_hours" | "extra_shift",
+    startTime: "08:00",
+    endTime: "17:00",
+    reason: "",
+  });
+  const [isCreatingOverride, setIsCreatingOverride] = useState(false);
 
   // Form states
   const [writeUpForm, setWriteUpForm] = useState({
@@ -1028,19 +1058,283 @@ function PersonnelDetailContent() {
                     </button>
                   )}
                   {portalLogin && (
-                    <span className={`px-3 py-1 text-sm font-medium rounded border ${
-                      portalLogin.isActive
-                        ? "bg-green-500/20 text-green-400 border-green-500/30"
-                        : "bg-red-500/20 text-red-400 border-red-500/30"
-                    }`}>
-                      {portalLogin.isActive ? "Active" : "Inactive"}
-                    </span>
+                    <div className="flex items-center gap-3">
+                      {canManagePersonnel && (
+                        <button
+                          onClick={async () => {
+                            if (!confirm("Reset this employee's portal password? They will be given a new temporary password and forced to change it on next login.")) {
+                              return;
+                            }
+                            setIsResettingPassword(true);
+                            try {
+                              const result = await resetEmployeePortalPassword({
+                                personnelId,
+                                adminUserId: user!._id,
+                              });
+                              if (result.success && result.tempPassword) {
+                                setTempPassword(result.tempPassword);
+                                setShowTempPasswordModal(true);
+                              } else {
+                                alert(result.error || "Failed to reset password");
+                              }
+                            } catch (error) {
+                              console.error("Failed to reset password:", error);
+                              alert("An error occurred while resetting password");
+                            } finally {
+                              setIsResettingPassword(false);
+                            }
+                          }}
+                          disabled={isResettingPassword}
+                          className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors flex items-center gap-2 ${
+                            isDark
+                              ? "bg-amber-500/20 text-amber-400 hover:bg-amber-500/30"
+                              : "bg-amber-100 text-amber-700 hover:bg-amber-200"
+                          } disabled:opacity-50`}
+                        >
+                          {isResettingPassword ? (
+                            <>
+                              <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                              </svg>
+                              Resetting...
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                              </svg>
+                              Reset Password
+                            </>
+                          )}
+                        </button>
+                      )}
+                      <span className={`px-3 py-1 text-sm font-medium rounded border ${
+                        portalLogin.isActive
+                          ? "bg-green-500/20 text-green-400 border-green-500/30"
+                          : "bg-red-500/20 text-red-400 border-red-500/30"
+                      }`}>
+                        {portalLogin.isActive ? "Active" : "Inactive"}
+                      </span>
+                    </div>
                   )}
                 </div>
                 {!personnel.email && !portalLogin && (
                   <p className={`mt-3 text-sm ${isDark ? "text-amber-400" : "text-amber-600"}`}>
                     Add an email address to this personnel record to enable portal login creation.
                   </p>
+                )}
+              </div>
+
+              {/* Schedule Assignment Section */}
+              <div className={`rounded-xl p-6 ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isDark ? "bg-blue-500/20" : "bg-blue-100"}`}>
+                      <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                        Schedule Assignment
+                      </h2>
+                      <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                        {personnel.defaultScheduleTemplateId
+                          ? "Assigned to schedule template"
+                          : "No schedule template assigned"
+                        }
+                      </p>
+                    </div>
+                  </div>
+                  {canManagePersonnel && (
+                    <button
+                      onClick={() => setShowScheduleModal(true)}
+                      className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+                        isDark
+                          ? "bg-blue-500 hover:bg-blue-400 text-white"
+                          : "bg-blue-600 hover:bg-blue-700 text-white"
+                      }`}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                      {personnel.defaultScheduleTemplateId ? "Change Schedule" : "Assign Schedule"}
+                    </button>
+                  )}
+                </div>
+                {personnel.defaultScheduleTemplateId && assignedScheduleTemplate && (
+                  <div className={`mt-4 p-4 rounded-lg ${isDark ? "bg-slate-700/50" : "bg-gray-50"}`}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                          {assignedScheduleTemplate.name}
+                        </p>
+                        <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                          {assignedScheduleTemplate.departments?.length || 0} shifts configured
+                        </p>
+                      </div>
+                      {canManagePersonnel && (
+                        <button
+                          onClick={async () => {
+                            if (confirm("Remove schedule assignment?")) {
+                              try {
+                                await clearScheduleAssignment({
+                                  personnelId: personnel._id,
+                                  userId: user!._id
+                                });
+                              } catch (error) {
+                                console.error("Failed to clear schedule:", error);
+                                alert("Failed to clear schedule assignment");
+                              }
+                            }
+                          }}
+                          className={`px-3 py-1 text-sm rounded-lg transition-colors ${
+                            isDark
+                              ? "text-red-400 hover:bg-red-500/20"
+                              : "text-red-600 hover:bg-red-50"
+                          }`}
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Schedule Overrides Section */}
+              <div className={`rounded-xl p-6 ${isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isDark ? "bg-purple-500/20" : "bg-purple-100"}`}>
+                      <svg className="w-6 h-6 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                        Schedule Overrides
+                      </h2>
+                      <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                        One-time schedule changes (days off, modified hours)
+                      </p>
+                    </div>
+                  </div>
+                  {canManagePersonnel && (
+                    <button
+                      onClick={() => setShowOverrideModal(true)}
+                      className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+                        isDark
+                          ? "bg-purple-500 hover:bg-purple-400 text-white"
+                          : "bg-purple-600 hover:bg-purple-700 text-white"
+                      }`}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      Add Override
+                    </button>
+                  )}
+                </div>
+
+                {/* Overrides List */}
+                {scheduleOverrides && scheduleOverrides.length > 0 ? (
+                  <div className="space-y-2">
+                    {scheduleOverrides.map((override) => (
+                      <div
+                        key={override._id}
+                        className={`p-4 rounded-lg flex items-center justify-between ${
+                          isDark ? "bg-slate-700/50" : "bg-gray-50"
+                        }`}
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                            override.overrideType === "day_off"
+                              ? isDark ? "bg-red-500/20" : "bg-red-100"
+                              : override.overrideType === "modified_hours"
+                              ? isDark ? "bg-amber-500/20" : "bg-amber-100"
+                              : isDark ? "bg-green-500/20" : "bg-green-100"
+                          }`}>
+                            {override.overrideType === "day_off" ? (
+                              <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            ) : override.overrideType === "modified_hours" ? (
+                              <svg className="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            ) : (
+                              <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                              </svg>
+                            )}
+                          </div>
+                          <div>
+                            <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                              {new Date(override.date + "T00:00:00").toLocaleDateString("en-US", {
+                                weekday: "short",
+                                month: "short",
+                                day: "numeric",
+                              })}
+                              {" - "}
+                              {override.overrideType === "day_off" && "Day Off"}
+                              {override.overrideType === "modified_hours" && `Modified Hours (${override.startTime} - ${override.endTime})`}
+                              {override.overrideType === "extra_shift" && `Extra Shift (${override.startTime} - ${override.endTime})`}
+                            </p>
+                            {override.reason && (
+                              <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                                {override.reason}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className={`px-2 py-1 text-xs rounded-full ${
+                            override.status === "approved"
+                              ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                              : override.status === "pending"
+                              ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                              : "bg-red-500/20 text-red-400 border border-red-500/30"
+                          }`}>
+                            {override.status}
+                          </span>
+                          {canManagePersonnel && (
+                            <button
+                              onClick={async () => {
+                                if (confirm("Delete this schedule override?")) {
+                                  try {
+                                    await deleteScheduleOverride({
+                                      overrideId: override._id,
+                                      userId: user!._id,
+                                    });
+                                  } catch (error) {
+                                    console.error("Failed to delete override:", error);
+                                    alert("Failed to delete override");
+                                  }
+                                }
+                              }}
+                              className={`p-1 rounded-lg transition-colors ${
+                                isDark
+                                  ? "text-red-400 hover:bg-red-500/20"
+                                  : "text-red-600 hover:bg-red-50"
+                              }`}
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className={`text-center py-8 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    <svg className="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <p>No upcoming schedule overrides</p>
+                  </div>
                 )}
               </div>
 
@@ -1314,7 +1608,7 @@ function PersonnelDetailContent() {
                               </p>
                               <p className={`text-xs ${isDark ? "text-slate-500" : "text-gray-500"}`}>
                                 {milestones.insuranceEligible
-                                  ? "Reached at 90 days"
+                                  ? "Reached at 60 days"
                                   : `${milestones.daysToInsurance} days remaining`}
                               </p>
                             </div>
@@ -3002,6 +3296,299 @@ function PersonnelDetailContent() {
               >
                 Done
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* Schedule Assignment Modal */}
+        {showScheduleModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className={`w-full max-w-lg rounded-xl p-6 ${isDark ? "bg-slate-800" : "bg-white"}`}>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className={`text-xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  Assign Schedule Template
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowScheduleModal(false);
+                    setSelectedScheduleTemplateId(null);
+                  }}
+                  className={`p-2 rounded-lg transition-colors ${isDark ? "hover:bg-slate-700 text-slate-400" : "hover:bg-gray-100 text-gray-500"}`}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <p className={`text-sm mb-4 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                Select a schedule template to assign to {personnel?.firstName} {personnel?.lastName}.
+              </p>
+
+              <div className="space-y-2 max-h-80 overflow-y-auto mb-6">
+                {scheduleTemplates?.map((template) => (
+                  <button
+                    key={template._id}
+                    onClick={() => setSelectedScheduleTemplateId(template._id)}
+                    className={`w-full p-4 rounded-lg text-left transition-colors border ${
+                      selectedScheduleTemplateId === template._id
+                        ? isDark
+                          ? "bg-blue-500/20 border-blue-500"
+                          : "bg-blue-50 border-blue-500"
+                        : isDark
+                          ? "bg-slate-700/50 border-slate-600 hover:border-slate-500"
+                          : "bg-gray-50 border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                          {template.name}
+                        </p>
+                        <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                          {template.locationName} - {template.departments?.length || 0} shifts
+                        </p>
+                      </div>
+                      {selectedScheduleTemplateId === template._id && (
+                        <svg className="w-5 h-5 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
+                        </svg>
+                      )}
+                    </div>
+                  </button>
+                ))}
+                {(!scheduleTemplates || scheduleTemplates.length === 0) && (
+                  <p className={`text-center py-8 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                    No schedule templates available. Create one from the Scheduling page.
+                  </p>
+                )}
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowScheduleModal(false);
+                    setSelectedScheduleTemplateId(null);
+                  }}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
+                    isDark
+                      ? "bg-slate-700 hover:bg-slate-600 text-white"
+                      : "bg-gray-100 hover:bg-gray-200 text-gray-700"
+                  }`}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!selectedScheduleTemplateId || !user) return;
+                    try {
+                      await updateScheduleAssignment({
+                        personnelId: personnel!._id,
+                        defaultScheduleTemplateId: selectedScheduleTemplateId,
+                        userId: user._id,
+                      });
+                      setShowScheduleModal(false);
+                      setSelectedScheduleTemplateId(null);
+                    } catch (error) {
+                      console.error("Failed to assign schedule:", error);
+                      alert("Failed to assign schedule template");
+                    }
+                  }}
+                  disabled={!selectedScheduleTemplateId}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
+                    isDark
+                      ? "bg-blue-500 hover:bg-blue-400 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                      : "bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                  }`}
+                >
+                  Assign Schedule
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Schedule Override Modal */}
+        {showOverrideModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className={`w-full max-w-lg rounded-xl p-6 ${isDark ? "bg-slate-800" : "bg-white"}`}>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className={`text-xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  Add Schedule Override
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowOverrideModal(false);
+                    setOverrideForm({
+                      date: new Date().toISOString().split("T")[0],
+                      overrideType: "day_off",
+                      startTime: "08:00",
+                      endTime: "17:00",
+                      reason: "",
+                    });
+                  }}
+                  className={`p-2 rounded-lg transition-colors ${isDark ? "hover:bg-slate-700 text-slate-400" : "hover:bg-gray-100 text-gray-500"}`}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* Date */}
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                    Date
+                  </label>
+                  <input
+                    type="date"
+                    value={overrideForm.date}
+                    onChange={(e) => setOverrideForm({ ...overrideForm, date: e.target.value })}
+                    min={new Date().toISOString().split("T")[0]}
+                    className={`w-full px-4 py-2 rounded-lg border ${
+                      isDark
+                        ? "bg-slate-700 border-slate-600 text-white"
+                        : "bg-white border-gray-300 text-gray-900"
+                    }`}
+                  />
+                </div>
+
+                {/* Override Type */}
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                    Override Type
+                  </label>
+                  <select
+                    value={overrideForm.overrideType}
+                    onChange={(e) => setOverrideForm({ ...overrideForm, overrideType: e.target.value as "day_off" | "modified_hours" | "extra_shift" })}
+                    className={`w-full px-4 py-2 rounded-lg border ${
+                      isDark
+                        ? "bg-slate-700 border-slate-600 text-white"
+                        : "bg-white border-gray-300 text-gray-900"
+                    }`}
+                  >
+                    <option value="day_off">Day Off</option>
+                    <option value="modified_hours">Modified Hours</option>
+                    <option value="extra_shift">Extra Shift</option>
+                  </select>
+                </div>
+
+                {/* Time Fields - only show for modified_hours and extra_shift */}
+                {(overrideForm.overrideType === "modified_hours" || overrideForm.overrideType === "extra_shift") && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                        Start Time
+                      </label>
+                      <input
+                        type="time"
+                        value={overrideForm.startTime}
+                        onChange={(e) => setOverrideForm({ ...overrideForm, startTime: e.target.value })}
+                        className={`w-full px-4 py-2 rounded-lg border ${
+                          isDark
+                            ? "bg-slate-700 border-slate-600 text-white"
+                            : "bg-white border-gray-300 text-gray-900"
+                        }`}
+                      />
+                    </div>
+                    <div>
+                      <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                        End Time
+                      </label>
+                      <input
+                        type="time"
+                        value={overrideForm.endTime}
+                        onChange={(e) => setOverrideForm({ ...overrideForm, endTime: e.target.value })}
+                        className={`w-full px-4 py-2 rounded-lg border ${
+                          isDark
+                            ? "bg-slate-700 border-slate-600 text-white"
+                            : "bg-white border-gray-300 text-gray-900"
+                        }`}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Reason */}
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                    Reason (optional)
+                  </label>
+                  <textarea
+                    value={overrideForm.reason}
+                    onChange={(e) => setOverrideForm({ ...overrideForm, reason: e.target.value })}
+                    placeholder="e.g., Doctor's appointment, personal day, covering for another employee..."
+                    rows={3}
+                    className={`w-full px-4 py-2 rounded-lg border ${
+                      isDark
+                        ? "bg-slate-700 border-slate-600 text-white placeholder-slate-400"
+                        : "bg-white border-gray-300 text-gray-900 placeholder-gray-400"
+                    }`}
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => {
+                    setShowOverrideModal(false);
+                    setOverrideForm({
+                      date: new Date().toISOString().split("T")[0],
+                      overrideType: "day_off",
+                      startTime: "08:00",
+                      endTime: "17:00",
+                      reason: "",
+                    });
+                  }}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
+                    isDark
+                      ? "bg-slate-700 hover:bg-slate-600 text-white"
+                      : "bg-gray-100 hover:bg-gray-200 text-gray-700"
+                  }`}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!user || !personnel) return;
+                    setIsCreatingOverride(true);
+                    try {
+                      await createScheduleOverride({
+                        personnelId: personnel._id,
+                        date: overrideForm.date,
+                        overrideType: overrideForm.overrideType,
+                        startTime: overrideForm.overrideType !== "day_off" ? overrideForm.startTime : undefined,
+                        endTime: overrideForm.overrideType !== "day_off" ? overrideForm.endTime : undefined,
+                        reason: overrideForm.reason || undefined,
+                        autoApprove: true, // Admin-created overrides are auto-approved
+                        userId: user._id,
+                      });
+                      setShowOverrideModal(false);
+                      setOverrideForm({
+                        date: new Date().toISOString().split("T")[0],
+                        overrideType: "day_off",
+                        startTime: "08:00",
+                        endTime: "17:00",
+                        reason: "",
+                      });
+                    } catch (error) {
+                      console.error("Failed to create override:", error);
+                      alert("Failed to create schedule override");
+                    } finally {
+                      setIsCreatingOverride(false);
+                    }
+                  }}
+                  disabled={isCreatingOverride || !overrideForm.date}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
+                    isDark
+                      ? "bg-purple-500 hover:bg-purple-400 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                      : "bg-purple-600 hover:bg-purple-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                  }`}
+                >
+                  {isCreatingOverride ? "Creating..." : "Create Override"}
+                </button>
+              </div>
             </div>
           </div>
         )}
