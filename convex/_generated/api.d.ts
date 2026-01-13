@@ -36,6 +36,7 @@ import type * as migrations from "../migrations.js";
 import type * as mileage from "../mileage.js";
 import type * as notifications from "../notifications.js";
 import type * as onboardingDocuments from "../onboardingDocuments.js";
+import type * as orgChart from "../orgChart.js";
 import type * as overtime from "../overtime.js";
 import type * as payrollCompanies from "../payrollCompanies.js";
 import type * as personnel from "../personnel.js";
@@ -90,6 +91,7 @@ declare const fullApi: ApiFromModules<{
   mileage: typeof mileage;
   notifications: typeof notifications;
   onboardingDocuments: typeof onboardingDocuments;
+  orgChart: typeof orgChart;
   overtime: typeof overtime;
   payrollCompanies: typeof payrollCompanies;
   personnel: typeof personnel;
