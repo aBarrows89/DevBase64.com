@@ -52,8 +52,10 @@ function ApplicationsContent() {
   const groupedApplications = useQuery(api.applications.getByStatusGrouped);
   const stats = useQuery(api.applications.getStats);
   const recentInterviews = useQuery(api.applications.getRecentlyInterviewed) || [];
+  const jobs = useQuery(api.jobs.getAll) || [];
   const updateStatus = useMutation(api.applications.updateStatus);
   const updateStatusWithActivity = useMutation(api.applications.updateStatusWithActivity);
+  const updateAppliedJob = useMutation(api.applications.updateAppliedJob);
   const deleteApplication = useMutation(api.applications.remove);
 
   const [viewMode, setViewMode] = useState<"table" | "kanban">("table");
@@ -65,6 +67,17 @@ function ApplicationsContent() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [draggedApp, setDraggedApp] = useState<Id<"applications"> | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
+  const [editingJobId, setEditingJobId] = useState<Id<"applications"> | null>(null);
+
+  // Handle job change
+  const handleJobChange = async (applicationId: Id<"applications">, jobId: Id<"jobs">) => {
+    try {
+      await updateAppliedJob({ applicationId, jobId });
+      setEditingJobId(null);
+    } catch (error) {
+      console.error("Failed to update job:", error);
+    }
+  };
 
   const handleSort = (column: "score" | "position" | "date") => {
     if (sortBy === column) {
@@ -808,7 +821,52 @@ function ApplicationsContent() {
                         </div>
                       </td>
                       <td className={`px-6 py-4 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
-                        {app.appliedJobTitle}
+                        {editingJobId === app._id ? (
+                          <select
+                            value={app.appliedJobId || ""}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              if (e.target.value) {
+                                handleJobChange(app._id, e.target.value as Id<"jobs">);
+                              }
+                            }}
+                            onBlur={() => setEditingJobId(null)}
+                            onClick={(e) => e.stopPropagation()}
+                            autoFocus
+                            className={`w-full px-2 py-1 text-sm rounded border ${
+                              isDark
+                                ? "bg-slate-700 border-slate-600 text-white"
+                                : "bg-white border-gray-300 text-gray-900"
+                            } focus:outline-none focus:ring-2 focus:ring-cyan-500`}
+                          >
+                            <option value="">Select Job...</option>
+                            {jobs.filter(j => j.isActive).map((job) => (
+                              <option key={job._id} value={job._id}>
+                                {job.title}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <span>{app.appliedJobTitle}</span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingJobId(app._id);
+                              }}
+                              className={`p-1 rounded transition-colors ${
+                                isDark
+                                  ? "text-cyan-400 hover:bg-slate-700 hover:text-cyan-300"
+                                  : "text-blue-500 hover:bg-blue-50 hover:text-blue-600"
+                              }`}
+                              title="Change job position"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                              </svg>
+                            </button>
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         {app.candidateAnalysis ? (

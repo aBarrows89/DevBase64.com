@@ -37,6 +37,7 @@ import type * as mileage from "../mileage.js";
 import type * as notifications from "../notifications.js";
 import type * as onboardingDocuments from "../onboardingDocuments.js";
 import type * as overtime from "../overtime.js";
+import type * as payrollCompanies from "../payrollCompanies.js";
 import type * as personnel from "../personnel.js";
 import type * as projectSuggestions from "../projectSuggestions.js";
 import type * as projects from "../projects.js";
@@ -51,6 +52,7 @@ import type * as systemBanners from "../systemBanners.js";
 import type * as tasks from "../tasks.js";
 import type * as timeClock from "../timeClock.js";
 import type * as timeOffRequests from "../timeOffRequests.js";
+import type * as timesheetApprovals from "../timesheetApprovals.js";
 import type * as writeUps from "../writeUps.js";
 
 import type {
@@ -89,6 +91,7 @@ declare const fullApi: ApiFromModules<{
   notifications: typeof notifications;
   onboardingDocuments: typeof onboardingDocuments;
   overtime: typeof overtime;
+  payrollCompanies: typeof payrollCompanies;
   personnel: typeof personnel;
   projectSuggestions: typeof projectSuggestions;
   projects: typeof projects;
@@ -103,6 +106,7 @@ declare const fullApi: ApiFromModules<{
   tasks: typeof tasks;
   timeClock: typeof timeClock;
   timeOffRequests: typeof timeOffRequests;
+  timesheetApprovals: typeof timesheetApprovals;
   writeUps: typeof writeUps;
 }>;
 

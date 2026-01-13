@@ -360,6 +360,7 @@ export default defineSchema({
     position: v.string(), // Job title
     department: v.string(), // "Warehouse", "Sales", "Management", etc.
     locationId: v.optional(v.id("locations")), // Assigned work location
+    payrollCompanyId: v.optional(v.id("payrollCompanies")), // For multi-company payroll
     employeeType: v.string(), // "full_time" | "part_time" | "seasonal"
     positionType: v.optional(v.string()), // "hourly" | "salaried" | "management" - Execs/salaried only visible to payroll_manager
     hireDate: v.string(), // YYYY-MM-DD
@@ -1231,6 +1232,57 @@ export default defineSchema({
     .index("by_personnel", ["personnelId"])
     .index("by_pay_date", ["payDate"])
     .index("by_personnel_date", ["personnelId", "payDate"]),
+
+  // Timesheet Approvals (CFO workflow)
+  // ============ PAYROLL COMPANIES ============
+  // For multi-company payroll (separate companies for different entities)
+  payrollCompanies: defineTable({
+    name: v.string(), // Company name (e.g., "Import Export Tire", "IE Logistics")
+    code: v.string(), // Short code (e.g., "IET", "IEL")
+    // QuickBooks connection for this company
+    qbCompanyName: v.optional(v.string()),
+    qbConnectionId: v.optional(v.id("qbConnection")),
+    // Departments that belong to this company
+    departments: v.array(v.string()), // e.g., ["Warehouse", "Shipping"]
+    // Settings
+    isActive: v.boolean(),
+    payPeriodReference: v.optional(v.string()), // If different pay schedule than default
+    payPeriodDays: v.optional(v.number()), // If different pay period length
+    // Metadata
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_code", ["code"])
+    .index("by_active", ["isActive"]),
+
+  timesheetApprovals: defineTable({
+    payPeriodStart: v.string(), // YYYY-MM-DD
+    payPeriodEnd: v.string(), // YYYY-MM-DD
+    payrollCompanyId: v.optional(v.id("payrollCompanies")), // Which company this approval is for
+    status: v.string(), // "pending" | "approved" | "locked"
+    // Summary stats
+    totalEmployees: v.number(),
+    totalRegularHours: v.number(),
+    totalOvertimeHours: v.number(),
+    totalHours: v.number(),
+    // Issues flagged
+    issueCount: v.optional(v.number()), // Missing entries, corrections pending, etc.
+    // Approval details
+    approvedBy: v.optional(v.id("users")),
+    approvedAt: v.optional(v.number()),
+    approvalNotes: v.optional(v.string()),
+    // Lock prevents further edits
+    lockedAt: v.optional(v.number()),
+    lockedBy: v.optional(v.id("users")),
+    // QB export tracking
+    exportedToQB: v.optional(v.boolean()),
+    exportedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_pay_period", ["payPeriodStart"])
+    .index("by_status", ["status"])
+    .index("by_company_period", ["payrollCompanyId", "payPeriodStart"]),
 
   // Employee App Push Tokens (for notifications)
   employeePushTokens: defineTable({

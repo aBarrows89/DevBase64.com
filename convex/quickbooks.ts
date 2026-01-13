@@ -334,11 +334,25 @@ export const getPendingTimeExports = query({
 });
 
 // Calculate and create pending time exports for a date range
+// NOTE: This now requires the pay period to be LOCKED before exports can be created
 export const calculatePendingTimeExports = mutation({
   args: {
     weekStartDate: v.string(), // YYYY-MM-DD (should be Sunday)
+    payPeriodStart: v.optional(v.string()), // If provided, check approval status
   },
   handler: async (ctx, args) => {
+    // Check if the pay period is approved/locked (required before QB export)
+    if (args.payPeriodStart) {
+      const approval = await ctx.db
+        .query("timesheetApprovals")
+        .withIndex("by_pay_period", (q) => q.eq("payPeriodStart", args.payPeriodStart!))
+        .first();
+
+      if (!approval || approval.status !== "locked") {
+        throw new Error("Pay period must be locked before exporting to QuickBooks. Please lock the pay period first.");
+      }
+    }
+
     // Get all active personnel with QB mappings
     const mappings = await ctx.db.query("qbEmployeeMapping").collect();
     const personnelIds = mappings.map((m) => m.personnelId);
@@ -684,6 +698,170 @@ export const getSyncStats = query({
         unmapped: activePersonnel.length - mappings.length,
       },
       recentLogs,
+    };
+  },
+});
+
+// ============ PAY PERIOD EXPORT ============
+
+// Get pay periods that are ready to export (locked but not yet exported to QB)
+export const getExportablePayPeriods = query({
+  args: {},
+  handler: async (ctx) => {
+    const approvals = await ctx.db
+      .query("timesheetApprovals")
+      .withIndex("by_status", (q) => q.eq("status", "locked"))
+      .collect();
+
+    // Filter to those not yet exported
+    const exportable = approvals.filter((a) => !a.exportedToQB);
+
+    return exportable.map((a) => ({
+      payPeriodStart: a.payPeriodStart,
+      payPeriodEnd: a.payPeriodEnd,
+      totalEmployees: a.totalEmployees,
+      totalHours: a.totalHours,
+      lockedAt: a.lockedAt,
+    }));
+  },
+});
+
+// Export an entire locked pay period to QuickBooks queue
+export const exportPayPeriodToQB = mutation({
+  args: {
+    payPeriodStart: v.string(),
+    payPeriodEnd: v.string(),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    // Verify pay period is locked
+    const approval = await ctx.db
+      .query("timesheetApprovals")
+      .withIndex("by_pay_period", (q) => q.eq("payPeriodStart", args.payPeriodStart))
+      .first();
+
+    if (!approval) {
+      throw new Error("Pay period not found");
+    }
+
+    if (approval.status !== "locked") {
+      throw new Error("Pay period must be locked before exporting to QuickBooks");
+    }
+
+    if (approval.exportedToQB) {
+      throw new Error("Pay period has already been exported to QuickBooks");
+    }
+
+    // Get all active personnel with QB mappings
+    const mappings = await ctx.db.query("qbEmployeeMapping").collect();
+    const personnelIds = mappings.map((m) => m.personnelId);
+
+    const now = Date.now();
+    const created: Id<"qbPendingTimeExport">[] = [];
+
+    for (const personnelId of personnelIds) {
+      // Check if already exists
+      const existing = await ctx.db
+        .query("qbPendingTimeExport")
+        .withIndex("by_personnel_week", (q) =>
+          q.eq("personnelId", personnelId).eq("weekStartDate", args.payPeriodStart)
+        )
+        .first();
+
+      if (existing) continue;
+
+      // Get time entries for this pay period
+      const entries = await ctx.db
+        .query("timeEntries")
+        .withIndex("by_personnel", (q) => q.eq("personnelId", personnelId))
+        .filter((q) =>
+          q.and(
+            q.gte(q.field("date"), args.payPeriodStart),
+            q.lte(q.field("date"), args.payPeriodEnd)
+          )
+        )
+        .collect();
+
+      if (entries.length === 0) continue;
+
+      // Calculate hours from clock in/out pairs
+      let totalMinutes = 0;
+      const entriesByDate: Record<string, typeof entries> = {};
+
+      for (const entry of entries) {
+        if (!entriesByDate[entry.date]) entriesByDate[entry.date] = [];
+        entriesByDate[entry.date].push(entry);
+      }
+
+      for (const date in entriesByDate) {
+        const dayEntries = entriesByDate[date].sort((a, b) => a.timestamp - b.timestamp);
+        let clockIn: number | null = null;
+        let breakStart: number | null = null;
+        let breakMinutes = 0;
+
+        for (const entry of dayEntries) {
+          if (entry.type === "clock_in") {
+            clockIn = entry.timestamp;
+          } else if (entry.type === "break_start" && clockIn) {
+            breakStart = entry.timestamp;
+          } else if (entry.type === "break_end" && breakStart) {
+            breakMinutes += (entry.timestamp - breakStart) / 60000;
+            breakStart = null;
+          } else if (entry.type === "clock_out" && clockIn) {
+            const workMinutes = (entry.timestamp - clockIn) / 60000 - breakMinutes;
+            totalMinutes += Math.max(0, workMinutes);
+            clockIn = null;
+            breakMinutes = 0;
+          }
+        }
+      }
+
+      const totalHours = Math.round((totalMinutes / 60) * 100) / 100;
+      const regularHours = Math.min(totalHours, 40);
+      const overtimeHours = Math.max(0, totalHours - 40);
+
+      if (totalHours > 0) {
+        const id = await ctx.db.insert("qbPendingTimeExport", {
+          personnelId,
+          weekStartDate: args.payPeriodStart,
+          weekEndDate: args.payPeriodEnd,
+          totalHours,
+          regularHours,
+          overtimeHours,
+          status: "approved", // Auto-approve since pay period is locked
+          approvedBy: args.userId,
+          approvedAt: now,
+          createdAt: now,
+          updatedAt: now,
+        });
+
+        // Add to sync queue
+        await ctx.db.insert("qbSyncQueue", {
+          type: "time_entry",
+          action: "add",
+          referenceId: id,
+          referenceType: "qbPendingTimeExport",
+          status: "pending",
+          priority: 5,
+          attempts: 0,
+          maxAttempts: 3,
+          createdAt: now,
+        });
+
+        created.push(id);
+      }
+    }
+
+    // Mark the pay period as exported
+    await ctx.db.patch(approval._id, {
+      exportedToQB: true,
+      exportedAt: now,
+      updatedAt: now,
+    });
+
+    return {
+      exportedCount: created.length,
+      exportIds: created,
     };
   },
 });

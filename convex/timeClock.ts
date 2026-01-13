@@ -912,6 +912,178 @@ export const getAllClockStatuses = query({
   },
 });
 
+// Get manager dashboard data (all employee statuses for today)
+export const getManagerDashboard = query({
+  args: {
+    locationId: v.optional(v.id("locations")), // Filter by location if needed
+  },
+  handler: async (ctx, args) => {
+    const today = new Date().toISOString().split("T")[0];
+    const now = Date.now();
+
+    // Get all active personnel
+    let personnel = await ctx.db
+      .query("personnel")
+      .withIndex("by_status", (q) => q.eq("status", "active"))
+      .collect();
+
+    // Filter by location if specified
+    if (args.locationId) {
+      personnel = personnel.filter((p) => p.locationId === args.locationId);
+    }
+
+    // Get all entries for today
+    const allEntries = await ctx.db
+      .query("timeEntries")
+      .withIndex("by_date", (q) => q.eq("date", today))
+      .collect();
+
+    // Get today's call-offs
+    const callOffs = await ctx.db
+      .query("callOffs")
+      .withIndex("by_date", (q) => q.eq("date", today))
+      .collect();
+
+    // Get unacknowledged call-offs
+    const unacknowledgedCallOffs = await ctx.db
+      .query("callOffs")
+      .filter((q) => q.eq(q.field("acknowledgedAt"), undefined))
+      .collect();
+
+    // Group entries by personnel
+    const entriesByPersonnel = new Map<string, typeof allEntries>();
+    for (const entry of allEntries) {
+      if (!entriesByPersonnel.has(entry.personnelId)) {
+        entriesByPersonnel.set(entry.personnelId, []);
+      }
+      entriesByPersonnel.get(entry.personnelId)!.push(entry);
+    }
+
+    // Call-off map
+    const callOffPersonnelIds = new Set(callOffs.map((c) => c.personnelId));
+
+    // Build employee status list
+    const employees = await Promise.all(
+      personnel.map(async (person) => {
+        const entries = entriesByPersonnel.get(person._id) || [];
+        const sorted = entries.sort((a, b) => a.timestamp - b.timestamp);
+        const lastEntry = sorted[sorted.length - 1];
+        const hasCalledOff = callOffPersonnelIds.has(person._id);
+
+        // Determine status
+        let status: "clocked_in" | "on_break" | "clocked_out" | "not_clocked_in" | "called_off";
+        if (hasCalledOff) {
+          status = "called_off";
+        } else if (!lastEntry) {
+          status = "not_clocked_in";
+        } else {
+          switch (lastEntry.type) {
+            case "clock_in":
+              status = "clocked_in";
+              break;
+            case "break_start":
+              status = "on_break";
+              break;
+            case "break_end":
+              status = "clocked_in";
+              break;
+            case "clock_out":
+              status = "clocked_out";
+              break;
+            default:
+              status = "not_clocked_in";
+          }
+        }
+
+        // Calculate hours worked
+        let totalMinutes = 0;
+        let breakMinutes = 0;
+        let clockInTime: number | undefined;
+        let breakStartTime: number | null = null;
+
+        for (const entry of sorted) {
+          if (entry.type === "clock_in" && !clockInTime) {
+            clockInTime = entry.timestamp;
+          } else if (entry.type === "break_start") {
+            breakStartTime = entry.timestamp;
+          } else if (entry.type === "break_end" && breakStartTime) {
+            breakMinutes += (entry.timestamp - breakStartTime) / (1000 * 60);
+            breakStartTime = null;
+          } else if (entry.type === "clock_out" && clockInTime) {
+            totalMinutes += (entry.timestamp - clockInTime) / (1000 * 60);
+          }
+        }
+
+        // If still clocked in, add time up to now
+        if (clockInTime && status !== "clocked_out") {
+          if (status === "on_break" && breakStartTime) {
+            // Don't count break time
+            totalMinutes += (breakStartTime - clockInTime) / (1000 * 60);
+          } else {
+            totalMinutes += (now - clockInTime) / (1000 * 60);
+          }
+        }
+
+        const hoursWorked = Math.round(((totalMinutes - breakMinutes) / 60) * 100) / 100;
+
+        // Check if late (look at first clock_in entry)
+        const firstClockIn = sorted.find((e) => e.type === "clock_in");
+        const isLate = firstClockIn?.isLate || false;
+        const minutesLate = firstClockIn?.minutesLate;
+
+        return {
+          personnelId: person._id,
+          name: `${person.firstName} ${person.lastName}`,
+          department: person.department,
+          position: person.position,
+          status,
+          clockInTime,
+          hoursWorked: hoursWorked > 0 ? hoursWorked : undefined,
+          isLate,
+          minutesLate,
+        };
+      })
+    );
+
+    // Sort: clocked in first, then by name
+    const statusOrder = { clocked_in: 0, on_break: 1, not_clocked_in: 2, called_off: 3, clocked_out: 4 };
+    employees.sort((a, b) => {
+      const orderDiff = statusOrder[a.status] - statusOrder[b.status];
+      if (orderDiff !== 0) return orderDiff;
+      return a.name.localeCompare(b.name);
+    });
+
+    // Calculate summary stats
+    const clockedInCount = employees.filter((e) => e.status === "clocked_in" || e.status === "on_break").length;
+    const lateCount = employees.filter((e) => e.isLate && e.status !== "called_off").length;
+    const callOffCount = employees.filter((e) => e.status === "called_off").length;
+    const notClockedInCount = employees.filter((e) => e.status === "not_clocked_in").length;
+
+    // Enrich unacknowledged call-offs with personnel info
+    const unacknowledgedWithNames = await Promise.all(
+      unacknowledgedCallOffs.map(async (callOff) => {
+        const person = await ctx.db.get(callOff.personnelId);
+        return {
+          ...callOff,
+          personnelName: person ? `${person.firstName} ${person.lastName}` : "Unknown",
+        };
+      })
+    );
+
+    return {
+      employees,
+      summary: {
+        total: employees.length,
+        clockedIn: clockedInCount,
+        late: lateCount,
+        callOffs: callOffCount,
+        notClockedIn: notClockedInCount,
+      },
+      unacknowledgedCallOffs: unacknowledgedWithNames,
+    };
+  },
+});
+
 // Force clock out (manager action for employee who forgot)
 export const forceClockOut = mutation({
   args: {

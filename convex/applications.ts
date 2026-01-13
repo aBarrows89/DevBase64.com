@@ -499,6 +499,26 @@ export const updateNotes = mutation({
   },
 });
 
+// Update applied job (change the position they applied for)
+export const updateAppliedJob = mutation({
+  args: {
+    applicationId: v.id("applications"),
+    jobId: v.id("jobs"),
+  },
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get(args.jobId);
+    if (!job) throw new Error("Job not found");
+
+    await ctx.db.patch(args.applicationId, {
+      appliedJobId: args.jobId,
+      appliedJobTitle: job.title,
+      updatedAt: Date.now(),
+    });
+
+    return { success: true, jobTitle: job.title };
+  },
+});
+
 // Schedule an interview
 export const scheduleInterview = mutation({
   args: {
