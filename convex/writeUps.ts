@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 
 // Helper to check if a write-up is expired (90 days from date)
@@ -185,6 +185,20 @@ export const create = mutation({
       });
     }
 
+    // Send push notification to employee
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_personnel", (q) => q.eq("personnelId", args.personnelId))
+      .first();
+
+    if (user?.expoPushToken) {
+      await ctx.scheduler.runAfter(0, internal.writeUps.sendWriteUpPush, {
+        expoPushToken: user.expoPushToken,
+        category: args.category,
+        severity: args.severity,
+      });
+    }
+
     return writeUpId;
   },
 });
@@ -311,5 +325,51 @@ export const getAttachmentUrl = query({
   args: { storageId: v.id("_storage") },
   handler: async (ctx, args) => {
     return await ctx.storage.getUrl(args.storageId);
+  },
+});
+
+// ============ PUSH NOTIFICATIONS ============
+
+// Send push notification for write-up
+export const sendWriteUpPush = internalAction({
+  args: {
+    expoPushToken: v.string(),
+    category: v.string(),
+    severity: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const severityLabels: Record<string, string> = {
+      verbal_warning: "Verbal Warning",
+      written_warning: "Written Warning",
+      suspension: "Suspension",
+      termination: "Termination Notice",
+    };
+
+    const severityLabel = severityLabels[args.severity] || args.severity;
+
+    const message = {
+      to: args.expoPushToken,
+      sound: "default",
+      title: `${severityLabel} Issued`,
+      body: `You have received a ${severityLabel.toLowerCase()} for ${args.category}. Please review in the app.`,
+      data: { type: "writeup" },
+    };
+
+    try {
+      const response = await fetch("https://exp.host/--/api/v2/push/send", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Accept-encoding": "gzip, deflate",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(message),
+      });
+
+      return await response.json();
+    } catch (error) {
+      console.error("Failed to send write-up push notification:", error);
+      return null;
+    }
   },
 });

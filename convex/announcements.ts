@@ -1,5 +1,6 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalMutation, internalQuery, internalAction } from "./_generated/server";
+import { internal } from "./_generated/api";
 
 // Get all announcements (admin view)
 export const getAll = query({
@@ -210,11 +211,15 @@ export const create = mutation({
       updatedAt: now,
     });
 
-    // TODO: If sendPush is true, send push notifications to targeted employees
+    // If sendPush is true, schedule push notifications to targeted employees
     if (args.sendPush) {
-      await ctx.db.patch(announcementId, {
-        pushSent: true,
-        pushSentAt: now,
+      await ctx.scheduler.runAfter(0, internal.announcements.sendAnnouncementPush, {
+        announcementId,
+        title: args.title,
+        priority: args.priority,
+        targetType: args.targetType,
+        targetDepartments: args.targetDepartments,
+        targetLocationIds: args.targetLocationIds,
       });
     }
 
@@ -399,5 +404,148 @@ export const getById = query({
       isRead,
       readAt,
     };
+  },
+});
+
+// ============ PUSH NOTIFICATIONS ============
+
+// Internal action to send push notifications for announcements
+export const sendAnnouncementPush = internalAction({
+  args: {
+    announcementId: v.id("announcements"),
+    title: v.string(),
+    priority: v.string(),
+    targetType: v.string(),
+    targetDepartments: v.optional(v.array(v.string())),
+    targetLocationIds: v.optional(v.array(v.id("locations"))),
+  },
+  handler: async (ctx, args) => {
+    // Get all active personnel that match the targeting
+    let personnel = await ctx.runQuery(internal.announcements.getTargetedPersonnel, {
+      targetType: args.targetType,
+      targetDepartments: args.targetDepartments,
+      targetLocationIds: args.targetLocationIds,
+    });
+
+    // Get users with push tokens for these personnel
+    const usersWithTokens = await ctx.runQuery(internal.announcements.getUsersWithPushTokens, {
+      personnelIds: personnel.map((p: any) => p._id),
+    });
+
+    // Send push notifications
+    let sentCount = 0;
+    for (const user of usersWithTokens) {
+      if (user.expoPushToken) {
+        try {
+          await sendExpoPush(
+            user.expoPushToken,
+            args.priority === "urgent" ? `🚨 ${args.title}` : args.title,
+            args.priority === "urgent" ? "URGENT: Tap to read" : "New announcement - tap to read",
+            { type: "announcement", announcementId: args.announcementId }
+          );
+          sentCount++;
+        } catch (error) {
+          console.error(`Failed to send push to ${user.email}:`, error);
+        }
+      }
+    }
+
+    // Update announcement with push sent status
+    await ctx.runMutation(internal.announcements.markPushSent, {
+      announcementId: args.announcementId,
+      sentCount,
+    });
+
+    return { sentCount };
+  },
+});
+
+// Helper function to send Expo push notification
+async function sendExpoPush(
+  expoPushToken: string,
+  title: string,
+  body: string,
+  data?: Record<string, unknown>
+) {
+  const message = {
+    to: expoPushToken,
+    sound: "default",
+    title,
+    body,
+    data,
+  };
+
+  const response = await fetch("https://exp.host/--/api/v2/push/send", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Accept-encoding": "gzip, deflate",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(message),
+  });
+
+  return await response.json();
+}
+
+// Internal query to get personnel matching targeting criteria
+export const getTargetedPersonnel = internalQuery({
+  args: {
+    targetType: v.string(),
+    targetDepartments: v.optional(v.array(v.string())),
+    targetLocationIds: v.optional(v.array(v.id("locations"))),
+  },
+  handler: async (ctx, args) => {
+    let personnel = await ctx.db
+      .query("personnel")
+      .withIndex("by_status", (q) => q.eq("status", "active"))
+      .collect();
+
+    // Filter by targeting
+    if (args.targetType === "department" && args.targetDepartments) {
+      personnel = personnel.filter((p) =>
+        args.targetDepartments!.includes(p.department)
+      );
+    } else if (args.targetType === "location" && args.targetLocationIds) {
+      personnel = personnel.filter((p) =>
+        p.locationId && args.targetLocationIds!.includes(p.locationId)
+      );
+    }
+    // "all" - return all active personnel
+
+    return personnel;
+  },
+});
+
+// Internal query to get users with push tokens for specific personnel
+export const getUsersWithPushTokens = internalQuery({
+  args: {
+    personnelIds: v.array(v.id("personnel")),
+  },
+  handler: async (ctx, args) => {
+    const personnelIdSet = new Set(args.personnelIds);
+
+    const users = await ctx.db.query("users").collect();
+
+    return users.filter(
+      (u) =>
+        u.expoPushToken &&
+        u.personnelId &&
+        personnelIdSet.has(u.personnelId)
+    );
+  },
+});
+
+// Internal mutation to mark announcement as push sent
+export const markPushSent = internalMutation({
+  args: {
+    announcementId: v.id("announcements"),
+    sentCount: v.number(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.announcementId, {
+      pushSent: true,
+      pushSentAt: Date.now(),
+    });
   },
 });
