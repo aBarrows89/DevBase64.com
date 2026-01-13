@@ -994,6 +994,10 @@ export default defineSchema({
       lng: v.number(),
     })),
     notes: v.optional(v.string()),
+    // Late tracking (for clock_in entries)
+    scheduledStart: v.optional(v.string()), // HH:MM scheduled start time
+    minutesLate: v.optional(v.number()), // Minutes late (if any)
+    isLate: v.optional(v.boolean()), // True if more than 5 min grace period
     // Edit tracking
     editedBy: v.optional(v.id("users")), // If manually adjusted
     editedAt: v.optional(v.number()),

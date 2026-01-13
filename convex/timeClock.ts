@@ -1,6 +1,61 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalAction, internalQuery } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
+
+// Helper to get scheduled start time for an employee today
+async function getScheduledStartTime(
+  ctx: any,
+  personnelId: Id<"personnel">,
+  today: string
+): Promise<{ startTime: string; shiftName?: string } | null> {
+  // First check for specific shift assignment for today
+  const todayShifts = await ctx.db
+    .query("shifts")
+    .withIndex("by_date", (q: any) => q.eq("date", today))
+    .collect();
+
+  for (const shift of todayShifts) {
+    if (shift.assignedPersonnel.includes(personnelId)) {
+      return { startTime: shift.startTime, shiftName: shift.name };
+    }
+  }
+
+  // Fall back to schedule template
+  const personnel = await ctx.db.get(personnelId);
+  if (personnel?.defaultScheduleTemplateId) {
+    const template = await ctx.db.get(personnel.defaultScheduleTemplateId);
+    if (template?.departments) {
+      // Find department matching employee
+      for (const dept of template.departments) {
+        if (dept.assignedPersonnel?.includes(personnelId)) {
+          return { startTime: dept.startTime };
+        }
+      }
+      // If not found by personnel, match by department name
+      const empDept = template.departments.find(
+        (d: any) => d.name === personnel.department
+      );
+      if (empDept) {
+        return { startTime: empDept.startTime };
+      }
+    }
+  }
+
+  return null;
+}
+
+// Helper to parse time string to minutes since midnight
+function parseTimeToMinutes(time: string): number {
+  const [hours, minutes] = time.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+// Helper to get current time in minutes since midnight
+function getCurrentMinutes(): number {
+  const now = new Date();
+  return now.getHours() * 60 + now.getMinutes();
+}
 
 // ============ QUERIES ============
 
@@ -385,6 +440,7 @@ export const clockIn = mutation({
       lng: v.number(),
     })),
     notes: v.optional(v.string()),
+    bypassScheduleCheck: v.optional(v.boolean()), // For admin overrides
   },
   handler: async (ctx, args) => {
     const now = Date.now();
@@ -406,6 +462,36 @@ export const clockIn = mutation({
       }
     }
 
+    // Get scheduled start time and check for early clock-in
+    let minutesLate = 0;
+    let isLate = false;
+    let scheduledStart: string | null = null;
+
+    if (!args.bypassScheduleCheck) {
+      const schedule = await getScheduledStartTime(ctx, args.personnelId, today);
+
+      if (schedule) {
+        scheduledStart = schedule.startTime;
+        const scheduledMinutes = parseTimeToMinutes(schedule.startTime);
+        const currentMinutes = getCurrentMinutes();
+
+        // Block early clock-in (before scheduled start time)
+        if (currentMinutes < scheduledMinutes) {
+          const minutesEarly = scheduledMinutes - currentMinutes;
+          throw new Error(
+            `Cannot clock in yet. Your shift starts at ${schedule.startTime}. ` +
+            `Please wait ${minutesEarly} minute${minutesEarly === 1 ? '' : 's'}.`
+          );
+        }
+
+        // Check if late (more than 5 minute grace period)
+        const GRACE_PERIOD_MINUTES = 5;
+        minutesLate = currentMinutes - scheduledMinutes;
+        isLate = minutesLate > GRACE_PERIOD_MINUTES;
+      }
+    }
+
+    // Create the time entry
     const entryId = await ctx.db.insert("timeEntries", {
       personnelId: args.personnelId,
       date: today,
@@ -416,7 +502,27 @@ export const clockIn = mutation({
       gpsCoordinates: args.gpsCoordinates,
       notes: args.notes,
       createdAt: now,
+      // Late tracking
+      scheduledStart: scheduledStart || undefined,
+      minutesLate: minutesLate > 0 ? minutesLate : undefined,
+      isLate: isLate || undefined,
     });
+
+    // If late, send alerts to managers
+    if (isLate) {
+      const personnel = await ctx.db.get(args.personnelId);
+      const employeeName = personnel
+        ? `${personnel.firstName} ${personnel.lastName}`
+        : "Unknown Employee";
+
+      await ctx.scheduler.runAfter(0, internal.timeClock.sendLateAlert, {
+        personnelId: args.personnelId,
+        employeeName,
+        minutesLate,
+        scheduledStart: scheduledStart || "Unknown",
+        locationId: personnel?.locationId,
+      });
+    }
 
     return entryId;
   },
@@ -832,5 +938,124 @@ export const forceClockOut = mutation({
     });
 
     return entryId;
+  },
+});
+
+// ============ LATE ALERTS ============
+
+// Get users who should receive late alerts
+export const getLateAlertRecipients = internalQuery({
+  args: {
+    locationId: v.optional(v.id("locations")),
+  },
+  handler: async (ctx, args) => {
+    const users = await ctx.db.query("users").collect();
+    const recipientRoles = ["super_admin", "admin", "warehouse_director", "coo"];
+
+    // Get location manager if location specified
+    let locationManagerId: Id<"users"> | null = null;
+    if (args.locationId) {
+      const location = await ctx.db.get(args.locationId);
+      if (location?.managerId) {
+        locationManagerId = location.managerId;
+      }
+    }
+
+    const recipients = users.filter((u) => {
+      if (!u.isActive || !u.expoPushToken) return false;
+      // Include by role
+      if (recipientRoles.includes(u.role)) return true;
+      // Include location manager
+      if (locationManagerId && u._id === locationManagerId) return true;
+      return false;
+    });
+
+    return recipients.map((u) => ({
+      userId: u._id,
+      name: u.name,
+      expoPushToken: u.expoPushToken!,
+      role: u.role,
+    }));
+  },
+});
+
+// Send late alert push notification
+export const sendLateAlert = internalAction({
+  args: {
+    personnelId: v.id("personnel"),
+    employeeName: v.string(),
+    minutesLate: v.number(),
+    scheduledStart: v.string(),
+    locationId: v.optional(v.id("locations")),
+  },
+  handler: async (ctx, args) => {
+    const recipients = await ctx.runQuery(internal.timeClock.getLateAlertRecipients, {
+      locationId: args.locationId,
+    });
+
+    if (recipients.length === 0) {
+      console.log("No recipients for late alert");
+      return { sentCount: 0 };
+    }
+
+    let sentCount = 0;
+    for (const recipient of recipients) {
+      try {
+        const message = {
+          to: recipient.expoPushToken,
+          sound: "default",
+          title: "⏰ Late Clock-In",
+          body: `${args.employeeName} clocked in ${args.minutesLate} min late (scheduled: ${args.scheduledStart})`,
+          data: { type: "late_alert", personnelId: args.personnelId },
+        };
+
+        const response = await fetch("https://exp.host/--/api/v2/push/send", {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Accept-encoding": "gzip, deflate",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(message),
+        });
+
+        if (response.ok) {
+          sentCount++;
+        }
+      } catch (error) {
+        console.error(`Failed to send late alert to ${recipient.name}:`, error);
+      }
+    }
+
+    return { sentCount };
+  },
+});
+
+// Check for late patterns (more than 1x per week = flagged)
+export const checkLatePattern = internalQuery({
+  args: {
+    personnelId: v.id("personnel"),
+  },
+  handler: async (ctx, args) => {
+    // Get entries from the last 7 days
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    const weekAgoStr = weekAgo.toISOString().split("T")[0];
+
+    const entries = await ctx.db
+      .query("timeEntries")
+      .withIndex("by_personnel_date", (q) => q.eq("personnelId", args.personnelId))
+      .filter((q) => q.gte(q.field("date"), weekAgoStr))
+      .collect();
+
+    // Count late clock-ins
+    const lateCount = entries.filter(
+      (e) => e.type === "clock_in" && e.isLate
+    ).length;
+
+    return {
+      lateCountThisWeek: lateCount,
+      hasPattern: lateCount > 1,
+    };
   },
 });

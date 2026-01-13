@@ -1,5 +1,6 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalAction, internalQuery } from "./_generated/server";
+import { internal } from "./_generated/api";
 
 // Get all call-offs (admin view)
 export const getAll = query({
@@ -155,15 +156,23 @@ export const submit = mutation({
 
     // Get personnel to find their location manager
     const personnel = await ctx.db.get(args.personnelId);
+    const employeeName = personnel
+      ? `${personnel.firstName} ${personnel.lastName}`
+      : "Unknown Employee";
+
+    let locationManagerId: any = undefined;
+
     if (personnel?.locationId) {
       const location = await ctx.db.get(personnel.locationId);
       if (location?.managerId) {
-        // Create notification for manager
+        locationManagerId = location.managerId;
+
+        // Create notification for manager (in-app)
         await ctx.db.insert("notifications", {
           userId: location.managerId,
           type: "call_off",
           title: "Employee Call-Off",
-          message: `${personnel.firstName} ${personnel.lastName} called off for ${args.date}: ${args.reason}`,
+          message: `${employeeName} called off for ${args.date}: ${args.reason}`,
           link: `/call-offs`,
           relatedPersonnelId: args.personnelId,
           relatedId: callOffId,
@@ -178,6 +187,14 @@ export const submit = mutation({
         });
       }
     }
+
+    // Send push notifications to managers (location manager + directors + admins)
+    await ctx.scheduler.runAfter(0, internal.callOffs.sendCallOffPush, {
+      employeeName,
+      date: args.date,
+      reason: args.reason,
+      locationManagerId,
+    });
 
     return callOffId;
   },
@@ -303,5 +320,103 @@ export const getByDateRange = query({
     );
 
     return enriched;
+  },
+});
+
+// ============ PUSH NOTIFICATIONS ============
+
+// Get users who should receive call-off alerts
+export const getCallOffAlertRecipients = internalQuery({
+  args: {
+    locationManagerId: v.optional(v.id("users")),
+  },
+  handler: async (ctx, args) => {
+    // Get all users who should receive call-off alerts
+    // 1. Location manager
+    // 2. Warehouse directors
+    // 3. Admins/super_admins (owner oversight)
+    const users = await ctx.db.query("users").collect();
+
+    const recipientRoles = ["super_admin", "admin", "warehouse_director", "coo"];
+
+    const recipients = users.filter((u) => {
+      // Include if they have a notification role
+      if (recipientRoles.includes(u.role) && u.isActive && u.expoPushToken) {
+        return true;
+      }
+      // Include if they are the location manager
+      if (args.locationManagerId && u._id === args.locationManagerId && u.expoPushToken) {
+        return true;
+      }
+      return false;
+    });
+
+    return recipients.map((u) => ({
+      userId: u._id,
+      name: u.name,
+      expoPushToken: u.expoPushToken!,
+      role: u.role,
+    }));
+  },
+});
+
+// Send push notification for call-off
+export const sendCallOffPush = internalAction({
+  args: {
+    employeeName: v.string(),
+    date: v.string(),
+    reason: v.string(),
+    locationManagerId: v.optional(v.id("users")),
+  },
+  handler: async (ctx, args) => {
+    // Get recipients
+    const recipients = await ctx.runQuery(internal.callOffs.getCallOffAlertRecipients, {
+      locationManagerId: args.locationManagerId,
+    });
+
+    if (recipients.length === 0) {
+      console.log("No recipients with push tokens for call-off alert");
+      return { sentCount: 0 };
+    }
+
+    // Format date for display
+    const dateObj = new Date(args.date + "T12:00:00");
+    const formattedDate = dateObj.toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
+
+    // Send push to each recipient
+    let sentCount = 0;
+    for (const recipient of recipients) {
+      try {
+        const message = {
+          to: recipient.expoPushToken,
+          sound: "default",
+          title: "📞 Employee Call-Off",
+          body: `${args.employeeName} called off for ${formattedDate}: ${args.reason}`,
+          data: { type: "call_off" },
+        };
+
+        const response = await fetch("https://exp.host/--/api/v2/push/send", {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Accept-encoding": "gzip, deflate",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(message),
+        });
+
+        if (response.ok) {
+          sentCount++;
+        }
+      } catch (error) {
+        console.error(`Failed to send call-off push to ${recipient.name}:`, error);
+      }
+    }
+
+    return { sentCount };
   },
 });
