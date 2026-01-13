@@ -869,3 +869,103 @@ export const registerPushToken = mutation({
     return true;
   },
 });
+
+// ============ ASSIGNED SCHEDULE ============
+
+// Get my assigned schedule template
+export const getMyAssignedSchedule = query({
+  args: {
+    personnelId: v.id("personnel"),
+  },
+  handler: async (ctx, args) => {
+    const personnel = await ctx.db.get(args.personnelId);
+    if (!personnel || !personnel.defaultScheduleTemplateId) {
+      return null;
+    }
+
+    const template = await ctx.db.get(personnel.defaultScheduleTemplateId);
+    if (!template) {
+      return null;
+    }
+
+    // Get the first department for simple time display
+    const schedule = template.departments?.[0];
+    return {
+      _id: template._id,
+      name: template.name,
+      description: template.description,
+      startTime: schedule?.startTime ?? null,
+      endTime: schedule?.endTime ?? null,
+    };
+  },
+});
+
+// ============ OVERTIME ============
+
+// Get count of available overtime offers for badge
+export const getAvailableOvertimeCount = query({
+  args: {
+    personnelId: v.id("personnel"),
+  },
+  handler: async (ctx, args) => {
+    const personnel = await ctx.db.get(args.personnelId);
+    if (!personnel) return 0;
+
+    // Get all open offers
+    const offers = await ctx.db
+      .query("overtimeOffers")
+      .withIndex("by_status", (q) => q.eq("status", "open"))
+      .collect();
+
+    // Filter offers that apply to this employee and haven't been responded to
+    const today = new Date().toISOString().split("T")[0];
+    let count = 0;
+
+    for (const offer of offers) {
+      // Skip past offers
+      if (offer.date < today) continue;
+
+      // Check if offer applies to this employee
+      let applies = false;
+      if (offer.targetType === "all") {
+        applies = true;
+      } else if (offer.targetType === "department" && offer.department === personnel.department) {
+        applies = true;
+      } else if (offer.targetType === "location" && offer.locationId === personnel.locationId) {
+        applies = true;
+      } else if (offer.targetType === "specific" && offer.targetPersonnelIds?.includes(args.personnelId)) {
+        applies = true;
+      }
+
+      if (!applies) continue;
+
+      // Check if employee has already responded (not pending)
+      const response = await ctx.db
+        .query("overtimeResponses")
+        .withIndex("by_offer_personnel", (q) =>
+          q.eq("offerId", offer._id).eq("personnelId", args.personnelId)
+        )
+        .first();
+
+      // Check if full
+      if (offer.maxSlots) {
+        const acceptedResponses = await ctx.db
+          .query("overtimeResponses")
+          .withIndex("by_offer", (q) => q.eq("offerId", offer._id))
+          .filter((q) => q.eq(q.field("response"), "accepted"))
+          .collect();
+
+        if (acceptedResponses.length >= offer.maxSlots) {
+          continue; // Full, don't count
+        }
+      }
+
+      // Count if no response or pending
+      if (!response || response.response === "pending") {
+        count++;
+      }
+    }
+
+    return count;
+  },
+});
