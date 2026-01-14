@@ -640,7 +640,7 @@ export const scheduleInterview = mutation({
       interviewTime: args.time,
       interviewLocation: args.location,
       scheduledByName: user.name,
-      scheduledByTitle: user.role === "admin" ? "HR Manager" : user.role === "super_admin" ? "Director" : undefined,
+      scheduledByTitle: user.role === "super_admin" ? "Chief Technology Officer" : user.role === "admin" ? "HR Manager" : undefined,
       companyName: "IE Central",
       contactPhone: "(724) 537-7559",
       contactEmail: "hr@iecentral.com",
