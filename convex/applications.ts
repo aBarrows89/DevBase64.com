@@ -639,9 +639,10 @@ export const scheduleInterview = mutation({
       interviewDate: args.date,
       interviewTime: args.time,
       interviewLocation: args.location,
+      scheduledByName: user.name,
+      scheduledByTitle: user.role === "admin" ? "HR Manager" : user.role === "super_admin" ? "Director" : undefined,
       companyName: "IE Central",
-      companyAddress: "3550 W Washington Blvd, Los Angeles, CA 90018",
-      contactPhone: "(323) 555-0100",
+      contactPhone: "(724) 537-7559",
       contactEmail: "hr@iecentral.com",
     });
 
@@ -704,8 +705,7 @@ export const rescheduleInterview = mutation({
         newTime: args.time,
         interviewLocation: args.location,
         companyName: "IE Central",
-        companyAddress: "3550 W Washington Blvd, Los Angeles, CA 90018",
-        contactPhone: "(323) 555-0100",
+        contactPhone: "(724) 537-7559",
         contactEmail: "hr@iecentral.com",
       });
     }

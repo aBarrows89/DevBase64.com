@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { action, internalAction } from "./_generated/server";
+import { internalAction } from "./_generated/server";
 import { Resend } from "resend";
 
 // Extract email addresses from text (resume)
@@ -33,6 +33,15 @@ function formatTimeForEmail(timeStr: string): string {
   return `${displayHours}:${minutes.toString().padStart(2, "0")} ${period}`;
 }
 
+// Build location string for templates
+function getLocationString(location: string | undefined, companyAddress: string): string {
+  if (!location) return "";
+  if (location === "Video") return "Video Call (link will be sent separately)";
+  if (location === "Phone") return "Phone Interview - We will call you";
+  if (location === "In-person" || location.includes("3550")) return companyAddress;
+  return location;
+}
+
 // Send interview scheduled email
 export const sendInterviewScheduledEmail = internalAction({
   args: {
@@ -44,8 +53,9 @@ export const sendInterviewScheduledEmail = internalAction({
     interviewDate: v.string(),
     interviewTime: v.string(),
     interviewLocation: v.optional(v.string()),
+    scheduledByName: v.string(),
+    scheduledByTitle: v.optional(v.string()),
     companyName: v.optional(v.string()),
-    companyAddress: v.optional(v.string()),
     contactPhone: v.optional(v.string()),
     contactEmail: v.optional(v.string()),
   },
@@ -74,20 +84,9 @@ export const sendInterviewScheduledEmail = internalAction({
     const companyName = args.companyName || "IE Central";
     const formattedDate = formatDateForEmail(args.interviewDate);
     const formattedTime = formatTimeForEmail(args.interviewTime);
-
-    // Build location details
-    let locationDetails = "";
-    if (args.interviewLocation) {
-      if (args.interviewLocation === "Video") {
-        locationDetails = "Video Call (link will be sent separately)";
-      } else if (args.interviewLocation === "Phone") {
-        locationDetails = "Phone Interview - We will call you";
-      } else if (args.interviewLocation === "In-person" || args.interviewLocation.includes("3550")) {
-        locationDetails = args.companyAddress || "3550 W Washington Blvd, Los Angeles, CA 90018";
-      } else {
-        locationDetails = args.interviewLocation;
-      }
-    }
+    const schedulerInfo = args.scheduledByTitle
+      ? `${args.scheduledByName}, ${args.scheduledByTitle}`
+      : args.scheduledByName;
 
     const emailHtml = `
 <!DOCTYPE html>
@@ -106,57 +105,63 @@ export const sendInterviewScheduledEmail = internalAction({
   <div style="background: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; border-top: none;">
     <p style="margin-top: 0;">Hi ${args.applicantFirstName},</p>
 
-    <p>We're excited to meet you! Your interview for the <strong>${args.jobTitle}</strong> position has been scheduled.</p>
+    <p>We're excited to meet you! Your interview has been scheduled.</p>
 
     <div style="background: white; border-radius: 8px; padding: 20px; margin: 20px 0; border: 1px solid #e5e7eb;">
       <table style="width: 100%; border-collapse: collapse;">
         <tr>
-          <td style="padding: 10px 0; border-bottom: 1px solid #f3f4f6;">
-            <span style="font-size: 20px; margin-right: 10px;">📅</span>
+          <td style="padding: 12px 0; border-bottom: 1px solid #f3f4f6;">
+            <strong>Interview Scheduled With:</strong>
+          </td>
+          <td style="padding: 12px 0; border-bottom: 1px solid #f3f4f6; text-align: right;">
+            ${schedulerInfo}
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 12px 0; border-bottom: 1px solid #f3f4f6;">
             <strong>Date:</strong>
           </td>
-          <td style="padding: 10px 0; border-bottom: 1px solid #f3f4f6; text-align: right;">
+          <td style="padding: 12px 0; border-bottom: 1px solid #f3f4f6; text-align: right;">
             ${formattedDate}
           </td>
         </tr>
         <tr>
-          <td style="padding: 10px 0; border-bottom: 1px solid #f3f4f6;">
-            <span style="font-size: 20px; margin-right: 10px;">🕐</span>
+          <td style="padding: 12px 0; border-bottom: 1px solid #f3f4f6;">
             <strong>Time:</strong>
           </td>
-          <td style="padding: 10px 0; border-bottom: 1px solid #f3f4f6; text-align: right;">
+          <td style="padding: 12px 0; border-bottom: 1px solid #f3f4f6; text-align: right;">
             ${formattedTime}
           </td>
         </tr>
-        ${locationDetails ? `
         <tr>
-          <td style="padding: 10px 0; border-bottom: 1px solid #f3f4f6;">
-            <span style="font-size: 20px; margin-right: 10px;">📍</span>
-            <strong>Location:</strong>
+          <td style="padding: 12px 0; border-bottom: 1px solid #f3f4f6;">
+            <strong>Position Applied For:</strong>
           </td>
-          <td style="padding: 10px 0; border-bottom: 1px solid #f3f4f6; text-align: right;">
-            ${locationDetails}
+          <td style="padding: 12px 0; border-bottom: 1px solid #f3f4f6; text-align: right;">
+            ${args.jobTitle}
           </td>
         </tr>
-        ` : ""}
         <tr>
-          <td style="padding: 10px 0;">
-            <span style="font-size: 20px; margin-right: 10px;">💼</span>
-            <strong>Position:</strong>
-          </td>
-          <td style="padding: 10px 0; text-align: right;">
-            ${args.jobTitle}
+          <td style="padding: 12px 0;" colspan="2">
+            <strong>Location:</strong><br>
+            <span style="color: #4b5563;">400 Unity St, Latrobe PA</span>
           </td>
         </tr>
       </table>
     </div>
 
+    <div style="background: #dbeafe; border-radius: 8px; padding: 15px; margin: 20px 0; border-left: 4px solid #3b82f6;">
+      <strong style="color: #1e40af;">Arrival Instructions:</strong>
+      <p style="margin: 10px 0 0 0; color: #1e40af;">
+        Park in the parking lot and head into the lobby. Have a seat, and we will be with you at your scheduled time!
+      </p>
+    </div>
+
     <div style="background: #fef3c7; border-radius: 8px; padding: 15px; margin: 20px 0; border-left: 4px solid #f59e0b;">
-      <strong style="color: #92400e;">Please bring:</strong>
-      <ul style="margin: 10px 0 0 0; padding-left: 20px; color: #92400e;">
-        <li>Valid government-issued ID</li>
-        <li>Any relevant certifications</li>
-      </ul>
+      <strong style="color: #92400e;">Please Bring:</strong>
+      <p style="margin: 10px 0 0 0; color: #92400e;">
+        A current, valid ID
+      </p>
     </div>
 
     <p>If you need to reschedule or have any questions, please contact us:</p>
@@ -187,15 +192,20 @@ Interview Scheduled - ${companyName}
 
 Hi ${args.applicantFirstName},
 
-Your interview for the ${args.jobTitle} position has been scheduled.
+Your interview has been scheduled!
 
+Interview Scheduled With: ${schedulerInfo}
 Date: ${formattedDate}
 Time: ${formattedTime}
-${locationDetails ? `Location: ${locationDetails}` : ""}
+Position Applied For: ${args.jobTitle}
 
-Please bring:
-- Valid government-issued ID
-- Any relevant certifications
+Location: 400 Unity St, Latrobe PA
+
+ARRIVAL INSTRUCTIONS:
+Park in the parking lot and head into the lobby. Have a seat, and we will be with you at your scheduled time!
+
+PLEASE BRING:
+A current, valid ID
 
 ${args.contactPhone ? `Phone: ${args.contactPhone}` : ""}
 ${args.contactEmail ? `Email: ${args.contactEmail}` : ""}
@@ -207,9 +217,8 @@ The ${companyName} Team
     `;
 
     try {
-      // Send to all collected email addresses
       const result = await resend.emails.send({
-        from: `${companyName} <interviews@resend.dev>`, // Using Resend's test domain - update with your domain
+        from: `${companyName} <interviews@iecentral.com>`,
         to: emailAddresses,
         subject: `Interview Scheduled - ${companyName} - ${args.jobTitle}`,
         html: emailHtml,
@@ -239,7 +248,6 @@ export const sendInterviewRescheduledEmail = internalAction({
     newTime: v.string(),
     interviewLocation: v.optional(v.string()),
     companyName: v.optional(v.string()),
-    companyAddress: v.optional(v.string()),
     contactPhone: v.optional(v.string()),
     contactEmail: v.optional(v.string()),
   },
@@ -270,19 +278,6 @@ export const sendInterviewRescheduledEmail = internalAction({
     const oldFormattedDate = formatDateForEmail(args.oldDate);
     const oldFormattedTime = formatTimeForEmail(args.oldTime);
 
-    let locationDetails = "";
-    if (args.interviewLocation) {
-      if (args.interviewLocation === "Video") {
-        locationDetails = "Video Call (link will be sent separately)";
-      } else if (args.interviewLocation === "Phone") {
-        locationDetails = "Phone Interview - We will call you";
-      } else if (args.interviewLocation === "In-person" || args.interviewLocation.includes("3550")) {
-        locationDetails = args.companyAddress || "3550 W Washington Blvd, Los Angeles, CA 90018";
-      } else {
-        locationDetails = args.interviewLocation;
-      }
-    }
-
     const emailHtml = `
 <!DOCTYPE html>
 <html>
@@ -311,35 +306,42 @@ export const sendInterviewRescheduledEmail = internalAction({
       <div style="background: #10b981; color: white; padding: 5px 10px; border-radius: 4px; display: inline-block; margin-bottom: 15px; font-size: 12px; font-weight: bold;">NEW TIME</div>
       <table style="width: 100%; border-collapse: collapse;">
         <tr>
-          <td style="padding: 10px 0; border-bottom: 1px solid #f3f4f6;">
-            <span style="font-size: 20px; margin-right: 10px;">📅</span>
+          <td style="padding: 12px 0; border-bottom: 1px solid #f3f4f6;">
             <strong>Date:</strong>
           </td>
-          <td style="padding: 10px 0; border-bottom: 1px solid #f3f4f6; text-align: right;">
+          <td style="padding: 12px 0; border-bottom: 1px solid #f3f4f6; text-align: right;">
             ${newFormattedDate}
           </td>
         </tr>
         <tr>
-          <td style="padding: 10px 0; border-bottom: 1px solid #f3f4f6;">
-            <span style="font-size: 20px; margin-right: 10px;">🕐</span>
+          <td style="padding: 12px 0; border-bottom: 1px solid #f3f4f6;">
             <strong>Time:</strong>
           </td>
-          <td style="padding: 10px 0; border-bottom: 1px solid #f3f4f6; text-align: right;">
+          <td style="padding: 12px 0; border-bottom: 1px solid #f3f4f6; text-align: right;">
             ${newFormattedTime}
           </td>
         </tr>
-        ${locationDetails ? `
         <tr>
-          <td style="padding: 10px 0;">
-            <span style="font-size: 20px; margin-right: 10px;">📍</span>
-            <strong>Location:</strong>
-          </td>
-          <td style="padding: 10px 0; text-align: right;">
-            ${locationDetails}
+          <td style="padding: 12px 0;" colspan="2">
+            <strong>Location:</strong><br>
+            <span style="color: #4b5563;">400 Unity St, Latrobe PA</span>
           </td>
         </tr>
-        ` : ""}
       </table>
+    </div>
+
+    <div style="background: #dbeafe; border-radius: 8px; padding: 15px; margin: 20px 0; border-left: 4px solid #3b82f6;">
+      <strong style="color: #1e40af;">Arrival Instructions:</strong>
+      <p style="margin: 10px 0 0 0; color: #1e40af;">
+        Park in the parking lot and head into the lobby. Have a seat, and we will be with you at your scheduled time!
+      </p>
+    </div>
+
+    <div style="background: #fef3c7; border-radius: 8px; padding: 15px; margin: 20px 0; border-left: 4px solid #f59e0b;">
+      <strong style="color: #92400e;">Please Bring:</strong>
+      <p style="margin: 10px 0 0 0; color: #92400e;">
+        A current, valid ID
+      </p>
     </div>
 
     <p>If this new time doesn't work for you, please contact us immediately:</p>
@@ -378,7 +380,14 @@ ${oldFormattedDate} at ${oldFormattedTime}
 NEW TIME:
 Date: ${newFormattedDate}
 Time: ${newFormattedTime}
-${locationDetails ? `Location: ${locationDetails}` : ""}
+
+Location: 400 Unity St, Latrobe PA
+
+ARRIVAL INSTRUCTIONS:
+Park in the parking lot and head into the lobby. Have a seat, and we will be with you at your scheduled time!
+
+PLEASE BRING:
+A current, valid ID
 
 If this new time doesn't work for you, please contact us immediately:
 ${args.contactPhone ? `Phone: ${args.contactPhone}` : ""}
@@ -392,7 +401,7 @@ The ${companyName} Team
 
     try {
       const result = await resend.emails.send({
-        from: `${companyName} <interviews@resend.dev>`,
+        from: `${companyName} <interviews@iecentral.com>`,
         to: emailAddresses,
         subject: `Interview Rescheduled - ${companyName} - ${args.jobTitle}`,
         html: emailHtml,
