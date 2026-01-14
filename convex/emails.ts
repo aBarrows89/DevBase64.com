@@ -218,7 +218,7 @@ The ${companyName} Team
 
     try {
       const result = await resend.emails.send({
-        from: `${companyName} <interviews@iecentral.com>`,
+        from: `${companyName} <interviews@notifications.iecentral.com>`,
         replyTo: "andy@ietires.com",
         to: emailAddresses,
         subject: `Interview Scheduled - ${companyName} - ${args.jobTitle}`,
@@ -402,7 +402,7 @@ The ${companyName} Team
 
     try {
       const result = await resend.emails.send({
-        from: `${companyName} <interviews@iecentral.com>`,
+        from: `${companyName} <interviews@notifications.iecentral.com>`,
         replyTo: "andy@ietires.com",
         to: emailAddresses,
         subject: `Interview Rescheduled - ${companyName} - ${args.jobTitle}`,
