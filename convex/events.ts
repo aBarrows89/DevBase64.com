@@ -117,9 +117,11 @@ export const listMyEvents = query({
           })
         );
 
+        // Prioritize organizer status over invite status - creator should always see organizer controls
+        const isOrganizer = event.createdBy === args.userId;
         return {
           ...event,
-          myInviteStatus: invite?.status || (event.createdBy === args.userId ? "organizer" : null),
+          myInviteStatus: isOrganizer ? "organizer" : (invite?.status || null),
           invitees: inviteeDetails,
         };
       })

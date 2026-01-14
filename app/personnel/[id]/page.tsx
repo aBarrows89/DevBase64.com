@@ -310,6 +310,7 @@ function PersonnelDetailContent() {
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
   const [showEditPersonnelModal, setShowEditPersonnelModal] = useState(false);
   const [showTerminateModal, setShowTerminateModal] = useState(false);
+  const [showRehireModal, setShowRehireModal] = useState(false);
   const [showCheckInModal, setShowCheckInModal] = useState(false);
   const [selectedMilestone, setSelectedMilestone] = useState<string | null>(null);
   const [checkInNotes, setCheckInNotes] = useState("");
@@ -358,6 +359,7 @@ function PersonnelDetailContent() {
   const addAttendanceAttachment = useMutation(api.attendance.addAttachment);
   const removeAttendanceAttachment = useMutation(api.attendance.removeAttachment);
   const terminatePersonnel = useMutation(api.personnel.terminate);
+  const rehirePersonnel = useMutation(api.personnel.rehire);
   const toggleTraining = useMutation(api.personnel.toggleTraining);
   const recordTenureCheckIn = useMutation(api.personnel.recordTenureCheckIn);
   const dismissTenureNotifications = useMutation(api.notifications.dismissTenureCheckInNotifications);
@@ -451,6 +453,14 @@ function PersonnelDetailContent() {
   const [terminateForm, setTerminateForm] = useState({
     terminationDate: new Date().toISOString().split("T")[0],
     terminationReason: "",
+  });
+  const [rehireForm, setRehireForm] = useState({
+    rehireDate: new Date().toISOString().split("T")[0],
+    position: "",
+    department: "",
+    employeeType: "full_time",
+    hourlyRate: "",
+    rehireReason: "",
   });
 
   // Initialize edit form when personnel data loads
@@ -1682,6 +1692,32 @@ function PersonnelDetailContent() {
                           }`}
                         >
                           Terminate Employee
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Rehire Button (admin+ only, terminated) */}
+                    {canManagePersonnel && personnel.status === "terminated" && (
+                      <div className="pt-4 border-t border-dashed border-slate-600/50">
+                        <button
+                          onClick={() => {
+                            setRehireForm({
+                              rehireDate: new Date().toISOString().split("T")[0],
+                              position: personnel.position || "",
+                              department: personnel.department || "",
+                              employeeType: personnel.employeeType || "full_time",
+                              hourlyRate: personnel.hourlyRate?.toString() || "",
+                              rehireReason: "",
+                            });
+                            setShowRehireModal(true);
+                          }}
+                          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                            isDark
+                              ? "bg-green-500/20 hover:bg-green-500/30 text-green-400 border border-green-500/30"
+                              : "bg-green-50 hover:bg-green-100 text-green-600 border border-green-200"
+                          }`}
+                        >
+                          Rehire Employee
                         </button>
                       </div>
                     )}
@@ -3132,6 +3168,168 @@ function PersonnelDetailContent() {
                   Confirm Termination
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Rehire Modal */}
+        {showRehireModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className={`w-full max-w-md rounded-xl p-6 max-h-[90vh] overflow-y-auto ${isDark ? "bg-slate-800" : "bg-white"}`}>
+              <div className="flex items-center gap-3 mb-4">
+                <div className={`p-2 rounded-full ${isDark ? "bg-green-500/20" : "bg-green-100"}`}>
+                  <svg className="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                  </svg>
+                </div>
+                <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  Rehire Employee
+                </h2>
+              </div>
+              <p className={`text-sm mb-4 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                Rehire {personnel?.firstName} {personnel?.lastName} as an active employee.
+                This will restore their access and add them back to shift planning.
+              </p>
+              <div className="space-y-4">
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    Rehire Date *
+                  </label>
+                  <input
+                    type="date"
+                    value={rehireForm.rehireDate}
+                    onChange={(e) => setRehireForm({ ...rehireForm, rehireDate: e.target.value })}
+                    className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"} border focus:outline-none`}
+                  />
+                </div>
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    Position *
+                  </label>
+                  <input
+                    type="text"
+                    value={rehireForm.position}
+                    onChange={(e) => setRehireForm({ ...rehireForm, position: e.target.value })}
+                    placeholder="e.g., Warehouse Associate"
+                    className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white placeholder-slate-500" : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400"} border focus:outline-none`}
+                  />
+                </div>
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    Department *
+                  </label>
+                  <select
+                    value={rehireForm.department}
+                    onChange={(e) => setRehireForm({ ...rehireForm, department: e.target.value })}
+                    className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"} border focus:outline-none`}
+                  >
+                    <option value="">Select Department</option>
+                    <option value="Warehouse">Warehouse</option>
+                    <option value="Office">Office</option>
+                    <option value="Sales">Sales</option>
+                    <option value="Delivery">Delivery</option>
+                    <option value="Management">Management</option>
+                    <option value="Executive">Executive</option>
+                    <option value="IT">IT</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    Employment Type *
+                  </label>
+                  <select
+                    value={rehireForm.employeeType}
+                    onChange={(e) => setRehireForm({ ...rehireForm, employeeType: e.target.value })}
+                    className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-gray-50 border-gray-200 text-gray-900"} border focus:outline-none`}
+                  >
+                    <option value="full_time">Full Time</option>
+                    <option value="part_time">Part Time</option>
+                    <option value="seasonal">Seasonal</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    Hourly Rate
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={rehireForm.hourlyRate}
+                    onChange={(e) => setRehireForm({ ...rehireForm, hourlyRate: e.target.value })}
+                    placeholder="e.g., 15.50"
+                    className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white placeholder-slate-500" : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400"} border focus:outline-none`}
+                  />
+                </div>
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    Reason for Rehire
+                  </label>
+                  <textarea
+                    value={rehireForm.rehireReason}
+                    onChange={(e) => setRehireForm({ ...rehireForm, rehireReason: e.target.value })}
+                    placeholder="Enter the reason for rehiring..."
+                    rows={2}
+                    className={`w-full px-4 py-2 rounded-lg ${isDark ? "bg-slate-700 border-slate-600 text-white placeholder-slate-500" : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400"} border focus:outline-none`}
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => {
+                    setShowRehireModal(false);
+                    setRehireForm({
+                      rehireDate: new Date().toISOString().split("T")[0],
+                      position: "",
+                      department: "",
+                      employeeType: "full_time",
+                      hourlyRate: "",
+                      rehireReason: "",
+                    });
+                  }}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-slate-700 hover:bg-slate-600 text-white" : "bg-gray-100 hover:bg-gray-200 text-gray-900"}`}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!rehireForm.position || !rehireForm.department || !user) {
+                      alert("Please fill in position and department.");
+                      return;
+                    }
+                    try {
+                      await rehirePersonnel({
+                        personnelId: personnel!._id,
+                        rehireDate: rehireForm.rehireDate,
+                        position: rehireForm.position,
+                        department: rehireForm.department,
+                        employeeType: rehireForm.employeeType,
+                        hourlyRate: rehireForm.hourlyRate ? parseFloat(rehireForm.hourlyRate) : undefined,
+                        rehireReason: rehireForm.rehireReason || undefined,
+                        userId: user._id as Id<"users">,
+                      });
+                      setShowRehireModal(false);
+                      setRehireForm({
+                        rehireDate: new Date().toISOString().split("T")[0],
+                        position: "",
+                        department: "",
+                        employeeType: "full_time",
+                        hourlyRate: "",
+                        rehireReason: "",
+                      });
+                    } catch (error) {
+                      console.error("Failed to rehire:", error);
+                      alert("Failed to rehire employee. Please try again.");
+                    }
+                  }}
+                  disabled={!rehireForm.position || !rehireForm.department}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${isDark ? "bg-green-500 hover:bg-green-400 text-white" : "bg-green-600 hover:bg-green-700 text-white"}`}
+                >
+                  Confirm Rehire
+                </button>
+              </div>
+              <p className={`text-xs mt-4 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                Authorized by: {user?.name} ({user?.email})
+              </p>
             </div>
           </div>
         )}

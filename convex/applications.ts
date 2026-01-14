@@ -632,6 +632,45 @@ export const scheduleInterview = mutation({
   },
 });
 
+// Reschedule an interview (updates both application and calendar event)
+export const rescheduleInterview = mutation({
+  args: {
+    applicationId: v.id("applications"),
+    date: v.string(), // New ISO date string (YYYY-MM-DD)
+    time: v.string(), // New time string (HH:MM)
+    location: v.optional(v.string()),
+    startTimestamp: v.number(), // Pre-calculated timestamp from frontend
+  },
+  handler: async (ctx, args) => {
+    const application = await ctx.db.get(args.applicationId);
+    if (!application) throw new Error("Application not found");
+
+    const now = Date.now();
+    const endTime = args.startTimestamp + 60 * 60 * 1000; // 1 hour interview
+
+    // Update the calendar event if it exists
+    if (application.scheduledInterviewEventId) {
+      const event = await ctx.db.get(application.scheduledInterviewEventId);
+      if (event && !event.isCancelled) {
+        await ctx.db.patch(application.scheduledInterviewEventId, {
+          startTime: args.startTimestamp,
+          endTime,
+          location: args.location,
+          updatedAt: now,
+        });
+      }
+    }
+
+    // Update application with new interview details
+    await ctx.db.patch(args.applicationId, {
+      scheduledInterviewDate: args.date,
+      scheduledInterviewTime: args.time,
+      scheduledInterviewLocation: args.location,
+      updatedAt: now,
+    });
+  },
+});
+
 // Clear scheduled interview
 export const clearScheduledInterview = mutation({
   args: {

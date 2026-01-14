@@ -507,6 +507,113 @@ export const terminate = mutation({
   },
 });
 
+// Rehire a terminated employee
+export const rehire = mutation({
+  args: {
+    personnelId: v.id("personnel"),
+    rehireDate: v.string(), // YYYY-MM-DD
+    position: v.string(),
+    department: v.string(),
+    employeeType: v.string(), // full_time, part_time, etc.
+    hourlyRate: v.optional(v.number()),
+    rehireReason: v.optional(v.string()),
+    userId: v.id("users"), // Who authorized the rehire
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db.get(args.personnelId);
+    if (!existing) {
+      throw new Error("Personnel not found");
+    }
+
+    if (existing.status !== "terminated") {
+      throw new Error("Only terminated employees can be rehired");
+    }
+
+    const authorizedBy = await ctx.db.get(args.userId);
+    if (!authorizedBy) {
+      throw new Error("Authorizing user not found");
+    }
+
+    const now = Date.now();
+
+    // Store previous termination info in employment history
+    const employmentHistory = existing.employmentHistory || [];
+    employmentHistory.push({
+      action: "terminated",
+      date: existing.terminationDate || new Date().toISOString().split("T")[0],
+      reason: existing.terminationReason,
+      position: existing.position,
+      department: existing.department,
+    });
+
+    // Add rehire record to history
+    employmentHistory.push({
+      action: "rehired",
+      date: args.rehireDate,
+      reason: args.rehireReason,
+      position: args.position,
+      department: args.department,
+      authorizedBy: authorizedBy.name,
+      authorizedById: args.userId,
+    });
+
+    // Update personnel record
+    await ctx.db.patch(args.personnelId, {
+      status: "active",
+      position: args.position,
+      department: args.department,
+      employeeType: args.employeeType,
+      hourlyRate: args.hourlyRate,
+      hireDate: args.rehireDate, // Update hire date to rehire date
+      originalHireDate: existing.originalHireDate || existing.hireDate, // Preserve original hire date
+      terminationDate: undefined,
+      terminationReason: undefined,
+      employmentHistory,
+      rehiredAt: now,
+      rehiredBy: args.userId,
+      updatedAt: now,
+    });
+
+    // Reactivate user account if they had one
+    const userAccount = await ctx.db
+      .query("users")
+      .withIndex("by_email", (q) => q.eq("email", existing.email.toLowerCase()))
+      .first();
+
+    if (userAccount && !userAccount.isActive) {
+      await ctx.db.patch(userAccount._id, {
+        isActive: true,
+      });
+
+      // Log user reactivation
+      await ctx.db.insert("auditLogs", {
+        action: "Reactivated user account",
+        actionType: "update",
+        resourceType: "user",
+        resourceId: userAccount._id,
+        userId: args.userId,
+        userEmail: authorizedBy.email,
+        details: `Reactivated user account for ${existing.firstName} ${existing.lastName} due to rehire`,
+        timestamp: now,
+      });
+    }
+
+    // Log the rehire action
+    await ctx.db.insert("auditLogs", {
+      action: "Rehired personnel",
+      actionType: "create",
+      resourceType: "personnel",
+      resourceId: args.personnelId,
+      userId: args.userId,
+      userEmail: authorizedBy.email,
+      details: `Rehired ${existing.firstName} ${existing.lastName} as ${args.position} in ${args.department}. Authorized by: ${authorizedBy.name}`,
+      timestamp: now,
+    });
+
+    return args.personnelId;
+  },
+});
+
 // Toggle training completion for a training area (with date tracking)
 export const toggleTraining = mutation({
   args: {

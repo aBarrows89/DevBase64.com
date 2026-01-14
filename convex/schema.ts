@@ -414,6 +414,19 @@ export default defineSchema({
       unavailableDays: v.optional(v.array(v.string())), // Days they can't work (e.g., "sunday", "monday")
       notes: v.optional(v.string()), // Additional scheduling notes
     })),
+    // Rehire tracking
+    originalHireDate: v.optional(v.string()), // Original first hire date (preserved after rehires)
+    rehiredAt: v.optional(v.number()), // Timestamp when last rehired
+    rehiredBy: v.optional(v.id("users")), // Who authorized the rehire
+    employmentHistory: v.optional(v.array(v.object({
+      action: v.string(), // "hired" | "terminated" | "rehired"
+      date: v.string(),
+      reason: v.optional(v.string()),
+      position: v.optional(v.string()),
+      department: v.optional(v.string()),
+      authorizedBy: v.optional(v.string()),
+      authorizedById: v.optional(v.id("users")),
+    }))),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
