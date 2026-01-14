@@ -641,7 +641,7 @@ export const scheduleInterview = mutation({
       interviewLocation: args.location,
       scheduledByName: user.name,
       scheduledByTitle: user.role === "super_admin" ? "Chief Technology Officer" : user.role === "admin" ? "HR Manager" : undefined,
-      companyName: "IE Central",
+      companyName: "Import Export Tire Co",
       contactPhone: "(724) 537-7559",
       contactEmail: "hr@iecentral.com",
     });
@@ -704,7 +704,7 @@ export const rescheduleInterview = mutation({
         newDate: args.date,
         newTime: args.time,
         interviewLocation: args.location,
-        companyName: "IE Central",
+        companyName: "Import Export Tire Co",
         contactPhone: "(724) 537-7559",
         contactEmail: "hr@iecentral.com",
       });

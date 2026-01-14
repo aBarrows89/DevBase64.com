@@ -81,7 +81,7 @@ export const sendInterviewScheduledEmail = internalAction({
       });
     }
 
-    const companyName = args.companyName || "IE Central";
+    const companyName = args.companyName || "Import Export Tire Co";
     const formattedDate = formatDateForEmail(args.interviewDate);
     const formattedTime = formatTimeForEmail(args.interviewTime);
     const schedulerInfo = args.scheduledByTitle
@@ -174,11 +174,12 @@ export const sendInterviewScheduledEmail = internalAction({
 
     <p style="margin-bottom: 0;">
       Best regards,<br>
-      <strong>The ${companyName} Team</strong>
+      <strong>The Import Export Tire Co Team</strong>
     </p>
   </div>
 
   <div style="background: #1f2937; padding: 20px; border-radius: 0 0 10px 10px; text-align: center;">
+    <img src="https://ietires.com/logo.gif" alt="Import Export Tire Co" style="max-width: 150px; margin-bottom: 15px;">
     <p style="color: #9ca3af; margin: 0; font-size: 12px;">
       This email was sent to confirm your interview. Please do not reply directly to this email.
     </p>
@@ -213,12 +214,12 @@ ${args.contactEmail ? `Email: ${args.contactEmail}` : ""}
 We look forward to meeting you!
 
 Best regards,
-The ${companyName} Team
+The Import Export Tire Co Team
     `;
 
     try {
       const result = await resend.emails.send({
-        from: `${companyName} <interviews@notifications.iecentral.com>`,
+        from: `Import Export Tire Co <interviews@notifications.iecentral.com>`,
         replyTo: "andy@ietires.com",
         to: emailAddresses,
         subject: `Interview Scheduled - ${companyName} - ${args.jobTitle}`,
@@ -273,7 +274,7 @@ export const sendInterviewRescheduledEmail = internalAction({
       });
     }
 
-    const companyName = args.companyName || "IE Central";
+    const companyName = args.companyName || "Import Export Tire Co";
     const newFormattedDate = formatDateForEmail(args.newDate);
     const newFormattedTime = formatTimeForEmail(args.newTime);
     const oldFormattedDate = formatDateForEmail(args.oldDate);
@@ -355,11 +356,12 @@ export const sendInterviewRescheduledEmail = internalAction({
 
     <p style="margin-bottom: 0;">
       Best regards,<br>
-      <strong>The ${companyName} Team</strong>
+      <strong>The Import Export Tire Co Team</strong>
     </p>
   </div>
 
   <div style="background: #1f2937; padding: 20px; border-radius: 0 0 10px 10px; text-align: center;">
+    <img src="https://ietires.com/logo.gif" alt="Import Export Tire Co" style="max-width: 150px; margin-bottom: 15px;">
     <p style="color: #9ca3af; margin: 0; font-size: 12px;">
       This email was sent to notify you of a schedule change. Please do not reply directly to this email.
     </p>
@@ -397,12 +399,12 @@ ${args.contactEmail ? `Email: ${args.contactEmail}` : ""}
 We apologize for any inconvenience and look forward to meeting you!
 
 Best regards,
-The ${companyName} Team
+The Import Export Tire Co Team
     `;
 
     try {
       const result = await resend.emails.send({
-        from: `${companyName} <interviews@notifications.iecentral.com>`,
+        from: `Import Export Tire Co <interviews@notifications.iecentral.com>`,
         replyTo: "andy@ietires.com",
         to: emailAddresses,
         subject: `Interview Rescheduled - ${companyName} - ${args.jobTitle}`,
