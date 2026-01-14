@@ -3316,9 +3316,10 @@ function PersonnelDetailContent() {
                         hourlyRate: "",
                         rehireReason: "",
                       });
-                    } catch (error) {
+                    } catch (error: unknown) {
                       console.error("Failed to rehire:", error);
-                      alert("Failed to rehire employee. Please try again.");
+                      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+                      alert(`Failed to rehire employee: ${errorMessage}`);
                     }
                   }}
                   disabled={!rehireForm.position || !rehireForm.department}

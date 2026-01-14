@@ -538,24 +538,42 @@ export const rehire = mutation({
 
     // Store previous termination info in employment history
     const employmentHistory = existing.employmentHistory || [];
-    employmentHistory.push({
+
+    // Build terminated entry, only including defined values
+    const terminatedEntry: {
+      action: string;
+      date: string;
+      reason?: string;
+      position?: string;
+      department?: string;
+    } = {
       action: "terminated",
       date: existing.terminationDate || new Date().toISOString().split("T")[0],
-      reason: existing.terminationReason,
-      position: existing.position,
-      department: existing.department,
-    });
+    };
+    if (existing.terminationReason) terminatedEntry.reason = existing.terminationReason;
+    if (existing.position) terminatedEntry.position = existing.position;
+    if (existing.department) terminatedEntry.department = existing.department;
+    employmentHistory.push(terminatedEntry);
 
-    // Add rehire record to history
-    employmentHistory.push({
+    // Build rehire entry, only including defined values
+    const rehireEntry: {
+      action: string;
+      date: string;
+      reason?: string;
+      position?: string;
+      department?: string;
+      authorizedBy?: string;
+      authorizedById?: typeof args.userId;
+    } = {
       action: "rehired",
       date: args.rehireDate,
-      reason: args.rehireReason,
       position: args.position,
       department: args.department,
       authorizedBy: authorizedBy.name,
       authorizedById: args.userId,
-    });
+    };
+    if (args.rehireReason) rehireEntry.reason = args.rehireReason;
+    employmentHistory.push(rehireEntry);
 
     // Update personnel record
     await ctx.db.patch(args.personnelId, {
