@@ -45,6 +45,18 @@ async function getScheduledStartTime(
   return null;
 }
 
+// Helper to round minutes to nearest 15-minute interval for pay
+function roundToQuarterHour(minutes: number): number {
+  return Math.round(minutes / 15) * 15;
+}
+
+// Helper to calculate hours with 15-minute rounding
+function calculateRoundedHours(totalMinutes: number, breakMinutes: number): number {
+  const workMinutes = totalMinutes - breakMinutes;
+  const roundedMinutes = roundToQuarterHour(workMinutes);
+  return Math.round((roundedMinutes / 60) * 100) / 100;
+}
+
 // Helper to parse time string to minutes since midnight
 function parseTimeToMinutes(time: string): number {
   const [hours, minutes] = time.split(":").map(Number);
@@ -129,12 +141,13 @@ export const getCurrentStatus = query({
       totalMinutes += (now - clockInTime) / (1000 * 60);
     }
 
-    const hoursWorked = (totalMinutes - breakMinutes) / 60;
+    // Round to nearest 15-minute interval for pay
+    const hoursWorked = calculateRoundedHours(totalMinutes, breakMinutes);
 
     return {
       status,
       entries: sorted,
-      hoursWorked: Math.round(hoursWorked * 100) / 100,
+      hoursWorked,
       lastEntry,
     };
   },
@@ -211,7 +224,8 @@ export const getActiveClocks = query({
         totalMinutes = (now - clockInTime) / (1000 * 60);
       }
 
-      const hoursWorked = (totalMinutes - breakMinutes) / 60;
+      // Round to nearest 15-minute interval for pay
+      const hoursWorked = calculateRoundedHours(totalMinutes, breakMinutes);
 
       activeClocks.push({
         personnelId: personnelId as Id<"personnel">,
@@ -339,11 +353,14 @@ export const getDailySummary = query({
 
       let totalHours = 0;
       if (clockIn && clockOut) {
-        totalHours = ((clockOut - clockIn) / (1000 * 60) - breakMinutes) / 60;
+        // Round to nearest 15-minute interval for pay
+        const totalMinutes = (clockOut - clockIn) / (1000 * 60);
+        totalHours = calculateRoundedHours(totalMinutes, breakMinutes);
       } else if (clockIn) {
-        // Still clocked in
+        // Still clocked in - round to nearest 15-minute interval
         const now = Date.now();
-        totalHours = ((now - clockIn) / (1000 * 60) - breakMinutes) / 60;
+        const totalMinutes = (now - clockIn) / (1000 * 60);
+        totalHours = calculateRoundedHours(totalMinutes, breakMinutes);
       }
 
       summaries.push({
@@ -899,7 +916,8 @@ export const getAllClockStatuses = query({
         totalMinutes = (now - clockInTime) / (1000 * 60);
       }
 
-      const hoursWorked = Math.round(((totalMinutes - breakMinutes) / 60) * 100) / 100;
+      // Round to nearest 15-minute interval for pay
+      const hoursWorked = calculateRoundedHours(totalMinutes, breakMinutes);
 
       statusMap[personnelId] = {
         status,
@@ -1024,7 +1042,8 @@ export const getManagerDashboard = query({
           }
         }
 
-        const hoursWorked = Math.round(((totalMinutes - breakMinutes) / 60) * 100) / 100;
+        // Round to nearest 15-minute interval for pay
+        const hoursWorked = calculateRoundedHours(totalMinutes, breakMinutes);
 
         // Check if late (look at first clock_in entry)
         const firstClockIn = sorted.find((e) => e.type === "clock_in");

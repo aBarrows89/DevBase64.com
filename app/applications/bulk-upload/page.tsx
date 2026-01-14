@@ -2,8 +2,9 @@
 
 import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { useAction } from "convex/react";
+import { useAction, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { Id } from "@/convex/_generated/dataModel";
 import ProtectedRoute from "@/app/protected";
 
 interface FileStatus {
@@ -25,6 +26,7 @@ interface FileStatus {
 export default function BulkUploadPage() {
   const router = useRouter();
   const processResume = useAction(api.bulkUpload.processResume);
+  const generateUploadUrl = useMutation(api.applications.generateUploadUrl);
 
   const [files, setFiles] = useState<FileStatus[]>([]);
   const [isDragging, setIsDragging] = useState(false);
@@ -105,6 +107,26 @@ export default function BulkUploadPage() {
     ]);
   };
 
+  // Upload file to Convex storage
+  const uploadFileToStorage = async (file: File): Promise<Id<"_storage">> => {
+    // Get upload URL from Convex
+    const uploadUrl = await generateUploadUrl();
+
+    // Upload the file
+    const response = await fetch(uploadUrl, {
+      method: "POST",
+      headers: { "Content-Type": file.type },
+      body: file,
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to upload file to storage");
+    }
+
+    const { storageId } = await response.json();
+    return storageId as Id<"_storage">;
+  };
+
   // Process a single file with timeout protection
   // Takes the file directly to avoid closure issues with stale state
   const processSingleFile = async (file: File, index: number): Promise<void> => {
@@ -118,12 +140,21 @@ export default function BulkUploadPage() {
     });
 
     try {
-      // Extract text from PDF with 60 second timeout (Indeed PDFs can be large)
-      const resumeText = await withTimeout(
-        extractTextFromPdf(file),
-        60000,
-        "PDF extraction timed out - file may be too large or password-protected"
-      );
+      // First, upload the PDF file to storage (parallel with text extraction)
+      const [resumeText, resumeFileId] = await Promise.all([
+        // Extract text from PDF with 60 second timeout (Indeed PDFs can be large)
+        withTimeout(
+          extractTextFromPdf(file),
+          60000,
+          "PDF extraction timed out - file may be too large or password-protected"
+        ),
+        // Upload file to storage with 30 second timeout
+        withTimeout(
+          uploadFileToStorage(file),
+          30000,
+          "File upload timed out"
+        ),
+      ]);
 
       if (!resumeText || resumeText.trim().length < 50) {
         throw new Error("Could not extract text from PDF - file may be scanned or image-based");
@@ -143,6 +174,7 @@ export default function BulkUploadPage() {
         processResume({
           resumeText,
           fileName: file.name,
+          resumeFileId, // Include the uploaded file ID
         }),
         120000,
         "AI processing timed out - please try again"

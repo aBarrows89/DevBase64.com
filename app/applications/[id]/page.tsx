@@ -43,6 +43,116 @@ function getScheduleDisplay(template: { departments?: { startTime: string; endTi
   return "No times set";
 }
 
+// Resume Section Component - Shows PDF viewer or text fallback
+function ResumeSection({ application }: { application: { resumeFileId?: Id<"_storage">; resumeText?: string; firstName: string; lastName: string } }) {
+  const [viewMode, setViewMode] = useState<"pdf" | "text">(application.resumeFileId ? "pdf" : "text");
+
+  // Fetch PDF URL if file exists
+  const resumeUrl = useQuery(
+    api.applications.getResumeUrl,
+    application.resumeFileId ? { fileId: application.resumeFileId } : "skip"
+  );
+
+  const hasPdf = !!application.resumeFileId && !!resumeUrl;
+  const hasText = !!application.resumeText;
+
+  return (
+    <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-lg font-semibold text-white">Submitted Resume</h2>
+        <div className="flex items-center gap-2">
+          {/* View mode tabs - only show if both PDF and text are available */}
+          {hasPdf && hasText && (
+            <div className="flex bg-slate-900 rounded-lg p-0.5">
+              <button
+                onClick={() => setViewMode("pdf")}
+                className={`px-3 py-1 rounded-md text-sm transition-colors ${
+                  viewMode === "pdf"
+                    ? "bg-cyan-600 text-white"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                PDF
+              </button>
+              <button
+                onClick={() => setViewMode("text")}
+                className={`px-3 py-1 rounded-md text-sm transition-colors ${
+                  viewMode === "text"
+                    ? "bg-cyan-600 text-white"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                Text
+              </button>
+            </div>
+          )}
+          {/* Download button for PDF */}
+          {hasPdf && (
+            <a
+              href={resumeUrl}
+              download={`${application.firstName}_${application.lastName}_Resume.pdf`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Download
+            </a>
+          )}
+        </div>
+      </div>
+
+      {/* PDF View */}
+      {viewMode === "pdf" && hasPdf && (
+        <div className="bg-slate-900/50 border border-slate-600 rounded-lg overflow-hidden">
+          <iframe
+            src={`${resumeUrl}#toolbar=1&navpanes=0`}
+            className="w-full h-[600px]"
+            title="Resume PDF"
+          />
+        </div>
+      )}
+
+      {/* Text View */}
+      {viewMode === "text" && hasText && (
+        <div className="bg-slate-900/50 border border-slate-600 rounded-lg p-4 max-h-96 overflow-y-auto">
+          <pre className="text-slate-300 text-sm whitespace-pre-wrap font-mono">
+            {application.resumeText}
+          </pre>
+        </div>
+      )}
+
+      {/* No PDF available message */}
+      {viewMode === "pdf" && !hasPdf && hasText && (
+        <div className="bg-slate-900/50 border border-slate-600 rounded-lg p-8 text-center">
+          <p className="text-slate-400 mb-2">PDF not available for this application</p>
+          <button
+            onClick={() => setViewMode("text")}
+            className="text-cyan-400 hover:text-cyan-300 text-sm"
+          >
+            View extracted text instead
+          </button>
+        </div>
+      )}
+
+      {/* Only PDF, no text */}
+      {viewMode === "text" && !hasText && hasPdf && (
+        <div className="bg-slate-900/50 border border-slate-600 rounded-lg p-8 text-center">
+          <p className="text-slate-400 mb-2">Text version not available</p>
+          <button
+            onClick={() => setViewMode("pdf")}
+            className="text-cyan-400 hover:text-cyan-300 text-sm"
+          >
+            View PDF instead
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ApplicationDetailContent({ id }: { id: string }) {
   const router = useRouter();
   const { user } = useAuth();
@@ -92,10 +202,10 @@ function ApplicationDetailContent({ id }: { id: string }) {
   const addInterviewAttendees = useMutation(api.applications.addInterviewAttendees);
   const removeInterviewAttendee = useMutation(api.applications.removeInterviewAttendee);
 
-  // Get interview attendees
+  // Get interview attendees - run when there's a scheduled interview date
   const interviewAttendees = useQuery(
     api.applications.getInterviewAttendees,
-    application?.scheduledInterviewEventId ? { applicationId: id as Id<"applications"> } : "skip"
+    application?.scheduledInterviewDate ? { applicationId: id as Id<"applications"> } : "skip"
   );
 
   // Get all users for attendee selection
@@ -1810,16 +1920,9 @@ function ApplicationDetailContent({ id }: { id: string }) {
             )}
           </div>
 
-          {/* Resume Text */}
-          {application.resumeText && (
-            <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
-              <h2 className="text-lg font-semibold text-white mb-3">Submitted Resume</h2>
-              <div className="bg-slate-900/50 border border-slate-600 rounded-lg p-4 max-h-96 overflow-y-auto">
-                <pre className="text-slate-300 text-sm whitespace-pre-wrap font-mono">
-                  {application.resumeText}
-                </pre>
-              </div>
-            </div>
+          {/* Resume Section - PDF or Text */}
+          {(application.resumeFileId || application.resumeText) && (
+            <ResumeSection application={application} />
           )}
         </div>
       </main>

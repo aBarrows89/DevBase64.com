@@ -2,6 +2,11 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
 
+// Helper to round minutes to nearest 15-minute interval for pay
+function roundToQuarterHour(minutes: number): number {
+  return Math.round(minutes / 15) * 15;
+}
+
 // Reference date for pay period calculation (same as employeePortal)
 const PAY_PERIOD_REFERENCE = new Date("2024-01-01T00:00:00");
 const PAY_PERIOD_DAYS = 14;
@@ -308,7 +313,9 @@ function calculateHoursFromEntries(
     }
 
     const netMinutes = Math.max(0, workMinutes - breakMinutes);
-    const hoursWorked = Math.round((netMinutes / 60) * 100) / 100;
+    // Round to nearest 15-minute interval for pay
+    const roundedMinutes = roundToQuarterHour(netMinutes);
+    const hoursWorked = Math.round((roundedMinutes / 60) * 100) / 100;
 
     dailyBreakdown.push({
       date,
@@ -318,10 +325,12 @@ function calculateHoursFromEntries(
       hoursWorked,
     });
 
-    totalMinutes += netMinutes;
+    // Add rounded minutes to total (for accurate pay calculation)
+    totalMinutes += roundedMinutes;
   }
 
   // Calculate regular vs overtime (>40 hrs/week = OT)
+  // totalMinutes already contains rounded values
   const totalHours = Math.round((totalMinutes / 60) * 100) / 100;
   const regularHours = Math.min(totalHours, 40);
   const overtimeHours = Math.max(0, totalHours - 40);

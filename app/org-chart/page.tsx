@@ -141,19 +141,21 @@ function OrgLevel({
   role,
   roleLabel,
   users,
+  permissions,
   isDark,
   isFirst,
 }: {
   role: string;
   roleLabel: string;
   users: OrgUser[];
+  permissions: string[];
   isDark: boolean;
   isFirst: boolean;
 }) {
   if (users.length === 0) return null;
 
   return (
-    <div className="flex flex-col items-center relative">
+    <div className="flex flex-col items-center relative w-full">
       {/* Vertical connector from above (except first level) */}
       {!isFirst && (
         <div
@@ -161,13 +163,33 @@ function OrgLevel({
         />
       )}
 
-      {/* Level label */}
+      {/* Level header with permissions */}
       <div
-        className={`px-3 py-1 rounded-full text-xs font-medium mb-3 ${
-          isDark ? "bg-slate-700/50 text-slate-400" : "bg-gray-100 text-gray-500"
+        className={`rounded-xl px-6 py-3 mb-4 ${
+          isDark ? "bg-slate-800/50 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"
         }`}
       >
-        {roleLabel} ({users.length})
+        <div className="flex items-center gap-3">
+          <span
+            className={`px-3 py-1 rounded-full text-xs font-semibold ${
+              ROLE_COLORS[role] || ROLE_COLORS.member
+            }`}
+          >
+            {roleLabel} ({users.length})
+          </span>
+          <div className="flex flex-wrap gap-1">
+            {permissions.map((perm, idx) => (
+              <span
+                key={idx}
+                className={`px-2 py-0.5 text-[10px] rounded ${
+                  isDark ? "bg-slate-700 text-slate-400" : "bg-gray-100 text-gray-500"
+                }`}
+              >
+                {perm}
+              </span>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Cards container */}
@@ -281,6 +303,7 @@ function OrgChartContent() {
                   role={role}
                   roleLabel={orgData.roleLabels[role] || role}
                   users={users}
+                  permissions={orgData.rolePermissions?.[role] || []}
                   isDark={isDark}
                   isFirst={isFirst}
                 />

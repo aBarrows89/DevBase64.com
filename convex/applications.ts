@@ -47,6 +47,38 @@ export const getByJob = query({
   },
 });
 
+// Check for existing application by email or name (for duplicate detection)
+export const checkForDuplicate = query({
+  args: {
+    email: v.optional(v.string()),
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    // Check by email first (most reliable)
+    if (args.email && args.email.trim().length > 0) {
+      const byEmail = await ctx.db
+        .query("applications")
+        .withIndex("by_email", (q) => q.eq("email", args.email!.toLowerCase()))
+        .first();
+      if (byEmail) return byEmail;
+    }
+
+    // Also check by name if email not found
+    if (args.firstName && args.lastName) {
+      const allApps = await ctx.db.query("applications").collect();
+      const byName = allApps.find(
+        (app) =>
+          app.firstName.toLowerCase() === args.firstName!.toLowerCase() &&
+          app.lastName.toLowerCase() === args.lastName!.toLowerCase()
+      );
+      if (byName) return byName;
+    }
+
+    return null;
+  },
+});
+
 // Get single application
 export const getById = query({
   args: { applicationId: v.id("applications") },
@@ -179,6 +211,7 @@ export const submitApplication = mutation({
     phone: v.string(),
     message: v.optional(v.string()),
     resumeText: v.optional(v.string()),
+    resumeFileId: v.optional(v.id("_storage")), // Actual PDF file
     appliedJobId: v.optional(v.id("jobs")),
     appliedJobTitle: v.string(),
     aiAnalysis: v.optional(v.object({
@@ -1117,6 +1150,38 @@ export const getByStatusGrouped = query({
     }
 
     return grouped;
+  },
+});
+
+// ============ RESUME FILE STORAGE ============
+
+// Generate upload URL for resume PDF
+export const generateUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+// Get download URL for a resume file
+export const getResumeUrl = query({
+  args: { fileId: v.id("_storage") },
+  handler: async (ctx, args) => {
+    return await ctx.storage.getUrl(args.fileId);
+  },
+});
+
+// Update application with resume file
+export const updateResumeFile = mutation({
+  args: {
+    applicationId: v.id("applications"),
+    resumeFileId: v.id("_storage"),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.applicationId, {
+      resumeFileId: args.resumeFileId,
+      updatedAt: Date.now(),
+    });
   },
 });
 

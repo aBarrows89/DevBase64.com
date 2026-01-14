@@ -132,6 +132,7 @@ export default defineSchema({
     phone: v.string(),
     message: v.optional(v.string()),
     resumeText: v.optional(v.string()),
+    resumeFileId: v.optional(v.id("_storage")), // Actual PDF file in storage
     appliedJobId: v.optional(v.id("jobs")),
     appliedJobTitle: v.string(),
     aiAnalysis: v.optional(

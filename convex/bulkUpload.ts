@@ -10,6 +10,7 @@ export const processResume = action({
   args: {
     resumeText: v.string(),
     fileName: v.string(),
+    resumeFileId: v.optional(v.id("_storage")), // Optional: actual PDF file stored in Convex
   },
   handler: async (ctx, args): Promise<{
     success: boolean;
@@ -84,7 +85,21 @@ export const processResume = action({
         };
       }
 
-      // No existing personnel - create a new application
+      // No existing personnel - check for duplicate application
+      const existingApplication = await ctx.runQuery(api.applications.checkForDuplicate, {
+        email: email || undefined,
+        firstName: firstName || undefined,
+        lastName: lastName || undefined,
+      });
+
+      if (existingApplication) {
+        return {
+          success: false,
+          error: `Duplicate: Application already exists for ${existingApplication.firstName} ${existingApplication.lastName} (${existingApplication.email})`,
+        };
+      }
+
+      // Create a new application
       if (!topMatch) {
         return {
           success: false,
@@ -115,6 +130,7 @@ export const processResume = action({
         email: email || "",
         phone: analysis.phone || "",
         resumeText,
+        resumeFileId: args.resumeFileId, // Include actual PDF if provided
         appliedJobId: topMatch.jobId,
         appliedJobTitle: topMatch.jobTitle,
         aiAnalysis,
