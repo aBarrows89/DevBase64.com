@@ -1,5 +1,6 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 
 // Get all applications
 export const getAll = query({
@@ -628,6 +629,22 @@ export const scheduleInterview = mutation({
       updatedAt: now,
     });
 
+    // Send interview confirmation email (async, don't block)
+    await ctx.scheduler.runAfter(0, internal.emails.sendInterviewScheduledEmail, {
+      applicantFirstName: application.firstName,
+      applicantLastName: application.lastName,
+      applicantEmail: application.email,
+      resumeText: application.resumeText,
+      jobTitle: application.appliedJobTitle || "Position",
+      interviewDate: args.date,
+      interviewTime: args.time,
+      interviewLocation: args.location,
+      companyName: "IE Central",
+      companyAddress: "3550 W Washington Blvd, Los Angeles, CA 90018",
+      contactPhone: "(323) 555-0100",
+      contactEmail: "hr@iecentral.com",
+    });
+
     return eventId;
   },
 });
@@ -644,6 +661,10 @@ export const rescheduleInterview = mutation({
   handler: async (ctx, args) => {
     const application = await ctx.db.get(args.applicationId);
     if (!application) throw new Error("Application not found");
+
+    // Store old date/time for the reschedule email
+    const oldDate = application.scheduledInterviewDate;
+    const oldTime = application.scheduledInterviewTime;
 
     const now = Date.now();
     const endTime = args.startTimestamp + 60 * 60 * 1000; // 1 hour interview
@@ -668,6 +689,26 @@ export const rescheduleInterview = mutation({
       scheduledInterviewLocation: args.location,
       updatedAt: now,
     });
+
+    // Send reschedule notification email (async, don't block)
+    if (oldDate && oldTime) {
+      await ctx.scheduler.runAfter(0, internal.emails.sendInterviewRescheduledEmail, {
+        applicantFirstName: application.firstName,
+        applicantLastName: application.lastName,
+        applicantEmail: application.email,
+        resumeText: application.resumeText,
+        jobTitle: application.appliedJobTitle || "Position",
+        oldDate,
+        oldTime,
+        newDate: args.date,
+        newTime: args.time,
+        interviewLocation: args.location,
+        companyName: "IE Central",
+        companyAddress: "3550 W Washington Blvd, Los Angeles, CA 90018",
+        contactPhone: "(323) 555-0100",
+        contactEmail: "hr@iecentral.com",
+      });
+    }
   },
 });
 
