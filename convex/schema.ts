@@ -1684,6 +1684,50 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_created_by", ["createdBy"]),
 
+  // ============ EXPENSE REPORTS ============
+  // Employee expense reports for reimbursement
+  expenseReports: defineTable({
+    // Report info
+    employeeName: v.string(),
+    department: v.string(),
+    reportDate: v.string(), // YYYY-MM-DD
+    periodStart: v.string(), // YYYY-MM-DD
+    periodEnd: v.string(), // YYYY-MM-DD
+    purpose: v.optional(v.string()), // Business reason
+    // Expense items
+    items: v.array(v.object({
+      date: v.string(), // YYYY-MM-DD
+      description: v.string(),
+      category: v.string(),
+      amount: v.number(),
+      hasReceipt: v.boolean(),
+    })),
+    totalAmount: v.number(),
+    // Status workflow
+    status: v.string(), // "draft" | "submitted" | "approved" | "rejected" | "paid"
+    submittedAt: v.optional(v.number()),
+    approvedAt: v.optional(v.number()),
+    approvedBy: v.optional(v.id("users")),
+    approvedByName: v.optional(v.string()),
+    rejectedAt: v.optional(v.number()),
+    rejectedBy: v.optional(v.id("users")),
+    rejectionReason: v.optional(v.string()),
+    paidAt: v.optional(v.number()),
+    paidBy: v.optional(v.id("users")),
+    // Notes
+    notes: v.optional(v.string()),
+    // Tracking
+    createdBy: v.id("users"),
+    createdByName: v.string(),
+    personnelId: v.optional(v.id("personnel")), // Link to personnel record
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_status", ["status"])
+    .index("by_created_by", ["createdBy"])
+    .index("by_date", ["reportDate"])
+    .index("by_personnel", ["personnelId"]),
+
   // ============ ONBOARDING DOCUMENTS ============
   // Documents that employees must read and sign (e.g., employee handbook)
   onboardingDocuments: defineTable({

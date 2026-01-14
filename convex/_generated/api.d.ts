@@ -28,6 +28,7 @@ import type * as employeeChat from "../employeeChat.js";
 import type * as employeePortal from "../employeePortal.js";
 import type * as equipment from "../equipment.js";
 import type * as events from "../events.js";
+import type * as expenseReports from "../expenseReports.js";
 import type * as jobs from "../jobs.js";
 import type * as locations from "../locations.js";
 import type * as merits from "../merits.js";
@@ -83,6 +84,7 @@ declare const fullApi: ApiFromModules<{
   employeePortal: typeof employeePortal;
   equipment: typeof equipment;
   events: typeof events;
+  expenseReports: typeof expenseReports;
   jobs: typeof jobs;
   locations: typeof locations;
   merits: typeof merits;
