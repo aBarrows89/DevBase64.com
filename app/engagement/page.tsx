@@ -308,7 +308,7 @@ function EngagementDashboardContent() {
                         </div>
                       </div>
                       {/* Show text answers if any */}
-                      {response.answers.filter(a => a.questionType === "text" && a.value).map((answer) => (
+                      {response.answers?.filter(a => a.questionType === "text" && a.value).map((answer) => (
                         <p key={answer.questionId} className={`mt-2 text-sm italic ${isDark ? "text-slate-400" : "text-gray-600"}`}>
                           "{answer.value}"
                         </p>
