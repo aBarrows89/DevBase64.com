@@ -92,13 +92,19 @@ function ApplicationsContent() {
     .filter((app) => {
       const matchesStatus =
         filterStatus === "all" || app.status === filterStatus;
+      // Normalize phone search - strip non-digits for comparison
+      const normalizedSearch = searchTerm.replace(/\D/g, "");
+      const normalizedPhone = app.phone?.replace(/\D/g, "") || "";
+      const matchesPhone = normalizedSearch.length >= 3 && normalizedPhone.includes(normalizedSearch);
+
       const matchesSearch =
         searchTerm === "" ||
         `${app.firstName} ${app.lastName}`
           .toLowerCase()
           .includes(searchTerm.toLowerCase()) ||
         app.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        app.appliedJobTitle.toLowerCase().includes(searchTerm.toLowerCase());
+        app.appliedJobTitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        matchesPhone;
       return matchesStatus && matchesSearch;
     })
     .sort((a, b) => {
@@ -525,7 +531,7 @@ function ApplicationsContent() {
               <div className="flex-1">
                 <input
                   type="text"
-                  placeholder="Search name, email, or job..."
+                  placeholder="Search name, email, phone, or job..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className={`w-full px-3 sm:px-4 py-2 text-sm sm:text-base rounded-lg focus:outline-none ${isDark ? "bg-slate-800/50 border border-slate-700 text-white placeholder-slate-500 focus:border-cyan-500" : "bg-white border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-blue-600"}`}

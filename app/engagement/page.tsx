@@ -1,0 +1,582 @@
+"use client";
+
+import { useState } from "react";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import ProtectedRoute from "@/components/ProtectedRoute";
+import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
+import Link from "next/link";
+
+function EngagementDashboardContent() {
+  const { user } = useAuth();
+  const { isDark } = useTheme();
+
+  const [dateRange, setDateRange] = useState({
+    startDate: "",
+    endDate: "",
+  });
+  const [selectedDepartment, setSelectedDepartment] = useState("");
+  const [activeTab, setActiveTab] = useState<"overview" | "surveys" | "exit" | "offers">("overview");
+  const [showCreateSurvey, setShowCreateSurvey] = useState(false);
+
+  // Queries
+  const engagementMetrics = useQuery(api.surveys.getEngagementMetrics, {
+    startDate: dateRange.startDate || undefined,
+    endDate: dateRange.endDate || undefined,
+    department: selectedDepartment || undefined,
+  });
+  const surveyCampaigns = useQuery(api.surveys.listCampaigns, {});
+  const recentResponses = useQuery(api.surveys.getRecentResponses, { limit: 10 });
+  const exitAnalytics = useQuery(api.exitInterviews.getAnalytics, {
+    startDate: dateRange.startDate || undefined,
+    endDate: dateRange.endDate || undefined,
+  });
+  const pendingExitInterviews = useQuery(api.exitInterviews.getPending);
+  const offerStats = useQuery(api.offerLetters.getStats);
+  const departments = useQuery(api.personnel.getDepartments);
+
+  // Mutations
+  const createDefaultSurvey = useMutation(api.surveys.createDefaultPulseSurvey);
+  const sendSurvey = useMutation(api.surveys.sendSurvey);
+
+  const handleCreateDefaultSurvey = async () => {
+    if (!user) return;
+    try {
+      await createDefaultSurvey({ userId: user._id });
+      setShowCreateSurvey(false);
+    } catch (error) {
+      console.error("Failed to create survey:", error);
+    }
+  };
+
+  const handleSendSurvey = async (campaignId: string) => {
+    try {
+      const result = await sendSurvey({ campaignId: campaignId as any });
+      alert(`Survey sent to ${result.sent} employees`);
+    } catch (error) {
+      console.error("Failed to send survey:", error);
+      alert("Failed to send survey");
+    }
+  };
+
+  // Score color helper
+  const getScoreColor = (score: number | null) => {
+    if (score === null) return "text-slate-400";
+    if (score >= 8) return "text-green-500";
+    if (score >= 6) return "text-yellow-500";
+    return "text-red-500";
+  };
+
+  const getNpsColor = (nps: number | null) => {
+    if (nps === null) return "text-slate-400";
+    if (nps >= 50) return "text-green-500";
+    if (nps >= 0) return "text-yellow-500";
+    return "text-red-500";
+  };
+
+  return (
+    <div className={`min-h-screen ${isDark ? "bg-slate-900" : "bg-gray-50"}`}>
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-8">
+          <div>
+            <h1 className={`text-3xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
+              Employee Engagement
+            </h1>
+            <p className={`mt-1 ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+              Track happiness, surveys, exit interviews, and offers
+            </p>
+          </div>
+
+          {/* Filters */}
+          <div className="flex flex-wrap gap-3 mt-4 md:mt-0">
+            <select
+              value={selectedDepartment}
+              onChange={(e) => setSelectedDepartment(e.target.value)}
+              className={`px-3 py-2 rounded-lg border ${isDark ? "bg-slate-800 border-slate-700 text-white" : "bg-white border-gray-200 text-gray-900"}`}
+            >
+              <option value="">All Departments</option>
+              {departments?.map((dept) => (
+                <option key={dept} value={dept}>{dept}</option>
+              ))}
+            </select>
+            <input
+              type="date"
+              value={dateRange.startDate}
+              onChange={(e) => setDateRange({ ...dateRange, startDate: e.target.value })}
+              className={`px-3 py-2 rounded-lg border ${isDark ? "bg-slate-800 border-slate-700 text-white" : "bg-white border-gray-200 text-gray-900"}`}
+              placeholder="Start Date"
+            />
+            <input
+              type="date"
+              value={dateRange.endDate}
+              onChange={(e) => setDateRange({ ...dateRange, endDate: e.target.value })}
+              className={`px-3 py-2 rounded-lg border ${isDark ? "bg-slate-800 border-slate-700 text-white" : "bg-white border-gray-200 text-gray-900"}`}
+              placeholder="End Date"
+            />
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+          {[
+            { id: "overview", label: "Overview" },
+            { id: "surveys", label: "Surveys" },
+            { id: "exit", label: "Exit Interviews" },
+            { id: "offers", label: "Offer Letters" },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors ${
+                activeTab === tab.id
+                  ? isDark
+                    ? "bg-cyan-500 text-white"
+                    : "bg-cyan-600 text-white"
+                  : isDark
+                    ? "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                    : "bg-white text-gray-600 hover:bg-gray-100"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Overview Tab */}
+        {activeTab === "overview" && (
+          <div className="space-y-6">
+            {/* Key Metrics */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Happiness Score */}
+              <div className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm`}>
+                <div className={`text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                  Happiness Score
+                </div>
+                <div className={`text-4xl font-bold mt-2 ${getScoreColor(engagementMetrics?.avgHappinessScore ?? null)}`}>
+                  {engagementMetrics?.avgHappinessScore !== null
+                    ? engagementMetrics?.avgHappinessScore?.toFixed(1)
+                    : "—"}
+                  <span className="text-lg text-slate-400">/10</span>
+                </div>
+                <div className={`text-xs mt-2 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                  Based on {engagementMetrics?.totalResponses || 0} responses
+                </div>
+              </div>
+
+              {/* NPS Score */}
+              <div className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm`}>
+                <div className={`text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                  eNPS Score
+                </div>
+                <div className={`text-4xl font-bold mt-2 ${getNpsColor(engagementMetrics?.avgNpsScore ?? null)}`}>
+                  {engagementMetrics?.avgNpsScore !== null
+                    ? Math.round(engagementMetrics?.avgNpsScore || 0)
+                    : "—"}
+                </div>
+                <div className={`text-xs mt-2 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                  Employee Net Promoter Score
+                </div>
+              </div>
+
+              {/* Response Rate */}
+              <div className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm`}>
+                <div className={`text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                  Response Rate
+                </div>
+                <div className={`text-4xl font-bold mt-2 ${isDark ? "text-white" : "text-gray-900"}`}>
+                  {engagementMetrics?.responseRate !== null
+                    ? `${engagementMetrics?.responseRate?.toFixed(0)}%`
+                    : "—"}
+                </div>
+                <div className={`text-xs mt-2 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                  Survey participation
+                </div>
+              </div>
+
+              {/* Offer Acceptance Rate */}
+              <div className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm`}>
+                <div className={`text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                  Offer Acceptance
+                </div>
+                <div className={`text-4xl font-bold mt-2 ${isDark ? "text-white" : "text-gray-900"}`}>
+                  {offerStats?.acceptanceRate !== null
+                    ? `${offerStats?.acceptanceRate?.toFixed(0)}%`
+                    : "—"}
+                </div>
+                <div className={`text-xs mt-2 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                  {offerStats?.accepted || 0} accepted / {(offerStats?.accepted || 0) + (offerStats?.declined || 0)} responded
+                </div>
+              </div>
+            </div>
+
+            {/* Trend Chart Placeholder & Department Breakdown */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Trend */}
+              <div className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm`}>
+                <h3 className={`text-lg font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
+                  Happiness Trend
+                </h3>
+                {engagementMetrics?.trend && engagementMetrics.trend.length > 0 ? (
+                  <div className="space-y-3">
+                    {engagementMetrics.trend.map((month) => (
+                      <div key={month.month} className="flex items-center gap-4">
+                        <span className={`w-20 text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                          {month.month}
+                        </span>
+                        <div className="flex-1 h-4 bg-slate-700 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-cyan-500 rounded-full"
+                            style={{ width: `${((month.avgScore || 0) / 10) * 100}%` }}
+                          />
+                        </div>
+                        <span className={`w-12 text-right text-sm font-medium ${getScoreColor(month.avgScore)}`}>
+                          {month.avgScore?.toFixed(1) || "—"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    No data yet. Send surveys to start tracking trends.
+                  </p>
+                )}
+              </div>
+
+              {/* By Department */}
+              <div className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm`}>
+                <h3 className={`text-lg font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
+                  By Department
+                </h3>
+                {engagementMetrics?.byDepartment && engagementMetrics.byDepartment.length > 0 ? (
+                  <div className="space-y-3">
+                    {engagementMetrics.byDepartment.map((dept) => (
+                      <div key={dept.department} className="flex items-center justify-between">
+                        <span className={`text-sm ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                          {dept.department}
+                        </span>
+                        <div className="flex items-center gap-3">
+                          <span className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                            {dept.responseCount} responses
+                          </span>
+                          <span className={`font-semibold ${getScoreColor(dept.avgScore)}`}>
+                            {dept.avgScore?.toFixed(1) || "—"}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    No department data yet.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Recent Responses */}
+            <div className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm`}>
+              <h3 className={`text-lg font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
+                Recent Survey Responses
+              </h3>
+              {recentResponses && recentResponses.length > 0 ? (
+                <div className="space-y-3">
+                  {recentResponses.map((response) => (
+                    <div
+                      key={response._id}
+                      className={`p-4 rounded-lg ${isDark ? "bg-slate-700" : "bg-gray-50"}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                            {response.personnelName}
+                          </span>
+                          <span className={`mx-2 ${isDark ? "text-slate-500" : "text-gray-400"}`}>•</span>
+                          <span className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                            {response.campaignName}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <span className={`font-semibold ${getScoreColor(response.overallScore ?? null)}`}>
+                            {response.overallScore?.toFixed(1) || "—"}
+                          </span>
+                          <span className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                            {new Date(response.submittedAt).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </div>
+                      {/* Show text answers if any */}
+                      {response.answers.filter(a => a.questionType === "text" && a.value).map((answer) => (
+                        <p key={answer.questionId} className={`mt-2 text-sm italic ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                          "{answer.value}"
+                        </p>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                  No responses yet.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Surveys Tab */}
+        {activeTab === "surveys" && (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className={`text-xl font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                Survey Campaigns
+              </h2>
+              <button
+                onClick={() => setShowCreateSurvey(true)}
+                className="px-4 py-2 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg font-medium transition-colors"
+              >
+                + Create Survey
+              </button>
+            </div>
+
+            {surveyCampaigns && surveyCampaigns.length > 0 ? (
+              <div className="grid gap-4">
+                {surveyCampaigns.map((campaign) => (
+                  <div
+                    key={campaign._id}
+                    className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h3 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                          {campaign.name}
+                        </h3>
+                        {campaign.description && (
+                          <p className={`text-sm mt-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                            {campaign.description}
+                          </p>
+                        )}
+                        <div className="flex flex-wrap gap-2 mt-3">
+                          <span className={`px-2 py-1 rounded text-xs font-medium ${
+                            campaign.isActive
+                              ? "bg-green-500/20 text-green-400"
+                              : "bg-slate-500/20 text-slate-400"
+                          }`}>
+                            {campaign.isActive ? "Active" : "Inactive"}
+                          </span>
+                          <span className={`px-2 py-1 rounded text-xs font-medium ${isDark ? "bg-slate-700 text-slate-300" : "bg-gray-100 text-gray-600"}`}>
+                            {campaign.frequency}
+                          </span>
+                          <span className={`px-2 py-1 rounded text-xs font-medium ${isDark ? "bg-slate-700 text-slate-300" : "bg-gray-100 text-gray-600"}`}>
+                            {campaign.isAnonymous ? "Anonymous" : "Named"}
+                          </span>
+                          <span className={`px-2 py-1 rounded text-xs font-medium ${isDark ? "bg-slate-700 text-slate-300" : "bg-gray-100 text-gray-600"}`}>
+                            {campaign.questions.length} questions
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className={`text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
+                          {campaign.totalResponses}
+                        </div>
+                        <div className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                          of {campaign.totalSent} responses
+                        </div>
+                        <button
+                          onClick={() => handleSendSurvey(campaign._id)}
+                          className="mt-3 px-3 py-1 bg-cyan-500 hover:bg-cyan-600 text-white text-sm rounded font-medium transition-colors"
+                        >
+                          Send Now
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className={`p-12 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm text-center`}>
+                <p className={`text-lg ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                  No survey campaigns yet
+                </p>
+                <button
+                  onClick={handleCreateDefaultSurvey}
+                  className="mt-4 px-6 py-3 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg font-medium transition-colors"
+                >
+                  Create Default Pulse Survey
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Exit Interviews Tab */}
+        {activeTab === "exit" && (
+          <div className="space-y-6">
+            {/* Exit Interview Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm`}>
+                <div className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>Completed</div>
+                <div className={`text-3xl font-bold mt-1 ${isDark ? "text-white" : "text-gray-900"}`}>
+                  {exitAnalytics?.totalCompleted || 0}
+                </div>
+              </div>
+              <div className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm`}>
+                <div className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>Avg Satisfaction</div>
+                <div className={`text-3xl font-bold mt-1 ${getScoreColor(exitAnalytics?.avgSatisfaction ?? null)}`}>
+                  {exitAnalytics?.avgSatisfaction?.toFixed(1) || "—"}
+                </div>
+              </div>
+              <div className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm`}>
+                <div className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>Would Return</div>
+                <div className={`text-3xl font-bold mt-1 text-green-500`}>
+                  {exitAnalytics?.wouldReturn?.yes || 0}
+                </div>
+              </div>
+              <div className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm`}>
+                <div className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>Would Recommend</div>
+                <div className={`text-3xl font-bold mt-1 text-green-500`}>
+                  {exitAnalytics?.wouldRecommend?.yes || 0}
+                </div>
+              </div>
+            </div>
+
+            {/* Pending Exit Interviews */}
+            <div className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm`}>
+              <h3 className={`text-lg font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
+                Pending Exit Interviews ({pendingExitInterviews?.length || 0})
+              </h3>
+              {pendingExitInterviews && pendingExitInterviews.length > 0 ? (
+                <div className="space-y-3">
+                  {pendingExitInterviews.map((interview) => (
+                    <div
+                      key={interview._id}
+                      className={`p-4 rounded-lg flex items-center justify-between ${isDark ? "bg-slate-700" : "bg-gray-50"}`}
+                    >
+                      <div>
+                        <span className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                          {interview.personnelName}
+                        </span>
+                        <span className={`mx-2 ${isDark ? "text-slate-500" : "text-gray-400"}`}>•</span>
+                        <span className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                          {interview.department} - {interview.position}
+                        </span>
+                      </div>
+                      <div className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                        Term date: {interview.terminationDate}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                  No pending exit interviews
+                </p>
+              )}
+            </div>
+
+            {/* Top Reasons for Leaving */}
+            <div className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm`}>
+              <h3 className={`text-lg font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
+                Top Reasons for Leaving
+              </h3>
+              {exitAnalytics?.topReasons && exitAnalytics.topReasons.length > 0 ? (
+                <div className="space-y-3">
+                  {exitAnalytics.topReasons.map((item, idx) => (
+                    <div key={item.reason} className="flex items-center gap-4">
+                      <span className={`w-6 text-center font-bold ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                        {idx + 1}
+                      </span>
+                      <div className="flex-1">
+                        <div className={`text-sm ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                          {item.reason}
+                        </div>
+                      </div>
+                      <span className={`font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                        {item.count}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                  No exit interview data yet
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Offer Letters Tab */}
+        {activeTab === "offers" && (
+          <div className="space-y-6">
+            {/* Offer Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+              {[
+                { label: "Draft", value: offerStats?.draft || 0, color: "text-slate-400" },
+                { label: "Sent", value: offerStats?.sent || 0, color: "text-blue-400" },
+                { label: "Viewed", value: offerStats?.viewed || 0, color: "text-cyan-400" },
+                { label: "Accepted", value: offerStats?.accepted || 0, color: "text-green-400" },
+                { label: "Declined", value: offerStats?.declined || 0, color: "text-red-400" },
+                { label: "Expired", value: offerStats?.expired || 0, color: "text-orange-400" },
+                { label: "Withdrawn", value: offerStats?.withdrawn || 0, color: "text-slate-500" },
+              ].map((stat) => (
+                <div key={stat.label} className={`p-4 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm text-center`}>
+                  <div className={`text-2xl font-bold ${stat.color}`}>{stat.value}</div>
+                  <div className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>{stat.label}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm text-center`}>
+              <p className={`${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                Create offer letters from the Applications page when extending offers to candidates.
+              </p>
+              <Link
+                href="/applications"
+                className="inline-block mt-4 px-6 py-2 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg font-medium transition-colors"
+              >
+                Go to Applications
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {/* Create Survey Modal */}
+        {showCreateSurvey && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className={`w-full max-w-md p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"}`}>
+              <h3 className={`text-lg font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
+                Create Survey
+              </h3>
+              <p className={`mb-6 ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                Create a default Weekly Pulse Check survey with standard engagement questions?
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowCreateSurvey(false)}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium ${isDark ? "bg-slate-700 hover:bg-slate-600 text-white" : "bg-gray-100 hover:bg-gray-200 text-gray-900"}`}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCreateDefaultSurvey}
+                  className="flex-1 px-4 py-2 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg font-medium"
+                >
+                  Create Survey
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function EngagementDashboardPage() {
+  return (
+    <ProtectedRoute requiredRoles={["super_admin", "admin"]}>
+      <EngagementDashboardContent />
+    </ProtectedRoute>
+  );
+}

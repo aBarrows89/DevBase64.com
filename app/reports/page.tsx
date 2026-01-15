@@ -45,6 +45,7 @@ function ReportsContent() {
   const [appStatus, setAppStatus] = useState("all");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [equipmentTypeFilter, setEquipmentTypeFilter] = useState("all");
 
   // Queries
   const personnel = useQuery(api.reports.getPersonnelExport);
@@ -448,8 +449,44 @@ function ReportsContent() {
             )}
 
             {/* Equipment Report */}
-            {activeReport === "equipment" && equipmentReport && (
+            {activeReport === "equipment" && equipmentReport && (() => {
+              // Get unique equipment types and sort them
+              const equipmentTypes = [...new Set(equipmentReport.equipment.map(eq => eq.type))].sort();
+
+              // Filter equipment by selected type
+              const filteredEquipment = equipmentTypeFilter === "all"
+                ? equipmentReport.equipment
+                : equipmentReport.equipment.filter(eq => eq.type === equipmentTypeFilter);
+
+              // Sort by type, then by number
+              const sortedEquipment = [...filteredEquipment].sort((a, b) => {
+                const typeCompare = a.type.localeCompare(b.type);
+                if (typeCompare !== 0) return typeCompare;
+                return (a.number || "").localeCompare(b.number || "");
+              });
+
+              return (
               <div className="space-y-6">
+                {/* Filter by Type */}
+                <div className="flex items-center gap-4">
+                  <label className={`text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                    Filter by Type:
+                  </label>
+                  <select
+                    value={equipmentTypeFilter}
+                    onChange={(e) => setEquipmentTypeFilter(e.target.value)}
+                    className={`px-3 py-2 rounded-lg text-sm ${isDark ? "bg-slate-800 border-slate-700 text-white" : "bg-white border-gray-200 text-gray-900"} border`}
+                  >
+                    <option value="all">All Equipment ({equipmentReport.equipment.length})</option>
+                    {equipmentTypes.map(type => {
+                      const count = equipmentReport.equipment.filter(eq => eq.type === type).length;
+                      return (
+                        <option key={type} value={type}>{type} ({count})</option>
+                      );
+                    })}
+                  </select>
+                </div>
+
                 {/* Summary Cards */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className={`p-4 rounded-lg ${isDark ? "bg-slate-900/50" : "bg-gray-50"}`}>
@@ -478,52 +515,53 @@ function ReportsContent() {
                   </div>
                 </div>
 
-                {/* Equipment Table */}
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className={isDark ? "text-slate-400" : "text-gray-500"}>
-                      <th className="text-left py-2 px-3">Type</th>
-                      <th className="text-left py-2 px-3">Number</th>
-                      <th className="text-left py-2 px-3">Model</th>
-                      <th className="text-left py-2 px-3">Status</th>
-                      <th className="text-left py-2 px-3">Assigned To</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {equipmentReport.equipment.slice(0, 15).map((eq, i) => (
-                      <tr key={i} className={`border-t ${isDark ? "border-slate-700" : "border-gray-100"}`}>
-                        <td className={`py-2 px-3 ${isDark ? "text-white" : "text-gray-900"}`}>
-                          {eq.type}
-                        </td>
-                        <td className={`py-2 px-3 ${isDark ? "text-slate-400" : "text-gray-600"}`}>
-                          #{eq.number}
-                        </td>
-                        <td className={`py-2 px-3 ${isDark ? "text-slate-400" : "text-gray-600"}`}>
-                          {eq.model || "-"}
-                        </td>
-                        <td className="py-2 px-3">
-                          <span className={`px-2 py-0.5 text-xs rounded-full ${
-                            eq.status === "available" ? "bg-green-500/20 text-green-400" :
-                            eq.status === "assigned" ? "bg-cyan-500/20 text-cyan-400" :
-                            "bg-amber-500/20 text-amber-400"
-                          }`}>
-                            {eq.status}
-                          </span>
-                        </td>
-                        <td className={`py-2 px-3 ${isDark ? "text-slate-400" : "text-gray-600"}`}>
-                          {eq.assignedTo || "-"}
-                        </td>
+                {/* Equipment Table - shows all filtered items */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className={isDark ? "text-slate-400" : "text-gray-500"}>
+                        <th className="text-left py-2 px-3">Type</th>
+                        <th className="text-left py-2 px-3">Number</th>
+                        <th className="text-left py-2 px-3">Model</th>
+                        <th className="text-left py-2 px-3">Status</th>
+                        <th className="text-left py-2 px-3">Assigned To</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {equipmentReport.equipment.length > 15 && (
-                  <p className={`text-sm ${isDark ? "text-slate-500" : "text-gray-400"}`}>
-                    Showing 15 of {equipmentReport.equipment.length} records. Export to see all.
-                  </p>
-                )}
+                    </thead>
+                    <tbody>
+                      {sortedEquipment.map((eq, i) => (
+                        <tr key={i} className={`border-t ${isDark ? "border-slate-700" : "border-gray-100"}`}>
+                          <td className={`py-2 px-3 ${isDark ? "text-white" : "text-gray-900"}`}>
+                            {eq.type}
+                          </td>
+                          <td className={`py-2 px-3 ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                            #{eq.number}
+                          </td>
+                          <td className={`py-2 px-3 ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                            {eq.model || "-"}
+                          </td>
+                          <td className="py-2 px-3">
+                            <span className={`px-2 py-0.5 text-xs rounded-full ${
+                              eq.status === "available" ? "bg-green-500/20 text-green-400" :
+                              eq.status === "assigned" ? "bg-cyan-500/20 text-cyan-400" :
+                              "bg-amber-500/20 text-amber-400"
+                            }`}>
+                              {eq.status}
+                            </span>
+                          </td>
+                          <td className={`py-2 px-3 ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                            {eq.assignedTo || "-"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className={`text-sm ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                  Showing {sortedEquipment.length} of {equipmentReport.equipment.length} total equipment items
+                </p>
               </div>
-            )}
+              );
+            })()}
 
             {/* Attendance Report */}
             {activeReport === "attendance" && (

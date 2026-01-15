@@ -1770,4 +1770,178 @@ export default defineSchema({
     .index("by_document", ["documentId"])
     .index("by_personnel", ["personnelId"])
     .index("by_document_personnel", ["documentId", "personnelId"]),
+
+  // ============ EMPLOYEE SURVEYS ============
+  // Survey templates/campaigns
+  surveyCampaigns: defineTable({
+    name: v.string(), // e.g., "Weekly Pulse Check", "Monthly Engagement"
+    description: v.optional(v.string()),
+    isActive: v.boolean(),
+    isAnonymous: v.boolean(), // Anonymous responses
+    frequency: v.string(), // "once" | "weekly" | "monthly" | "quarterly"
+    // Questions in the survey
+    questions: v.array(v.object({
+      id: v.string(), // Unique ID for the question
+      text: v.string(), // Question text
+      type: v.string(), // "scale" | "nps" | "text" | "multiple_choice"
+      required: v.boolean(),
+      options: v.optional(v.array(v.string())), // For multiple choice
+      minLabel: v.optional(v.string()), // e.g., "Very Unhappy" for scale
+      maxLabel: v.optional(v.string()), // e.g., "Very Happy" for scale
+    })),
+    // Targeting
+    targetDepartments: v.optional(v.array(v.string())), // Specific departments, or all if empty
+    targetLocationIds: v.optional(v.array(v.id("locations"))), // Specific locations, or all if empty
+    // Schedule
+    startDate: v.optional(v.string()), // When to start sending
+    endDate: v.optional(v.string()), // When to stop
+    lastSentAt: v.optional(v.number()), // Last time surveys were sent
+    nextSendAt: v.optional(v.number()), // Next scheduled send
+    // Stats
+    totalSent: v.number(),
+    totalResponses: v.number(),
+    // Tracking
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_active", ["isActive"])
+    .index("by_next_send", ["nextSendAt"]),
+
+  // Individual survey assignments (sent to specific employees)
+  surveyAssignments: defineTable({
+    campaignId: v.id("surveyCampaigns"),
+    personnelId: v.id("personnel"),
+    userId: v.optional(v.id("users")), // User account if they have one
+    // Status
+    status: v.string(), // "pending" | "completed" | "expired"
+    sentAt: v.number(),
+    completedAt: v.optional(v.number()),
+    expiresAt: v.optional(v.number()), // When the survey expires
+    // For non-anonymous, track who
+    reminderSentAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_campaign", ["campaignId"])
+    .index("by_personnel", ["personnelId"])
+    .index("by_status", ["status"])
+    .index("by_campaign_personnel", ["campaignId", "personnelId"]),
+
+  // Survey responses
+  surveyResponses: defineTable({
+    campaignId: v.id("surveyCampaigns"),
+    assignmentId: v.optional(v.id("surveyAssignments")), // Link to assignment
+    // For anonymous surveys, personnelId may be null
+    personnelId: v.optional(v.id("personnel")),
+    department: v.optional(v.string()), // Store department for anonymous aggregation
+    locationId: v.optional(v.id("locations")), // Store location for anonymous aggregation
+    // Responses - array of question answers
+    answers: v.array(v.object({
+      questionId: v.string(),
+      questionText: v.string(), // Store text for historical reference
+      questionType: v.string(),
+      value: v.optional(v.union(v.string(), v.number())), // The answer
+      numericValue: v.optional(v.number()), // Numeric value for scoring
+    })),
+    // Calculated scores
+    overallScore: v.optional(v.number()), // Average of numeric answers (0-10)
+    npsScore: v.optional(v.number()), // NPS score if applicable (-100 to 100)
+    // Tracking
+    submittedAt: v.number(),
+  })
+    .index("by_campaign", ["campaignId"])
+    .index("by_personnel", ["personnelId"])
+    .index("by_submitted", ["submittedAt"])
+    .index("by_department", ["department"]),
+
+  // ============ EXIT INTERVIEWS ============
+  exitInterviews: defineTable({
+    personnelId: v.id("personnel"),
+    personnelName: v.string(), // Store name for reference
+    department: v.string(),
+    position: v.string(),
+    hireDate: v.string(),
+    terminationDate: v.string(),
+    terminationReason: v.optional(v.string()), // From termination record
+    // Exit interview status
+    status: v.string(), // "pending" | "scheduled" | "completed" | "declined"
+    scheduledDate: v.optional(v.string()),
+    scheduledTime: v.optional(v.string()),
+    conductedBy: v.optional(v.id("users")),
+    conductedByName: v.optional(v.string()),
+    completedAt: v.optional(v.number()),
+    // Standard questions and responses
+    responses: v.optional(v.object({
+      primaryReason: v.optional(v.string()), // Main reason for leaving
+      wouldReturn: v.optional(v.string()), // "yes" | "no" | "maybe"
+      wouldRecommend: v.optional(v.string()), // "yes" | "no" | "maybe"
+      satisfactionRating: v.optional(v.number()), // 1-10
+      managementRating: v.optional(v.number()), // 1-10
+      workLifeBalanceRating: v.optional(v.number()), // 1-10
+      compensationRating: v.optional(v.number()), // 1-10
+      growthOpportunityRating: v.optional(v.number()), // 1-10
+      whatLikedMost: v.optional(v.string()), // Open text
+      whatCouldImprove: v.optional(v.string()), // Open text
+      additionalComments: v.optional(v.string()), // Open text
+    })),
+    // Notes from interviewer
+    interviewerNotes: v.optional(v.string()),
+    // Tracking
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_personnel", ["personnelId"])
+    .index("by_status", ["status"])
+    .index("by_date", ["terminationDate"]),
+
+  // ============ OFFER LETTERS ============
+  offerLetters: defineTable({
+    applicationId: v.id("applications"),
+    // Candidate info (copied from application)
+    candidateName: v.string(),
+    candidateEmail: v.string(),
+    // Position details
+    positionTitle: v.string(),
+    department: v.string(),
+    locationId: v.optional(v.id("locations")),
+    locationName: v.optional(v.string()),
+    reportsTo: v.optional(v.string()), // Manager name
+    // Compensation
+    employmentType: v.string(), // "full_time" | "part_time" | "seasonal" | "contract"
+    compensationType: v.string(), // "hourly" | "salary"
+    compensationAmount: v.number(), // Hourly rate or annual salary
+    payFrequency: v.optional(v.string()), // "weekly" | "biweekly" | "monthly"
+    // Schedule
+    startDate: v.string(), // Proposed start date
+    workSchedule: v.optional(v.string()), // e.g., "Monday-Friday, 8am-5pm"
+    // Benefits
+    benefitsEligible: v.boolean(),
+    benefitsStartDate: v.optional(v.string()),
+    ptoAccrual: v.optional(v.string()), // e.g., "2 weeks per year"
+    // Offer status
+    status: v.string(), // "draft" | "sent" | "viewed" | "accepted" | "declined" | "expired" | "withdrawn"
+    sentAt: v.optional(v.number()),
+    viewedAt: v.optional(v.number()),
+    respondedAt: v.optional(v.number()),
+    expiresAt: v.optional(v.number()), // Offer expiration date
+    // Response
+    declineReason: v.optional(v.string()),
+    // Signature
+    signedAt: v.optional(v.number()),
+    signatureData: v.optional(v.string()), // Base64 signature image
+    signedIpAddress: v.optional(v.string()),
+    // Generated PDF
+    pdfStorageId: v.optional(v.id("_storage")),
+    // Custom terms/notes
+    additionalTerms: v.optional(v.string()),
+    internalNotes: v.optional(v.string()),
+    // Tracking
+    createdBy: v.id("users"),
+    createdByName: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_application", ["applicationId"])
+    .index("by_status", ["status"])
+    .index("by_candidate_email", ["candidateEmail"]),
 });
