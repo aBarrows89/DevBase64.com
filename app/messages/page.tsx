@@ -280,6 +280,28 @@ function MessagesContent() {
       setShowLinkPicker(false);
       setLinkSearchQuery("");
     }
+
+    // Handle typing indicator
+    if (selectedConversation && user && value.length > 0) {
+      // Send typing status
+      setTyping({
+        conversationId: selectedConversation._id,
+        userId: user._id,
+      });
+
+      // Clear typing after 2 seconds of no typing
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      typingTimeoutRef.current = setTimeout(() => {
+        if (selectedConversation && user) {
+          clearTyping({
+            conversationId: selectedConversation._id,
+            userId: user._id,
+          });
+        }
+      }, 2000);
+    }
   };
 
   // Handle link item selection
@@ -387,6 +409,19 @@ function MessagesContent() {
   const toggleReaction = useMutation(api.messages.toggleReaction);
   const generateUploadUrl = useMutation(api.messages.generateUploadUrl);
   const getAttachmentUrl = useAction(api.messages.getAttachmentUrl);
+  const setTyping = useMutation(api.messages.setTyping);
+  const clearTyping = useMutation(api.messages.clearTyping);
+
+  // Typing indicator query
+  const typingUsers = useQuery(
+    api.messages.getTypingUsers,
+    selectedConversation && user
+      ? { conversationId: selectedConversation._id, currentUserId: user._id }
+      : "skip"
+  );
+
+  // Typing debounce ref
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // State for message reactions
   const [reactionPickerMessageId, setReactionPickerMessageId] = useState<Id<"messages"> | null>(null);
@@ -490,6 +525,15 @@ function MessagesContent() {
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if ((!newMessage.trim() && pendingAttachments.length === 0) || !selectedConversation || !user) return;
+
+    // Clear typing indicator
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    clearTyping({
+      conversationId: selectedConversation._id,
+      userId: user._id,
+    });
 
     // Parse @mentions
     const mentionRegex = /@(\w+)/g;
@@ -836,19 +880,62 @@ function MessagesContent() {
                           </div>
                         )}
 
-                        <p
-                          className={`text-[10px] sm:text-xs text-slate-500 mt-1 ${
-                            isOwn ? "text-right mr-1" : "ml-1"
+                        <div
+                          className={`flex items-center gap-1.5 mt-1 ${
+                            isOwn ? "justify-end mr-1" : "ml-1"
                           }`}
                         >
-                          {formatMessageTime(msg.createdAt)}
-                        </p>
+                          <span className="text-[10px] sm:text-xs text-slate-500">
+                            {formatMessageTime(msg.createdAt)}
+                          </span>
+                          {/* Read receipt for sent messages */}
+                          {isOwn && (
+                            <span className="flex items-center" title={
+                              msg.readBy.length > 1
+                                ? `Read by ${msg.readBy.length - 1} ${msg.readBy.length - 1 === 1 ? "person" : "people"}`
+                                : "Sent"
+                            }>
+                              {msg.readBy.length > 1 ? (
+                                // Double check - message has been read
+                                <svg className="w-4 h-4 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M2 12l5 5L18 6" strokeLinecap="round" strokeLinejoin="round" />
+                                  <path d="M7 12l5 5L23 6" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                              ) : (
+                                // Single check - message sent but not read
+                                <svg className="w-4 h-4 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M5 12l5 5L20 7" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                              )}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );
                 })}
                 <div ref={messagesEndRef} />
               </div>
+
+              {/* Typing Indicator */}
+              {typingUsers && typingUsers.length > 0 && (
+                <div className="px-4 py-2 border-t border-slate-700/50">
+                  <div className="flex items-center gap-2 text-slate-400 text-sm">
+                    <div className="flex gap-1">
+                      <span className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                      <span className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                      <span className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                    </div>
+                    <span>
+                      {typingUsers.length === 1
+                        ? `${typingUsers[0]?.name} is typing...`
+                        : typingUsers.length === 2
+                        ? `${typingUsers[0]?.name} and ${typingUsers[1]?.name} are typing...`
+                        : `${typingUsers.length} people are typing...`}
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {/* Message Input */}
               <div className="p-3 sm:p-4 border-t border-slate-700 relative">

@@ -293,6 +293,15 @@ export default defineSchema({
     .index("by_conversation", ["conversationId"])
     .index("by_created", ["createdAt"]),
 
+  // Typing indicators for real-time "user is typing..." status
+  typingIndicators: defineTable({
+    conversationId: v.id("conversations"),
+    userId: v.id("users"),
+    lastTypingAt: v.number(), // Timestamp of last typing activity
+  })
+    .index("by_conversation", ["conversationId"])
+    .index("by_user_conversation", ["userId", "conversationId"]),
+
   // ============ AUDIT LOG ============
   auditLogs: defineTable({
     action: v.string(),

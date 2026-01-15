@@ -430,3 +430,88 @@ export const toggleReaction = mutation({
     });
   },
 });
+
+// ============ TYPING INDICATORS ============
+
+// Set typing status (called when user is typing)
+export const setTyping = mutation({
+  args: {
+    conversationId: v.id("conversations"),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    // Check if there's an existing typing indicator for this user/conversation
+    const existing = await ctx.db
+      .query("typingIndicators")
+      .withIndex("by_user_conversation", (q) =>
+        q.eq("userId", args.userId).eq("conversationId", args.conversationId)
+      )
+      .first();
+
+    if (existing) {
+      // Update the timestamp
+      await ctx.db.patch(existing._id, {
+        lastTypingAt: Date.now(),
+      });
+    } else {
+      // Create a new typing indicator
+      await ctx.db.insert("typingIndicators", {
+        conversationId: args.conversationId,
+        userId: args.userId,
+        lastTypingAt: Date.now(),
+      });
+    }
+  },
+});
+
+// Clear typing status (called when user stops typing or sends a message)
+export const clearTyping = mutation({
+  args: {
+    conversationId: v.id("conversations"),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("typingIndicators")
+      .withIndex("by_user_conversation", (q) =>
+        q.eq("userId", args.userId).eq("conversationId", args.conversationId)
+      )
+      .first();
+
+    if (existing) {
+      await ctx.db.delete(existing._id);
+    }
+  },
+});
+
+// Get typing users for a conversation (excludes current user, only recent activity)
+export const getTypingUsers = query({
+  args: {
+    conversationId: v.id("conversations"),
+    currentUserId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const typingIndicators = await ctx.db
+      .query("typingIndicators")
+      .withIndex("by_conversation", (q) =>
+        q.eq("conversationId", args.conversationId)
+      )
+      .collect();
+
+    // Filter out current user and only include recent typing (within last 3 seconds)
+    const recentThreshold = Date.now() - 3000;
+    const activeTyping = typingIndicators.filter(
+      (t) => t.userId !== args.currentUserId && t.lastTypingAt > recentThreshold
+    );
+
+    // Get user info for typing users
+    const typingUsers = await Promise.all(
+      activeTyping.map(async (t) => {
+        const user = await ctx.db.get(t.userId);
+        return user ? { _id: user._id, name: user.name } : null;
+      })
+    );
+
+    return typingUsers.filter(Boolean);
+  },
+});
