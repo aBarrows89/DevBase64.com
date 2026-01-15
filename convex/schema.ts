@@ -1544,6 +1544,17 @@ export default defineSchema({
     .index("by_user_status", ["userId", "status"])
     .index("by_user_unread", ["userId", "isRead"]),
 
+  // Calendar shares (view someone else's calendar)
+  calendarShares: defineTable({
+    ownerId: v.id("users"), // The person sharing their calendar
+    sharedWithId: v.id("users"), // The person who can view the calendar
+    permission: v.string(), // "view" | "edit" (edit = can add events on behalf)
+    createdAt: v.number(),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_shared_with", ["sharedWithId"])
+    .index("by_owner_shared", ["ownerId", "sharedWithId"]),
+
   // ============ EQUIPMENT / COMPUTERS ============
   // Track company computers and equipment with remote access
   equipment: defineTable({

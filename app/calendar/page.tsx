@@ -126,6 +126,36 @@ function CalendarContent() {
   const [showDayModal, setShowDayModal] = useState(false);
   const [selectedDayDate, setSelectedDayDate] = useState<Date | null>(null);
 
+  // Calendar sharing state
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareUserId, setShareUserId] = useState<Id<"users"> | "">("");
+  const [viewingSharedCalendar, setViewingSharedCalendar] = useState<Id<"users"> | null>(null);
+
+  // Calendar sharing queries
+  const sharedWithMe = useQuery(
+    api.events.getSharedWithMe,
+    user ? { userId: user._id as Id<"users"> } : "skip"
+  );
+  const myShares = useQuery(
+    api.events.getMyShares,
+    user ? { userId: user._id as Id<"users"> } : "skip"
+  );
+  const sharedCalendarEvents = useQuery(
+    api.events.getSharedCalendarEvents,
+    user && viewingSharedCalendar
+      ? {
+          userId: user._id as Id<"users">,
+          sharedOwnerId: viewingSharedCalendar,
+          startDate: dateRange.start,
+          endDate: dateRange.end,
+        }
+      : "skip"
+  );
+
+  // Calendar sharing mutations
+  const shareCalendar = useMutation(api.events.shareCalendar);
+  const removeCalendarShare = useMutation(api.events.removeCalendarShare);
+
   // Calendar grid for month view
   const calendarDays = useMemo(() => {
     const days = [];
@@ -161,11 +191,12 @@ function CalendarContent() {
 
   // Get events for a specific day
   const getEventsForDay = (date: Date) => {
-    if (!myEvents) return [];
+    const events = viewingSharedCalendar ? sharedCalendarEvents : myEvents;
+    if (!events) return [];
     const dayStart = new Date(date).setHours(0, 0, 0, 0);
     const dayEnd = new Date(date).setHours(23, 59, 59, 999);
-    return myEvents.filter(
-      (e) => e.startTime >= dayStart && e.startTime <= dayEnd
+    return events.filter(
+      (e: any) => e.startTime >= dayStart && e.startTime <= dayEnd
     );
   };
 
@@ -286,27 +317,70 @@ function CalendarContent() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <h1 className={`text-xl sm:text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
-                Calendar
+                {viewingSharedCalendar
+                  ? `${sharedWithMe?.find((s) => s.ownerId === viewingSharedCalendar)?.ownerName}'s Calendar`
+                  : "My Calendar"}
               </h1>
-              {pendingInvites && pendingInvites.length > 0 && (
+              {pendingInvites && pendingInvites.length > 0 && !viewingSharedCalendar && (
                 <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
                   {pendingInvites.length} pending
                 </span>
               )}
+              {/* Shared calendars dropdown */}
+              {sharedWithMe && sharedWithMe.length > 0 && (
+                <select
+                  value={viewingSharedCalendar || ""}
+                  onChange={(e) =>
+                    setViewingSharedCalendar(
+                      e.target.value ? (e.target.value as Id<"users">) : null
+                    )
+                  }
+                  className={`px-3 py-1.5 text-sm rounded-lg border ${
+                    isDark
+                      ? "bg-slate-800 border-slate-600 text-white"
+                      : "bg-white border-gray-300 text-gray-900"
+                  }`}
+                >
+                  <option value="">My Calendar</option>
+                  {sharedWithMe.map((share) => (
+                    <option key={share._id} value={share.ownerId}>
+                      {share.ownerName}&apos;s Calendar
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
-            <button
-              onClick={() => {
-                resetForm();
-                setShowCreateModal(true);
-              }}
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
-                isDark
-                  ? "bg-cyan-500 text-white hover:bg-cyan-600"
-                  : "bg-blue-600 text-white hover:bg-blue-700"
-              }`}
-            >
-              + New Event
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowShareModal(true)}
+                className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
+                  isDark
+                    ? "bg-slate-700 text-white hover:bg-slate-600"
+                    : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                }`}
+                title="Share Calendar"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                </svg>
+                Share
+              </button>
+              {!viewingSharedCalendar && (
+                <button
+                  onClick={() => {
+                    resetForm();
+                    setShowCreateModal(true);
+                  }}
+                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
+                    isDark
+                      ? "bg-cyan-500 text-white hover:bg-cyan-600"
+                      : "bg-blue-600 text-white hover:bg-blue-700"
+                  }`}
+                >
+                  + New Event
+                </button>
+              )}
+            </div>
           </div>
         </header>
 
@@ -1030,6 +1104,134 @@ function CalendarContent() {
                   }`}
                 >
                   Add {selectedInviteeIds.length > 0 ? `(${selectedInviteeIds.length})` : ""}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Share Calendar Modal */}
+        {showShareModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+            <div className={`w-full max-w-md rounded-xl border ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200"}`}>
+              <div className={`p-4 border-b ${isDark ? "border-slate-700" : "border-gray-200"}`}>
+                <div className="flex items-center justify-between">
+                  <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                    Share Calendar
+                  </h2>
+                  <button
+                    onClick={() => setShowShareModal(false)}
+                    className={`p-1 rounded hover:${isDark ? "bg-slate-700" : "bg-gray-100"}`}
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-4 space-y-4">
+                {/* Current shares */}
+                {myShares && myShares.length > 0 && (
+                  <div>
+                    <h3 className={`text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                      Shared with
+                    </h3>
+                    <div className="space-y-2">
+                      {myShares.map((share) => (
+                        <div
+                          key={share._id}
+                          className={`flex items-center justify-between p-2 rounded-lg ${
+                            isDark ? "bg-slate-700" : "bg-gray-100"
+                          }`}
+                        >
+                          <div>
+                            <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                              {share.sharedWithName}
+                            </p>
+                            <p className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                              {share.sharedWithEmail} - {share.permission} access
+                            </p>
+                          </div>
+                          <button
+                            onClick={async () => {
+                              await removeCalendarShare({ shareId: share._id });
+                            }}
+                            className={`p-1 rounded ${isDark ? "hover:bg-red-500/20 text-red-400" : "hover:bg-red-100 text-red-600"}`}
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Add new share */}
+                <div>
+                  <h3 className={`text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                    Share with someone new
+                  </h3>
+                  <select
+                    value={shareUserId}
+                    onChange={(e) => setShareUserId(e.target.value as Id<"users"> | "")}
+                    className={`w-full px-3 py-2 rounded-lg border ${
+                      isDark
+                        ? "bg-slate-900 border-slate-600 text-white"
+                        : "bg-white border-gray-300 text-gray-900"
+                    }`}
+                  >
+                    <option value="">Select a person...</option>
+                    {allUsers
+                      ?.filter(
+                        (u) =>
+                          u._id !== user?._id &&
+                          !myShares?.some((s) => s.sharedWithId === u._id)
+                      )
+                      .map((u) => (
+                        <option key={u._id} value={u._id}>
+                          {u.name} ({u.email})
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className={`p-4 border-t flex gap-2 ${isDark ? "border-slate-700" : "border-gray-200"}`}>
+                <button
+                  onClick={() => {
+                    setShowShareModal(false);
+                    setShareUserId("");
+                  }}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium ${
+                    isDark
+                      ? "bg-slate-700 text-white hover:bg-slate-600"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
+                >
+                  Close
+                </button>
+                <button
+                  onClick={async () => {
+                    if (user && shareUserId) {
+                      await shareCalendar({
+                        ownerId: user._id as Id<"users">,
+                        sharedWithId: shareUserId as Id<"users">,
+                        permission: "view",
+                      });
+                      setShareUserId("");
+                    }
+                  }}
+                  disabled={!shareUserId}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium disabled:opacity-50 ${
+                    isDark
+                      ? "bg-cyan-500 text-white hover:bg-cyan-600"
+                      : "bg-blue-600 text-white hover:bg-blue-700"
+                  }`}
+                >
+                  Share
                 </button>
               </div>
             </div>
