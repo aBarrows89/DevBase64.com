@@ -280,7 +280,7 @@ function CalendarContent() {
     setSelectedEvent(event);
     setShowEventModal(true);
     // Mark as read if it's an invite
-    if (user && event.myInviteStatus === "pending") {
+    if (user && (event as any).myInviteStatus === "pending") {
       await markInviteRead({
         eventId: event._id,
         userId: user._id as Id<"users">,
@@ -526,10 +526,12 @@ function CalendarContent() {
                             openEventDetails(event);
                           }}
                           className={`text-xs px-1 py-0.5 rounded truncate cursor-pointer flex-shrink-0 ${
-                            event.myInviteStatus === "pending"
+                            (event as any).myInviteStatus === "pending"
                               ? "bg-amber-500/20 text-amber-400"
-                              : event.myInviteStatus === "organizer"
+                              : (event as any).myInviteStatus === "organizer"
                               ? isDark ? "bg-cyan-500/20 text-cyan-400" : "bg-blue-100 text-blue-700"
+                              : viewingSharedCalendar
+                              ? isDark ? "bg-purple-500/20 text-purple-400" : "bg-purple-100 text-purple-700"
                               : isDark ? "bg-green-500/20 text-green-400" : "bg-green-100 text-green-700"
                           }`}
                         >
@@ -963,18 +965,22 @@ function CalendarContent() {
                           </div>
                           <span
                             className={`flex-shrink-0 px-2 py-0.5 rounded text-xs font-medium ${
-                              event.myInviteStatus === "pending"
+                              (event as any).myInviteStatus === "pending"
                                 ? "bg-amber-500/20 text-amber-400"
-                                : event.myInviteStatus === "organizer"
+                                : (event as any).myInviteStatus === "organizer"
                                 ? isDark ? "bg-cyan-500/20 text-cyan-400" : "bg-blue-100 text-blue-700"
+                                : viewingSharedCalendar
+                                ? isDark ? "bg-purple-500/20 text-purple-400" : "bg-purple-100 text-purple-700"
                                 : isDark ? "bg-green-500/20 text-green-400" : "bg-green-100 text-green-700"
                             }`}
                           >
-                            {event.myInviteStatus === "organizer"
+                            {viewingSharedCalendar
+                              ? "Shared"
+                              : (event as any).myInviteStatus === "organizer"
                               ? "Organizer"
-                              : event.myInviteStatus === "pending"
+                              : (event as any).myInviteStatus === "pending"
                               ? "Pending"
-                              : event.myInviteStatus}
+                              : (event as any).myInviteStatus || "Accepted"}
                           </span>
                         </div>
                       </div>
