@@ -53,17 +53,19 @@ function MileageContent() {
   // Check if user is super_admin
   const isSuperAdmin = user?.role === "super_admin";
 
-  // Queries
-  const entries = useQuery(api.mileage.list, {
+  // Queries - filter by current user's mileage only
+  const entries = useQuery(api.mileage.list, user?._id ? {
     year: selectedYear,
     month: selectedMonth ?? undefined,
     status: selectedStatus ?? undefined,
-  });
+    userId: user._id,
+  } : "skip");
 
-  const summary = useQuery(api.mileage.getSummary, {
+  const summary = useQuery(api.mileage.getSummary, user?._id ? {
     year: selectedYear,
     month: selectedMonth ?? undefined,
-  });
+    userId: user._id,
+  } : "skip");
 
   const currentRate = useQuery(api.mileage.getCurrentRate);
 

@@ -9,12 +9,14 @@ const DEFAULT_FROM_LOCATION = "Latrobe, PA";
 
 // ============ QUERIES ============
 
-// Get all mileage entries (super_admin only - checked in frontend)
+// Get mileage entries - filtered by user unless viewing all (admin only)
 export const list = query({
   args: {
     year: v.optional(v.number()),
     month: v.optional(v.number()),
     status: v.optional(v.string()),
+    userId: v.optional(v.id("users")),
+    showAll: v.optional(v.boolean()), // Admin only - show all users' entries
   },
   handler: async (ctx, args) => {
     let entries = await ctx.db
@@ -22,6 +24,11 @@ export const list = query({
       .withIndex("by_date")
       .order("desc")
       .collect();
+
+    // Filter by user if provided and not showing all
+    if (args.userId && !args.showAll) {
+      entries = entries.filter((e) => e.createdBy === args.userId);
+    }
 
     // Filter by year if provided
     if (args.year) {
@@ -53,9 +60,16 @@ export const getSummary = query({
   args: {
     year: v.optional(v.number()),
     month: v.optional(v.number()),
+    userId: v.optional(v.id("users")),
+    showAll: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     let entries = await ctx.db.query("mileageEntries").collect();
+
+    // Filter by user if provided and not showing all
+    if (args.userId && !args.showAll) {
+      entries = entries.filter((e) => e.createdBy === args.userId);
+    }
 
     // Filter by year if provided
     if (args.year) {
