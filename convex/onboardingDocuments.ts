@@ -288,6 +288,13 @@ export const signDocument = mutation({
     userId: v.optional(v.id("users")),
     signatureData: v.optional(v.string()),
     deviceInfo: v.optional(v.string()),
+    // Initials for disclosure sections
+    initialsData: v.optional(v.array(v.object({
+      disclosureId: v.string(),
+      disclosureTitle: v.string(),
+      initialsImage: v.string(),
+      acknowledgedAt: v.number(),
+    }))),
   },
   handler: async (ctx, args) => {
     const document = await ctx.db.get(args.documentId);
@@ -319,6 +326,7 @@ export const signDocument = mutation({
       deviceInfo: args.deviceInfo,
       acknowledgmentText: `I have read, understand, and agree to comply with the ${document.title} (Version ${document.version})`,
       documentVersion: document.version,
+      initialsData: args.initialsData,
     });
 
     return signatureId;

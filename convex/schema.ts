@@ -1775,6 +1775,15 @@ export default defineSchema({
     // Acknowledgment text they agreed to
     acknowledgmentText: v.string(), // e.g., "I have read and agree to the Employee Handbook"
     documentVersion: v.string(), // Version of document at time of signing
+    // Initials for disclosure sections
+    initialsData: v.optional(v.array(v.object({
+      disclosureId: v.string(), // e.g., "at_will", "confidentiality"
+      disclosureTitle: v.string(),
+      initialsImage: v.string(), // Base64 initials image
+      acknowledgedAt: v.number(),
+    }))),
+    // Stored copy of signed document (for future PDF embedding)
+    signedDocumentStorageId: v.optional(v.id("_storage")),
   })
     .index("by_document", ["documentId"])
     .index("by_personnel", ["personnelId"])
