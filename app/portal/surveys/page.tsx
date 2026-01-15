@@ -8,24 +8,30 @@ import { useTheme } from "@/app/theme-context";
 import { useAuth } from "@/app/auth-context";
 import { Id } from "@/convex/_generated/dataModel";
 
+interface SurveyAssignment {
+  _id: Id<"surveyAssignments">;
+  campaignId: Id<"surveyCampaigns">;
+  dueDate?: string;
+  campaign: {
+    _id: Id<"surveyCampaigns">;
+    name: string;
+    isAnonymous: boolean;
+    questions: Array<{
+      id: string;
+      text: string;
+      type: string;
+      options?: string[];
+      required: boolean;
+    }>;
+  } | null;
+}
+
 function SurveyForm({
   assignment,
   onComplete,
   onCancel,
 }: {
-  assignment: {
-    _id: Id<"surveyAssignments">;
-    campaignId: Id<"surveyCampaigns">;
-    campaignName: string;
-    isAnonymous: boolean;
-    questions: Array<{
-      id: string;
-      text: string;
-      type: "rating" | "scale" | "text" | "multiple_choice";
-      options?: string[];
-      required: boolean;
-    }>;
-  };
+  assignment: SurveyAssignment;
   onComplete: () => void;
   onCancel: () => void;
 }) {
@@ -41,9 +47,12 @@ function SurveyForm({
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
   };
 
+  const campaign = assignment.campaign;
+  const questions = campaign?.questions || [];
+
   const handleSubmit = async () => {
     // Validate required questions
-    const unanswered = assignment.questions.filter(
+    const unanswered = questions.filter(
       (q) => q.required && !answers[q.id]
     );
     if (unanswered.length > 0) {
@@ -54,10 +63,16 @@ function SurveyForm({
     setSubmitting(true);
     setError(null);
     try {
-      const formattedAnswers = Object.entries(answers).map(([questionId, value]) => ({
-        questionId,
-        value,
-      }));
+      const formattedAnswers = Object.entries(answers).map(([questionId, value]) => {
+        const question = questions.find(q => q.id === questionId);
+        return {
+          questionId,
+          questionText: question?.text || "",
+          questionType: question?.type || "text",
+          value,
+          numericValue: typeof value === "number" ? value : undefined,
+        };
+      });
       await submitResponse({
         assignmentId: assignment._id,
         answers: formattedAnswers,
@@ -71,13 +86,17 @@ function SurveyForm({
     }
   };
 
+  if (!campaign) {
+    return <div className={`text-center py-8 ${isDark ? "text-slate-400" : "text-gray-500"}`}>Survey not found</div>;
+  }
+
   return (
     <div className={`max-w-2xl mx-auto p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-lg`}>
       <div className="mb-6">
         <h2 className={`text-xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
-          {assignment.campaignName}
+          {campaign.name}
         </h2>
-        {assignment.isAnonymous && (
+        {campaign.isAnonymous && (
           <p className={`text-sm mt-2 ${isDark ? "text-green-400" : "text-green-600"}`}>
             This survey is anonymous. Your responses will not be linked to your name.
           </p>
@@ -91,8 +110,8 @@ function SurveyForm({
       )}
 
       <div className="space-y-6">
-        {assignment.questions.map((question, idx) => (
-          <div key={question.id} className={`pb-6 ${idx < assignment.questions.length - 1 ? `border-b ${isDark ? "border-slate-700" : "border-gray-200"}` : ""}`}>
+        {questions.map((question, idx) => (
+          <div key={question.id} className={`pb-6 ${idx < questions.length - 1 ? `border-b ${isDark ? "border-slate-700" : "border-gray-200"}` : ""}`}>
             <label className={`block mb-3 font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
               {idx + 1}. {question.text}
               {question.required && <span className="text-red-400 ml-1">*</span>}
@@ -282,20 +301,20 @@ function EmployeeSurveysContent() {
                 <div className="flex items-start justify-between">
                   <div>
                     <h3 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
-                      {survey.campaignName}
+                      {survey.campaign?.name || "Survey"}
                     </h3>
                     <div className="flex flex-wrap gap-3 mt-2">
                       <span className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                        {survey.questions.length} questions
+                        {survey.campaign?.questions.length || 0} questions
                       </span>
-                      {survey.isAnonymous && (
+                      {survey.campaign?.isAnonymous && (
                         <span className="text-sm text-green-500">
                           Anonymous
                         </span>
                       )}
-                      {survey.dueDate && (
+                      {(survey as any).dueDate && (
                         <span className={`text-sm ${isDark ? "text-amber-400" : "text-amber-600"}`}>
-                          Due: {new Date(survey.dueDate).toLocaleDateString()}
+                          Due: {new Date((survey as any).dueDate).toLocaleDateString()}
                         </span>
                       )}
                     </div>

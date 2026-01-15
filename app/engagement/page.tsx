@@ -3,14 +3,15 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import ProtectedRoute from "@/components/ProtectedRoute";
-import { useAuth } from "@/contexts/AuthContext";
-import { useTheme } from "@/contexts/ThemeContext";
+import Protected from "@/app/protected";
+import { useAuth } from "@/app/auth-context";
+import { useTheme } from "@/app/theme-context";
 import Link from "next/link";
 
 function EngagementDashboardContent() {
   const { user } = useAuth();
-  const { isDark } = useTheme();
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
 
   const [dateRange, setDateRange] = useState({
     startDate: "",
@@ -575,8 +576,8 @@ function EngagementDashboardContent() {
 
 export default function EngagementDashboardPage() {
   return (
-    <ProtectedRoute requiredRoles={["super_admin", "admin"]}>
+    <Protected>
       <EngagementDashboardContent />
-    </ProtectedRoute>
+    </Protected>
   );
 }
