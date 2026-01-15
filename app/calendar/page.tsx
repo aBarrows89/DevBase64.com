@@ -123,6 +123,8 @@ function CalendarContent() {
   // State for adding invitees to existing events
   const [showAddInviteesModal, setShowAddInviteesModal] = useState(false);
   const [selectedInviteeIds, setSelectedInviteeIds] = useState<Id<"users">[]>([]);
+  const [showDayModal, setShowDayModal] = useState(false);
+  const [selectedDayDate, setSelectedDayDate] = useState<Date | null>(null);
 
   // Calendar grid for month view
   const calendarDays = useMemo(() => {
@@ -398,11 +400,13 @@ function CalendarContent() {
               {calendarDays.map((day, idx) => {
                 const dayEvents = getEventsForDay(day.date);
                 const today = isToday(day.date);
+                const maxVisibleEvents = 2; // Show 2 events max, then "+X more"
+                const hasMore = dayEvents.length > maxVisibleEvents;
 
                 return (
                   <div
                     key={idx}
-                    className={`min-h-[100px] p-1 border-b border-r cursor-pointer transition-colors ${
+                    className={`h-[110px] p-1 border-b border-r cursor-pointer transition-colors overflow-hidden ${
                       isDark ? "border-slate-700" : "border-gray-100"
                     } ${
                       day.isCurrentMonth
@@ -412,13 +416,20 @@ function CalendarContent() {
                       today ? (isDark ? "ring-2 ring-cyan-500 ring-inset" : "ring-2 ring-blue-500 ring-inset") : ""
                     } hover:${isDark ? "bg-slate-700" : "bg-gray-50"}`}
                     onClick={() => {
-                      const newDate = new Date(day.date);
-                      setFormData({
-                        ...formData,
-                        startTime: formatDateForInput(newDate),
-                        endTime: formatDateForInput(new Date(newDate.getTime() + 60 * 60 * 1000)),
-                      });
-                      setShowCreateModal(true);
+                      if (dayEvents.length > 0) {
+                        // If there are events, show day detail modal
+                        setSelectedDayDate(day.date);
+                        setShowDayModal(true);
+                      } else {
+                        // If no events, open create modal
+                        const newDate = new Date(day.date);
+                        setFormData({
+                          ...formData,
+                          startTime: formatDateForInput(newDate),
+                          endTime: formatDateForInput(new Date(newDate.getTime() + 60 * 60 * 1000)),
+                        });
+                        setShowCreateModal(true);
+                      }
                     }}
                   >
                     <div
@@ -432,15 +443,15 @@ function CalendarContent() {
                     >
                       {day.date.getDate()}
                     </div>
-                    <div className="space-y-0.5">
-                      {dayEvents.slice(0, 3).map((event) => (
+                    <div className="space-y-0.5 flex flex-col">
+                      {dayEvents.slice(0, maxVisibleEvents).map((event) => (
                         <div
                           key={event._id}
                           onClick={(e) => {
                             e.stopPropagation();
                             openEventDetails(event);
                           }}
-                          className={`text-xs px-1 py-0.5 rounded truncate cursor-pointer ${
+                          className={`text-xs px-1 py-0.5 rounded truncate cursor-pointer flex-shrink-0 ${
                             event.myInviteStatus === "pending"
                               ? "bg-amber-500/20 text-amber-400"
                               : event.myInviteStatus === "organizer"
@@ -451,10 +462,21 @@ function CalendarContent() {
                           {formatTime(event.startTime)} {event.title}
                         </div>
                       ))}
-                      {dayEvents.length > 3 && (
-                        <div className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>
-                          +{dayEvents.length - 3} more
-                        </div>
+                      {hasMore && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedDayDate(day.date);
+                            setShowDayModal(true);
+                          }}
+                          className={`text-xs font-medium py-0.5 px-1 rounded text-left flex-shrink-0 transition-colors ${
+                            isDark
+                              ? "text-cyan-400 hover:bg-cyan-500/20"
+                              : "text-blue-600 hover:bg-blue-100"
+                          }`}
+                        >
+                          +{dayEvents.length - maxVisibleEvents} more
+                        </button>
                       )}
                     </div>
                   </div>
@@ -796,6 +818,117 @@ function CalendarContent() {
                     </button>
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Day Detail Modal */}
+        {showDayModal && selectedDayDate && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className={`w-full max-w-md rounded-xl border max-h-[80vh] flex flex-col ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200"}`}>
+              <div className={`p-4 border-b flex-shrink-0 ${isDark ? "border-slate-700" : "border-gray-200"}`}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                      {selectedDayDate.toLocaleDateString("en-US", {
+                        weekday: "long",
+                        month: "long",
+                        day: "numeric",
+                      })}
+                    </h2>
+                    <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                      {getEventsForDay(selectedDayDate).length} event(s)
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setShowDayModal(false);
+                      setSelectedDayDate(null);
+                    }}
+                    className={`p-1 rounded hover:${isDark ? "bg-slate-700" : "bg-gray-100"}`}
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-4 overflow-y-auto flex-1">
+                {getEventsForDay(selectedDayDate).length === 0 ? (
+                  <p className={`text-center py-8 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    No events scheduled
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {getEventsForDay(selectedDayDate).map((event) => (
+                      <div
+                        key={event._id}
+                        onClick={() => {
+                          setShowDayModal(false);
+                          openEventDetails(event);
+                        }}
+                        className={`p-3 rounded-lg cursor-pointer transition-colors ${
+                          isDark ? "bg-slate-700 hover:bg-slate-600" : "bg-gray-50 hover:bg-gray-100"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <p className={`font-medium truncate ${isDark ? "text-white" : "text-gray-900"}`}>
+                              {event.title}
+                            </p>
+                            <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                              {formatTime(event.startTime)} - {formatTime(event.endTime)}
+                            </p>
+                            {event.location && (
+                              <p className={`text-xs mt-1 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                                📍 {event.location}
+                              </p>
+                            )}
+                          </div>
+                          <span
+                            className={`flex-shrink-0 px-2 py-0.5 rounded text-xs font-medium ${
+                              event.myInviteStatus === "pending"
+                                ? "bg-amber-500/20 text-amber-400"
+                                : event.myInviteStatus === "organizer"
+                                ? isDark ? "bg-cyan-500/20 text-cyan-400" : "bg-blue-100 text-blue-700"
+                                : isDark ? "bg-green-500/20 text-green-400" : "bg-green-100 text-green-700"
+                            }`}
+                          >
+                            {event.myInviteStatus === "organizer"
+                              ? "Organizer"
+                              : event.myInviteStatus === "pending"
+                              ? "Pending"
+                              : event.myInviteStatus}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className={`p-4 border-t flex-shrink-0 ${isDark ? "border-slate-700" : "border-gray-200"}`}>
+                <button
+                  onClick={() => {
+                    setShowDayModal(false);
+                    const newDate = new Date(selectedDayDate);
+                    setFormData({
+                      ...formData,
+                      startTime: formatDateForInput(newDate),
+                      endTime: formatDateForInput(new Date(newDate.getTime() + 60 * 60 * 1000)),
+                    });
+                    setShowCreateModal(true);
+                  }}
+                  className={`w-full px-4 py-2 rounded-lg font-medium ${
+                    isDark
+                      ? "bg-cyan-500 text-white hover:bg-cyan-600"
+                      : "bg-blue-600 text-white hover:bg-blue-700"
+                  }`}
+                >
+                  + Add Event
+                </button>
               </div>
             </div>
           </div>
