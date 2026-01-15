@@ -1004,6 +1004,24 @@ export default defineSchema({
     .index("by_active", ["isActive"])
     .index("by_created", ["createdAt"]),
 
+  // ============ HOLIDAYS & SCHEDULE OVERRIDES ============
+  // Global holidays and schedule overrides (prevents NCNS triggers)
+  holidays: defineTable({
+    name: v.string(), // e.g., "Christmas Day", "Thanksgiving"
+    date: v.string(), // YYYY-MM-DD format
+    type: v.string(), // "holiday" | "closure" | "override"
+    isPaidHoliday: v.boolean(), // Whether employees are paid for this day
+    affectedLocations: v.optional(v.array(v.id("locations"))), // Empty = all locations
+    affectedDepartments: v.optional(v.array(v.string())), // Empty = all departments
+    isRecurring: v.optional(v.boolean()), // Repeats every year
+    notes: v.optional(v.string()),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_date", ["date"])
+    .index("by_type", ["type"]),
+
   // ============ TIME CLOCK ============
   // Raw time entries (clock in/out, breaks)
   timeEntries: defineTable({

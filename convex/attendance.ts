@@ -594,6 +594,27 @@ export const detectMissedShifts = mutation({
       return { checked: 0, missedShifts: 0 };
     }
 
+    // Check if today is a global holiday
+    const globalHoliday = await ctx.db
+      .query("holidays")
+      .withIndex("by_date", (q) => q.eq("date", targetDate))
+      .first();
+
+    if (globalHoliday) {
+      // Check if it's a company-wide holiday (no location/department restrictions)
+      const isCompanyWide =
+        (!globalHoliday.affectedLocations || globalHoliday.affectedLocations.length === 0) &&
+        (!globalHoliday.affectedDepartments || globalHoliday.affectedDepartments.length === 0);
+
+      if (isCompanyWide) {
+        return {
+          checked: 0,
+          missedShifts: 0,
+          message: `Skipped - Holiday: ${globalHoliday.name}`,
+        };
+      }
+    }
+
     // Only run after 10am (give people time to arrive)
     if (currentHour < 10) {
       return { checked: 0, missedShifts: 0, message: "Too early to check" };
@@ -646,6 +667,24 @@ export const detectMissedShifts = mutation({
 
       // If no attendance record and no valid excuse, they missed their shift
       if (!attendance && !callOff && !timeOff) {
+        // Check if this person is affected by a location/department-specific holiday
+        if (globalHoliday) {
+          const locationMatch =
+            !globalHoliday.affectedLocations ||
+            globalHoliday.affectedLocations.length === 0 ||
+            (person.locationId && globalHoliday.affectedLocations.includes(person.locationId));
+
+          const deptMatch =
+            !globalHoliday.affectedDepartments ||
+            globalHoliday.affectedDepartments.length === 0 ||
+            globalHoliday.affectedDepartments.includes(person.department);
+
+          if (locationMatch && deptMatch) {
+            // This person is covered by the holiday, skip them
+            continue;
+          }
+        }
+
         // Check if their scheduled time has passed (with buffer)
         const [hours, minutes] = scheduledStart.split(":").map(Number);
         const scheduledTime = new Date(currentDate);
