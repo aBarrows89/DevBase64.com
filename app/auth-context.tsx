@@ -242,13 +242,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user?.role === "warehouse_director";
 
   // Employee portal admin permissions
-  // Manage time off requests: super_admin, admin, warehouse_director, department_manager, warehouse_manager
+  // Manage time off requests: super_admin, admin, warehouse_director only
+  // (Warehouse managers and department managers cannot approve - goes through directors)
   const canManageTimeOff =
     user?.role === "super_admin" ||
     user?.role === "admin" ||
-    user?.role === "warehouse_director" ||
-    user?.role === "department_manager" ||
-    user?.role === "warehouse_manager";
+    user?.role === "warehouse_director";
 
   // Manage call-offs: super_admin, admin, warehouse_director, department_manager, warehouse_manager
   const canManageCallOffs =
