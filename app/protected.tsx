@@ -7,11 +7,19 @@ import { useEffect } from "react";
 interface ProtectedProps {
   children: React.ReactNode;
   requireAdmin?: boolean;
+  requiredRoles?: string[]; // Array of allowed roles
 }
 
-export default function Protected({ children, requireAdmin = false }: ProtectedProps) {
+export default function Protected({ children, requireAdmin = false, requiredRoles }: ProtectedProps) {
   const { user, isLoading } = useAuth();
   const router = useRouter();
+
+  // Check if user has required role
+  const hasRequiredRole = () => {
+    if (!user) return false;
+    if (!requiredRoles || requiredRoles.length === 0) return true;
+    return requiredRoles.includes(user.role);
+  };
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -20,7 +28,10 @@ export default function Protected({ children, requireAdmin = false }: ProtectedP
     if (!isLoading && user && requireAdmin && user.role !== "admin") {
       router.push("/");
     }
-  }, [user, isLoading, router, requireAdmin]);
+    if (!isLoading && user && requiredRoles && !hasRequiredRole()) {
+      router.push("/");
+    }
+  }, [user, isLoading, router, requireAdmin, requiredRoles]);
 
   if (isLoading) {
     return (
@@ -38,6 +49,10 @@ export default function Protected({ children, requireAdmin = false }: ProtectedP
   }
 
   if (requireAdmin && user.role !== "admin") {
+    return null;
+  }
+
+  if (requiredRoles && !hasRequiredRole()) {
     return null;
   }
 

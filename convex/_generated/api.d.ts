@@ -23,6 +23,7 @@ import type * as callOffs from "../callOffs.js";
 import type * as contactMessages from "../contactMessages.js";
 import type * as crons from "../crons.js";
 import type * as dealerInquiries from "../dealerInquiries.js";
+import type * as deletedRecords from "../deletedRecords.js";
 import type * as documents from "../documents.js";
 import type * as emails from "../emails.js";
 import type * as employeeChat from "../employeeChat.js";
@@ -84,6 +85,7 @@ declare const fullApi: ApiFromModules<{
   contactMessages: typeof contactMessages;
   crons: typeof crons;
   dealerInquiries: typeof dealerInquiries;
+  deletedRecords: typeof deletedRecords;
   documents: typeof documents;
   emails: typeof emails;
   employeeChat: typeof employeeChat;

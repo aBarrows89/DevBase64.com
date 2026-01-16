@@ -1022,6 +1022,24 @@ export default defineSchema({
     .index("by_date", ["date"])
     .index("by_type", ["type"]),
 
+  // ============ DELETED RECORDS (SOFT DELETE) ============
+  // Archive of deleted records for admin deletion with super_admin restore
+  deletedRecords: defineTable({
+    tableName: v.string(), // Original table: "personnel", "users", "jobs", etc.
+    originalId: v.string(), // The original _id of the deleted record
+    recordData: v.string(), // JSON stringified original record data
+    recordSummary: v.string(), // Human-readable summary (e.g., "John Doe - Employee")
+    deletedBy: v.id("users"),
+    deletedByName: v.string(), // Cached for display
+    deletedAt: v.number(),
+    reason: v.optional(v.string()), // Optional deletion reason
+    restoredAt: v.optional(v.number()), // If restored
+    restoredBy: v.optional(v.id("users")), // Who restored it
+  })
+    .index("by_table", ["tableName"])
+    .index("by_deleted_at", ["deletedAt"])
+    .index("by_deleted_by", ["deletedBy"]),
+
   // ============ TIME CLOCK ============
   // Raw time entries (clock in/out, breaks)
   timeEntries: defineTable({

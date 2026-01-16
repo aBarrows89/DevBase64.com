@@ -9,9 +9,11 @@ const ROLE_HIERARCHY = [
   "department_manager",
   "payroll_manager",
   "coo",
-  "employee",
-  "member",
 ] as const;
+
+// Roles to exclude from org chart display (these are base-level roles)
+// Users with these roles aren't shown since higher roles inherit their permissions
+const EXCLUDED_ROLES = ["employee", "member"];
 
 // Role display names
 const ROLE_LABELS: Record<string, string> = {
@@ -26,7 +28,16 @@ const ROLE_LABELS: Record<string, string> = {
   member: "Member",
 };
 
-// Role permissions - what each role can do
+// Base employee permissions that all roles inherit
+const EMPLOYEE_PERMISSIONS = [
+  "View own schedule",
+  "Request time off",
+  "View announcements",
+  "Calendar",
+  "Messages",
+];
+
+// Role-specific permissions - what makes each role unique
 const ROLE_PERMISSIONS: Record<string, string[]> = {
   super_admin: [
     "Full system access",
@@ -34,6 +45,9 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     "View all data",
     "System configuration",
     "Delete records",
+    "Restore deleted records",
+    "Hiring & HR",
+    ...EMPLOYEE_PERMISSIONS,
   ],
   admin: [
     "Manage personnel",
@@ -41,23 +55,30 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     "Approve time off",
     "View reports",
     "Manage equipment",
+    "Delete records (archived)",
+    "Hiring & HR",
+    "Onboarding docs",
+    ...EMPLOYEE_PERMISSIONS,
   ],
   warehouse_director: [
     "Manage assigned locations",
     "View personnel",
     "Approve time off",
     "View reports",
+    "Onboarding docs",
+    ...EMPLOYEE_PERMISSIONS,
   ],
   warehouse_manager: [
     "Manage assigned locations",
     "View personnel",
     "Approve time off",
     "Manage shifts",
+    "Onboarding docs",
+    ...EMPLOYEE_PERMISSIONS,
   ],
   department_manager: [
     "Manage assigned departments",
     "View department personnel",
-    "Approve department time off",
   ],
   payroll_manager: [
     "View timesheets",
@@ -68,12 +89,9 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     "View operations",
     "View reports",
     "Manage announcements",
+    ...EMPLOYEE_PERMISSIONS,
   ],
-  employee: [
-    "View own schedule",
-    "Request time off",
-    "View announcements",
-  ],
+  employee: EMPLOYEE_PERMISSIONS,
   member: [
     "Basic access",
     "View dashboard",
@@ -99,12 +117,18 @@ export const getOrgChartData = query({
     const seenEmails = new Set<string>();
     const deduplicatedUsers: typeof users = [];
 
+    // All roles for processing (including employee/member for deduplication)
+    const ALL_ROLES = [...ROLE_HIERARCHY, "employee", "member"] as const;
+
     // Process in hierarchy order (highest first) so we keep the highest role
-    for (const role of ROLE_HIERARCHY) {
+    for (const role of ALL_ROLES) {
       for (const user of users) {
         if (user.role === role && !seenEmails.has(user.email.toLowerCase())) {
           seenEmails.add(user.email.toLowerCase());
-          deduplicatedUsers.push(user);
+          // Only add to display if not an excluded role
+          if (!EXCLUDED_ROLES.includes(role)) {
+            deduplicatedUsers.push(user);
+          }
         }
       }
     }
