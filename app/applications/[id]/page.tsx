@@ -245,6 +245,19 @@ function ApplicationDetailContent({ id }: { id: string }) {
     scheduleTemplateId: "" as string,
   });
 
+  // Send Offer state
+  const [showOfferModal, setShowOfferModal] = useState(false);
+  const [isSendingOffer, setIsSendingOffer] = useState(false);
+  const [offerForm, setOfferForm] = useState({
+    positionTitle: "",
+    department: "",
+    compensationType: "hourly" as "hourly" | "salary",
+    compensationAmount: "",
+    startDate: new Date().toISOString().split("T")[0],
+    startTime: "08:00",
+  });
+  const createAndSendOffer = useMutation(api.offerLetters.createAndSend);
+
   const handleDelete = async () => {
     if (!application) return;
     setIsDeleting(true);
@@ -533,6 +546,24 @@ function ApplicationDetailContent({ id }: { id: string }) {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
                   </svg>
                   Hire Applicant
+                </button>
+              )}
+              {/* Send Offer button */}
+              {application.email && application.status !== "rejected" && application.status !== "hired" && (
+                <button
+                  onClick={() => {
+                    setOfferForm({
+                      ...offerForm,
+                      positionTitle: application.appliedJobTitle || "",
+                    });
+                    setShowOfferModal(true);
+                  }}
+                  className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-colors flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  Send Offer
                 </button>
               )}
               <select
@@ -1846,6 +1877,161 @@ function ApplicationDetailContent({ id }: { id: string }) {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
                         </svg>
                         Create Personnel Record
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Send Offer Modal */}
+          {showOfferModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+              <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 max-w-lg mx-4 w-full">
+                <h3 className="text-xl font-bold text-white mb-2">Send Offer Letter</h3>
+                <p className="text-slate-400 text-sm mb-6">
+                  Send an offer email to {application.firstName} {application.lastName} at {application.email}
+                </p>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-2">Position *</label>
+                    <input
+                      type="text"
+                      placeholder="e.g., Warehouse Associate"
+                      value={offerForm.positionTitle}
+                      onChange={(e) => setOfferForm({ ...offerForm, positionTitle: e.target.value })}
+                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-cyan-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-2">Department *</label>
+                    <input
+                      type="text"
+                      placeholder="e.g., Warehouse, Operations"
+                      value={offerForm.department}
+                      onChange={(e) => setOfferForm({ ...offerForm, department: e.target.value })}
+                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-cyan-500"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-2">Pay Type *</label>
+                      <select
+                        value={offerForm.compensationType}
+                        onChange={(e) => setOfferForm({ ...offerForm, compensationType: e.target.value as "hourly" | "salary" })}
+                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-cyan-500"
+                      >
+                        <option value="hourly">Hourly</option>
+                        <option value="salary">Salary</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-2">
+                        {offerForm.compensationType === "hourly" ? "Hourly Rate *" : "Annual Salary *"}
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder={offerForm.compensationType === "hourly" ? "e.g., 18.00" : "e.g., 45000"}
+                        value={offerForm.compensationAmount}
+                        onChange={(e) => setOfferForm({ ...offerForm, compensationAmount: e.target.value })}
+                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-2">Start Date *</label>
+                      <input
+                        type="date"
+                        value={offerForm.startDate}
+                        onChange={(e) => setOfferForm({ ...offerForm, startDate: e.target.value })}
+                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-2">Start Time</label>
+                      <input
+                        type="time"
+                        value={offerForm.startTime}
+                        onChange={(e) => setOfferForm({ ...offerForm, startTime: e.target.value })}
+                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 mt-6">
+                  <button
+                    onClick={() => {
+                      setShowOfferModal(false);
+                      setOfferForm({
+                        positionTitle: "",
+                        department: "",
+                        compensationType: "hourly",
+                        compensationAmount: "",
+                        startDate: new Date().toISOString().split("T")[0],
+                        startTime: "08:00",
+                      });
+                    }}
+                    disabled={isSendingOffer}
+                    className="px-4 py-2 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!user || !offerForm.positionTitle || !offerForm.department || !offerForm.compensationAmount) return;
+                      setIsSendingOffer(true);
+                      try {
+                        await createAndSendOffer({
+                          applicationId: application._id,
+                          positionTitle: offerForm.positionTitle,
+                          department: offerForm.department,
+                          compensationType: offerForm.compensationType,
+                          compensationAmount: parseFloat(offerForm.compensationAmount),
+                          startDate: offerForm.startDate,
+                          startTime: offerForm.startTime || undefined,
+                          userId: user._id,
+                        });
+                        setShowOfferModal(false);
+                        setOfferForm({
+                          positionTitle: "",
+                          department: "",
+                          compensationType: "hourly",
+                          compensationAmount: "",
+                          startDate: new Date().toISOString().split("T")[0],
+                          startTime: "08:00",
+                        });
+                      } catch (error: any) {
+                        console.error("Failed to send offer:", error);
+                        alert(error?.message || "Failed to send offer");
+                      } finally {
+                        setIsSendingOffer(false);
+                      }
+                    }}
+                    disabled={!offerForm.positionTitle || !offerForm.department || !offerForm.compensationAmount || isSendingOffer}
+                    className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {isSendingOffer ? (
+                      <>
+                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                        Sending Offer...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                        Send Offer Email
                       </>
                     )}
                   </button>

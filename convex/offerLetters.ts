@@ -182,6 +182,76 @@ export const update = mutation({
   },
 });
 
+// Create and immediately send an offer letter (combined for convenience)
+export const createAndSend = mutation({
+  args: {
+    applicationId: v.id("applications"),
+    positionTitle: v.string(),
+    department: v.string(),
+    compensationType: v.string(), // "hourly" | "salary"
+    compensationAmount: v.number(),
+    startDate: v.string(),
+    startTime: v.optional(v.string()),
+    employmentType: v.optional(v.string()),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const application = await ctx.db.get(args.applicationId);
+    if (!application) throw new Error("Application not found");
+
+    const user = await ctx.db.get(args.userId);
+    if (!user) throw new Error("User not found");
+
+    // Check if offer already exists for this application
+    const existing = await ctx.db
+      .query("offerLetters")
+      .withIndex("by_application", (q) => q.eq("applicationId", args.applicationId))
+      .first();
+
+    if (existing && existing.status !== "withdrawn" && existing.status !== "declined" && existing.status !== "expired") {
+      throw new Error("An active offer letter already exists for this application");
+    }
+
+    const now = Date.now();
+    const expiresAt = now + (7 * 24 * 60 * 60 * 1000); // 7 days
+
+    // Create the offer
+    const offerId = await ctx.db.insert("offerLetters", {
+      applicationId: args.applicationId,
+      candidateName: `${application.firstName} ${application.lastName}`,
+      candidateEmail: application.email,
+      positionTitle: args.positionTitle,
+      department: args.department,
+      employmentType: args.employmentType || "full_time",
+      compensationType: args.compensationType,
+      compensationAmount: args.compensationAmount,
+      startDate: args.startDate,
+      workSchedule: args.startTime ? `${args.startTime}` : undefined,
+      benefitsEligible: true,
+      status: "sent",
+      sentAt: now,
+      expiresAt,
+      createdBy: args.userId,
+      createdByName: user.name,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // Schedule email to be sent
+    await ctx.scheduler.runAfter(0, internal.offerLetters.sendOfferEmail, {
+      offerId,
+    });
+
+    // Update application status
+    await ctx.db.patch(args.applicationId, {
+      status: "offer_sent",
+      updatedAt: now,
+    });
+
+    return offerId;
+  },
+});
+
 // Send an offer letter
 export const send = mutation({
   args: {
