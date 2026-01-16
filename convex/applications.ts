@@ -1304,3 +1304,40 @@ export const updateStatusWithActivity = mutation({
     return args.applicationId;
   },
 });
+
+// One-time migration to backfill applicationId on existing interview events
+export const backfillInterviewEventApplicationIds = mutation({
+  args: {},
+  handler: async (ctx) => {
+    // Get all applications that have a scheduled interview event
+    const applications = await ctx.db
+      .query("applications")
+      .collect();
+
+    let updated = 0;
+    let skipped = 0;
+
+    for (const application of applications) {
+      if (application.scheduledInterviewEventId) {
+        const event = await ctx.db.get(application.scheduledInterviewEventId);
+
+        if (event && !event.applicationId) {
+          // Update the event to include the applicationId
+          await ctx.db.patch(application.scheduledInterviewEventId, {
+            applicationId: application._id,
+          });
+          updated++;
+        } else if (event?.applicationId) {
+          skipped++;
+        }
+      }
+    }
+
+    return {
+      success: true,
+      updated,
+      skipped,
+      message: `Backfilled ${updated} interview events, skipped ${skipped} (already had applicationId)`,
+    };
+  },
+});
