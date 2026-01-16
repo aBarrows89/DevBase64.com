@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "IE Central",
-  description: "Industrial Equipment Central - Employee Management & Operations Dashboard",
+  description: "IE Central - Employee Management & Operations Dashboard",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,

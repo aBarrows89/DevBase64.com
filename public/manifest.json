@@ -1,7 +1,7 @@
 {
   "name": "IE Central",
   "short_name": "IE Central",
-  "description": "Industrial Equipment Central - Employee Management & Operations Dashboard",
+  "description": "IE Central - Employee Management & Operations Dashboard",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f172a",

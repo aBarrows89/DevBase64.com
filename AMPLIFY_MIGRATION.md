@@ -62,7 +62,7 @@ Copy these to AWS Amplify Console > Environment Variables:
 - [ ] Update any webhooks pointing to old Vercel URL
 - [ ] Update OAuth redirect URLs if using external auth
 - [ ] Update any documentation with new URL
-- [ ] Rebrand references from DevBase64 to IECentral
+- [x] Rebrand references from DevBase64 to IECentral
 
 ## Rollback Plan
 If issues occur, Vercel deployment remains active until explicitly removed.

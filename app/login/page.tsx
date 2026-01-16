@@ -46,13 +46,13 @@ export default function LoginPage() {
         <div className="text-center mb-8">
           <Image
             src="/logo.gif"
-            alt="Import Export Tire Company"
+            alt="IE Central"
             width={200}
             height={56}
             className="h-14 w-auto mx-auto"
             priority
           />
-          <p className={`mt-3 ${isDark ? "text-slate-500" : "text-gray-500"}`}>IE Central - Business Intelligence</p>
+          <p className={`mt-3 ${isDark ? "text-slate-500" : "text-gray-500"}`}>Employee Management & Operations</p>
         </div>
 
         {/* Login Form */}
