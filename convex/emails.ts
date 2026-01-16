@@ -540,3 +540,130 @@ ${companyName}
     }
   },
 });
+
+// Send missed interview email (Did Not Show)
+export const sendMissedInterviewEmail = internalAction({
+  args: {
+    applicantFirstName: v.string(),
+    applicantLastName: v.string(),
+    applicantEmail: v.string(),
+    resumeText: v.optional(v.string()),
+    jobTitle: v.string(),
+    interviewDate: v.string(),
+    companyName: v.optional(v.string()),
+    contactPhone: v.optional(v.string()),
+    contactEmail: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const resendApiKey = process.env.RESEND_API_KEY;
+    if (!resendApiKey) {
+      console.error("RESEND_API_KEY not configured");
+      return { success: false, error: "Email service not configured" };
+    }
+
+    const resend = new Resend(resendApiKey);
+
+    // Collect all email addresses
+    const emailAddresses: string[] = [args.applicantEmail];
+
+    if (args.resumeText) {
+      const extractedEmails = extractEmailsFromText(args.resumeText);
+      extractedEmails.forEach(email => {
+        if (!emailAddresses.includes(email.toLowerCase())) {
+          emailAddresses.push(email.toLowerCase());
+        }
+      });
+    }
+
+    const companyName = args.companyName || "Import Export Tire Co";
+    const formattedDate = formatDateForEmail(args.interviewDate);
+    const contactPhone = args.contactPhone || "(724) 537-7797";
+    const contactEmail = args.contactEmail || "andy@ietires.com";
+
+    const emailHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>We Missed You!</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); padding: 30px; border-radius: 10px 10px 0 0;">
+    <h1 style="color: white; margin: 0; font-size: 24px;">We Missed You Today!</h1>
+    <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0;">Let's find a time that works better</p>
+  </div>
+
+  <div style="background: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; border-top: none;">
+    <p style="margin-top: 0;">Hi ${args.applicantFirstName},</p>
+
+    <p>We had you scheduled for an interview on <strong>${formattedDate}</strong> for the <strong>${args.jobTitle}</strong> position, but it looks like we missed each other.</p>
+
+    <div style="background: white; border-radius: 8px; padding: 20px; margin: 20px 0; border: 1px solid #e5e7eb; text-align: center;">
+      <h3 style="margin-top: 0; color: #374151;">Still Interested?</h3>
+      <p style="margin-bottom: 15px;">We'd love to reschedule! Give us a call and we'll find a time that works for you.</p>
+      <a href="tel:${contactPhone.replace(/[^0-9+]/g, '')}" style="display: inline-block; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold;">
+        📞 Call Us: ${contactPhone}
+      </a>
+    </div>
+
+    <p>Life happens - we understand! If you're still interested in joining our team, just reach out and we'll get you back on the calendar.</p>
+
+    <p>You can also email us at <a href="mailto:${contactEmail}" style="color: #6366f1;">${contactEmail}</a> if that's easier.</p>
+
+    <p style="margin-bottom: 0;">
+      We hope to hear from you soon!<br><br>
+      Best regards,<br>
+      <strong>The ${companyName} Team</strong>
+    </p>
+  </div>
+
+  <div style="background: #1f2937; padding: 20px; border-radius: 0 0 10px 10px; text-align: center;">
+    <img src="https://ietires.com/logo.gif" alt="Import Export Tire Co" style="max-width: 150px; margin-bottom: 15px;">
+    <p style="color: #9ca3af; margin: 0; font-size: 12px;">
+      This is an automated message regarding your scheduled interview.
+    </p>
+  </div>
+</body>
+</html>
+    `;
+
+    const textContent = `
+We Missed You Today! - ${companyName}
+
+Hi ${args.applicantFirstName},
+
+We had you scheduled for an interview on ${formattedDate} for the ${args.jobTitle} position, but it looks like we missed each other.
+
+STILL INTERESTED?
+We'd love to reschedule! Give us a call and we'll find a time that works for you.
+
+Phone: ${contactPhone}
+Email: ${contactEmail}
+
+Life happens - we understand! If you're still interested in joining our team, just reach out and we'll get you back on the calendar.
+
+We hope to hear from you soon!
+
+Best regards,
+The ${companyName} Team
+    `;
+
+    try {
+      const result = await resend.emails.send({
+        from: `Import Export Tire Co <interviews@notifications.iecentral.com>`,
+        replyTo: contactEmail,
+        to: emailAddresses,
+        subject: `We Missed You! - ${companyName} Interview`,
+        html: emailHtml,
+        text: textContent,
+      });
+
+      console.log("Missed interview email sent:", result, "to:", emailAddresses);
+      return { success: true, emailId: result.data?.id, sentTo: emailAddresses };
+    } catch (error) {
+      console.error("Failed to send missed interview email:", error);
+      return { success: false, error: String(error) };
+    }
+  },
+});

@@ -188,7 +188,7 @@ export default defineSchema({
         hiringTeamNotes: v.string(),
       })
     ),
-    status: v.string(), // "new" | "reviewed" | "contacted" | "scheduled" | "interviewed" | "hired" | "rejected"
+    status: v.string(), // "new" | "reviewed" | "contacted" | "scheduled" | "interviewed" | "dns" | "hired" | "rejected"
     notes: v.optional(v.string()),
     // Scheduled interview info
     scheduledInterviewDate: v.optional(v.string()), // ISO date string (YYYY-MM-DD)

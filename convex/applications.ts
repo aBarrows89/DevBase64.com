@@ -497,6 +497,54 @@ export const saveInterviewEvaluation = mutation({
   },
 });
 
+// Mark applicant as Did Not Show (DNS) and send follow-up email
+export const markDidNotShow = mutation({
+  args: {
+    applicationId: v.id("applications"),
+    sendEmail: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const application = await ctx.db.get(args.applicationId);
+    if (!application) {
+      throw new Error("Application not found");
+    }
+
+    // Update status to dns (did not show)
+    await ctx.db.patch(args.applicationId, {
+      status: "dns",
+      updatedAt: Date.now(),
+    });
+
+    // Log activity
+    await ctx.db.insert("applicationActivity", {
+      applicationId: args.applicationId,
+      type: "status_change",
+      description: "Marked as Did Not Show (DNS) - applicant missed scheduled interview",
+      previousValue: application.status,
+      newValue: "dns",
+      performedByName: "System",
+      createdAt: Date.now(),
+    });
+
+    // Send missed interview email if requested
+    if (args.sendEmail !== false) {
+      await ctx.scheduler.runAfter(0, internal.emails.sendMissedInterviewEmail, {
+        applicantFirstName: application.firstName,
+        applicantLastName: application.lastName,
+        applicantEmail: application.email,
+        resumeText: application.resumeText,
+        jobTitle: application.appliedJobTitle,
+        interviewDate: application.scheduledInterviewDate || new Date().toISOString().split("T")[0],
+        companyName: "Import Export Tire Co",
+        contactPhone: "(724) 537-7797",
+        contactEmail: "andy@ietires.com",
+      });
+    }
+
+    return { success: true };
+  },
+});
+
 // Complete interview round and send thank you email
 export const completeInterviewRound = mutation({
   args: {
