@@ -243,6 +243,8 @@ function ApplicationDetailContent({ id }: { id: string }) {
     hireDate: new Date().toISOString().split("T")[0],
     hourlyRate: "",
     scheduleTemplateId: "" as string,
+    sendOfferEmail: true, // Send offer email by default
+    startTime: "08:00",
   });
 
   // Send Offer state
@@ -272,9 +274,28 @@ function ApplicationDetailContent({ id }: { id: string }) {
   };
 
   const handleHire = async () => {
-    if (!application || !hireForm.position || !hireForm.department) return;
+    if (!application || !hireForm.position || !hireForm.department || !user) return;
     setIsHiring(true);
     try {
+      // Send offer email first if checkbox is checked and applicant has email
+      if (hireForm.sendOfferEmail && application.email && hireForm.hourlyRate) {
+        try {
+          await createAndSendOffer({
+            applicationId: application._id,
+            positionTitle: hireForm.position,
+            department: hireForm.department,
+            compensationType: "hourly",
+            compensationAmount: parseFloat(hireForm.hourlyRate),
+            startDate: hireForm.hireDate,
+            startTime: hireForm.startTime || undefined,
+            userId: user._id,
+          });
+        } catch (offerError) {
+          console.error("Failed to send offer email:", offerError);
+          // Continue with hiring even if email fails
+        }
+      }
+
       const personnelId = await createPersonnel({
         applicationId: application._id,
         position: hireForm.position,
@@ -282,7 +303,7 @@ function ApplicationDetailContent({ id }: { id: string }) {
         employeeType: hireForm.employeeType,
         hireDate: hireForm.hireDate,
         hourlyRate: hireForm.hourlyRate ? parseFloat(hireForm.hourlyRate) : undefined,
-        userId: user?._id,
+        userId: user._id,
         defaultScheduleTemplateId: hireForm.scheduleTemplateId ? hireForm.scheduleTemplateId as Id<"shiftTemplates"> : undefined,
       });
       setShowHireModal(false);
@@ -1796,13 +1817,23 @@ function ApplicationDetailContent({ id }: { id: string }) {
                     </select>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-3 gap-4">
                     <div>
                       <label className="block text-sm text-slate-400 mb-2">Hire Date *</label>
                       <input
                         type="date"
                         value={hireForm.hireDate}
                         onChange={(e) => setHireForm({ ...hireForm, hireDate: e.target.value })}
+                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-2">Start Time</label>
+                      <input
+                        type="time"
+                        value={hireForm.startTime}
+                        onChange={(e) => setHireForm({ ...hireForm, startTime: e.target.value })}
                         className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-cyan-500"
                       />
                     </div>
@@ -1819,6 +1850,23 @@ function ApplicationDetailContent({ id }: { id: string }) {
                       />
                     </div>
                   </div>
+
+                  {/* Send Offer Email Checkbox */}
+                  {application.email && (
+                    <div className="flex items-center gap-3 p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                      <input
+                        type="checkbox"
+                        id="sendOfferEmail"
+                        checked={hireForm.sendOfferEmail}
+                        onChange={(e) => setHireForm({ ...hireForm, sendOfferEmail: e.target.checked })}
+                        className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-purple-500 focus:ring-purple-500"
+                      />
+                      <label htmlFor="sendOfferEmail" className="text-sm text-slate-300">
+                        Send offer email to <span className="text-purple-400">{application.email}</span>
+                        {!hireForm.hourlyRate && <span className="text-amber-400 ml-2">(requires hourly rate)</span>}
+                      </label>
+                    </div>
+                  )}
 
                   <div>
                     <label className="block text-sm text-slate-400 mb-2">Schedule Template</label>
@@ -1851,6 +1899,8 @@ function ApplicationDetailContent({ id }: { id: string }) {
                         hireDate: new Date().toISOString().split("T")[0],
                         hourlyRate: "",
                         scheduleTemplateId: "",
+                        sendOfferEmail: true,
+                        startTime: "08:00",
                       });
                     }}
                     disabled={isHiring}

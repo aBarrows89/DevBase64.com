@@ -4,20 +4,26 @@ import { v } from "convex/values";
 export default defineSchema({
   // ============ AUTHENTICATION ============
   users: defineTable({
-    email: v.string(),
-    passwordHash: v.string(),
+    email: v.optional(v.string()),
+    passwordHash: v.optional(v.string()),
     name: v.string(),
     role: v.string(), // "super_admin" | "admin" | "warehouse_director" | "warehouse_manager" | "department_manager" | "payroll_manager" | "employee" | "member"
     isActive: v.boolean(),
-    forcePasswordChange: v.boolean(),
+    forcePasswordChange: v.optional(v.boolean()),
     // Role-specific fields
     managedDepartments: v.optional(v.array(v.string())), // For department_manager - which departments they manage
     managedLocationIds: v.optional(v.array(v.id("locations"))), // For warehouse_manager - which locations they manage
     personnelId: v.optional(v.id("personnel")), // For employee role - links to their personnel record
     // Push notification token for mobile app
     expoPushToken: v.optional(v.string()),
-    createdAt: v.number(),
+    createdAt: v.optional(v.number()),
     lastLoginAt: v.optional(v.number()),
+    // Legacy fields from old system
+    base44Id: v.optional(v.string()),
+    empId: v.optional(v.string()),
+    locationId: v.optional(v.string()),
+    locationName: v.optional(v.string()),
+    pin: v.optional(v.string()),
   })
     .index("by_email", ["email"])
     .index("by_personnel", ["personnelId"]),
