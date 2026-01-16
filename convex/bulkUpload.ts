@@ -11,6 +11,8 @@ export const processResume = action({
     resumeText: v.string(),
     fileName: v.string(),
     resumeFileId: v.optional(v.id("_storage")), // Optional: actual PDF file stored in Convex
+    selectedJobId: v.optional(v.id("jobs")), // Optional: pre-selected job to assign
+    skipAiMatching: v.optional(v.boolean()), // Skip AI job matching when job is pre-selected
   },
   handler: async (ctx, args): Promise<{
     success: boolean;
@@ -23,7 +25,7 @@ export const processResume = action({
     overallScore?: number;
     currentPosition?: string;
   }> => {
-    const { resumeText, fileName } = args;
+    const { resumeText, fileName, selectedJobId, skipAiMatching } = args;
 
     if (!resumeText || resumeText.trim().length < 50) {
       return {
@@ -33,7 +35,19 @@ export const processResume = action({
     }
 
     try {
-      // Run the AI analysis
+      // If a job is pre-selected, fetch its details
+      let selectedJob: { _id: Id<"jobs">; title: string } | null = null;
+      if (selectedJobId) {
+        selectedJob = await ctx.runQuery(api.jobs.getById, { jobId: selectedJobId });
+        if (!selectedJob) {
+          return {
+            success: false,
+            error: "Selected job not found",
+          };
+        }
+      }
+
+      // Run the AI analysis (always needed for contact info extraction)
       const analysis = await ctx.runAction(api.aiMatching.analyzeResume, {
         resumeText,
       }) as any;
@@ -50,8 +64,10 @@ export const processResume = action({
         lastName: lastName || undefined,
       });
 
-      // Get the best matching job
-      const topMatch = analysis.jobMatches?.[0];
+      // Get the best matching job - use selected job if provided, otherwise use AI match
+      const topMatch = selectedJob
+        ? { jobId: selectedJob._id, jobTitle: selectedJob.title, score: 100 }
+        : analysis.jobMatches?.[0];
 
       if (existingPersonnel) {
         // This is an existing employee - update their record with resume and job analysis
@@ -108,20 +124,30 @@ export const processResume = action({
       }
 
       // Build the AI analysis object for storage
-      const aiAnalysis = {
-        suggestedJobId: topMatch.jobId,
-        suggestedJobTitle: topMatch.jobTitle,
-        matchScore: topMatch.score,
-        allScores: analysis.jobMatches.map((m: any) => ({
-          jobId: m.jobId,
-          jobTitle: m.jobTitle,
-          score: m.score,
-          matchedKeywords: m.matchedKeywords,
-          reasoning: m.reasoning,
-        })),
-        extractedSkills: analysis.extractedSkills || [],
-        summary: analysis.summary,
-      };
+      const aiAnalysis = selectedJob
+        ? {
+            // When job is pre-selected, store minimal analysis
+            suggestedJobId: selectedJob._id,
+            suggestedJobTitle: selectedJob.title,
+            matchScore: 100,
+            allScores: [{ jobId: selectedJob._id, jobTitle: selectedJob.title, score: 100, matchedKeywords: [], reasoning: "Manually assigned" }],
+            extractedSkills: analysis.extractedSkills || [],
+            summary: analysis.summary,
+          }
+        : {
+            suggestedJobId: topMatch.jobId,
+            suggestedJobTitle: topMatch.jobTitle,
+            matchScore: topMatch.score,
+            allScores: analysis.jobMatches.map((m: any) => ({
+              jobId: m.jobId,
+              jobTitle: m.jobTitle,
+              score: m.score,
+              matchedKeywords: m.matchedKeywords,
+              reasoning: m.reasoning,
+            })),
+            extractedSkills: analysis.extractedSkills || [],
+            summary: analysis.summary,
+          };
 
       // Create the application with the best matching job
       const applicationId = await ctx.runMutation(api.applications.submitApplication, {

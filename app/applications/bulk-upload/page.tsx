@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { useAction, useMutation } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import ProtectedRoute from "@/app/protected";
@@ -27,10 +27,13 @@ export default function BulkUploadPage() {
   const router = useRouter();
   const processResume = useAction(api.bulkUpload.processResume);
   const generateUploadUrl = useMutation(api.applications.generateUploadUrl);
+  const activeJobs = useQuery(api.jobs.getActiveJobs);
 
   const [files, setFiles] = useState<FileStatus[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [selectedJobId, setSelectedJobId] = useState<Id<"jobs"> | "">("");
+  const [skipAiMatching, setSkipAiMatching] = useState(false);
 
   // Extract text from PDF using server-side API (more reliable than client-side pdfjs)
   const extractTextFromPdf = async (file: File): Promise<string> => {
@@ -175,6 +178,8 @@ export default function BulkUploadPage() {
           resumeText,
           fileName: file.name,
           resumeFileId, // Include the uploaded file ID
+          selectedJobId: selectedJobId || undefined, // Use selected job if specified
+          skipAiMatching, // Skip AI job matching if user specified a job
         }),
         120000,
         "AI processing timed out - please try again"
@@ -314,10 +319,37 @@ export default function BulkUploadPage() {
             <h2 className="font-medium text-cyan-400 mb-2">How it works:</h2>
             <ol className="text-sm text-slate-300 space-y-1 list-decimal list-inside">
               <li>Download resumes from Indeed as PDFs</li>
+              <li>Select the position you&apos;re uploading for (optional)</li>
               <li>Drag and drop all PDFs into the zone below</li>
-              <li>Click "Process All" - AI will extract contact info and match to jobs</li>
-              <li>Review results and view created applications</li>
+              <li>Click &quot;Process All&quot; - contact info will be extracted and applications created</li>
             </ol>
+          </div>
+
+          {/* Position Selector */}
+          <div className="mb-6 p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Assign all uploads to position:
+            </label>
+            <select
+              value={selectedJobId}
+              onChange={(e) => {
+                setSelectedJobId(e.target.value as Id<"jobs"> | "");
+                setSkipAiMatching(e.target.value !== "");
+              }}
+              className="w-full md:w-96 px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+            >
+              <option value="">Use AI matching (analyze each resume)</option>
+              {activeJobs?.map((job) => (
+                <option key={job._id} value={job._id}>
+                  {job.title} {job.department ? `- ${job.department}` : ""}
+                </option>
+              ))}
+            </select>
+            {selectedJobId && (
+              <p className="mt-2 text-sm text-cyan-400">
+                All uploaded resumes will be assigned to this position without AI job matching.
+              </p>
+            )}
           </div>
 
           {/* Drop Zone */}

@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query, internalAction } from "./_generated/server";
+import { mutation, query, internalAction, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 
 // ============ QUERIES ============
@@ -349,18 +349,58 @@ export const remove = mutation({
   },
 });
 
+// ============ INTERNAL QUERIES ============
+
+// Get offer details for email (internal use only)
+export const getOfferForEmail = internalQuery({
+  args: { offerId: v.id("offerLetters") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.offerId);
+  },
+});
+
 // ============ INTERNAL ACTIONS ============
 
 // Send offer letter email
 export const sendOfferEmail = internalAction({
   args: { offerId: v.id("offerLetters") },
-  handler: async (ctx, args) => {
-    // This will be implemented to send email via Resend
-    // For now, just log
-    console.log("Would send offer letter email for:", args.offerId);
+  handler: async (ctx, args): Promise<{ success: boolean; error?: string; emailId?: string; sentTo?: string[] }> => {
+    // Get the offer letter details directly from DB
+    const offer = await ctx.runQuery(internal.offerLetters.getOfferForEmail, {
+      offerId: args.offerId,
+    }) as {
+      candidateName: string;
+      candidateEmail: string;
+      positionTitle: string;
+      compensationType: string;
+      compensationAmount: number;
+      startDate: string;
+      workSchedule?: string;
+    } | null;
 
-    // TODO: Implement email sending with Resend
-    // Include link to view/accept offer
+    if (!offer) {
+      console.error("Offer letter not found:", args.offerId);
+      return { success: false, error: "Offer letter not found" };
+    }
+
+    // Extract first name from candidate name
+    const candidateFirstName: string = offer.candidateName.split(" ")[0];
+
+    // Send the email
+    const result = await ctx.runAction(internal.emails.sendOfferLetterEmail, {
+      candidateFirstName,
+      candidateName: offer.candidateName,
+      candidateEmail: offer.candidateEmail,
+      positionTitle: offer.positionTitle,
+      compensationType: offer.compensationType,
+      compensationAmount: offer.compensationAmount,
+      startDate: offer.startDate,
+      startTime: offer.workSchedule ? offer.workSchedule.split(",")[0]?.trim() : undefined,
+      companyName: "Import Export Tire Co",
+    }) as { success: boolean; error?: string; emailId?: string; sentTo?: string[] };
+
+    console.log("Offer letter email result:", result);
+    return result;
   },
 });
 

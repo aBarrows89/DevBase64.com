@@ -541,6 +541,166 @@ ${companyName}
   },
 });
 
+// Send offer letter email
+export const sendOfferLetterEmail = internalAction({
+  args: {
+    candidateFirstName: v.string(),
+    candidateName: v.string(),
+    candidateEmail: v.string(),
+    positionTitle: v.string(),
+    compensationType: v.string(), // "hourly" | "salary"
+    compensationAmount: v.number(),
+    startDate: v.string(),
+    startTime: v.optional(v.string()),
+    companyName: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const resendApiKey = process.env.RESEND_API_KEY;
+    if (!resendApiKey) {
+      console.error("RESEND_API_KEY not configured");
+      return { success: false, error: "Email service not configured" };
+    }
+
+    const resend = new Resend(resendApiKey);
+
+    const companyName = args.companyName || "Import Export Tire Co";
+    const formattedDate = formatDateForEmail(args.startDate);
+    const formattedTime = args.startTime ? formatTimeForEmail(args.startTime) : "8:00 AM";
+
+    // Format compensation
+    const compensationText = args.compensationType === "hourly"
+      ? `$${args.compensationAmount.toFixed(2)} per hour`
+      : `$${args.compensationAmount.toLocaleString()} per year`;
+
+    const emailHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Job Offer - ${companyName}</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 30px; border-radius: 10px 10px 0 0;">
+    <h1 style="color: white; margin: 0; font-size: 24px;">Congratulations!</h1>
+    <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0;">We have great news for you</p>
+  </div>
+
+  <div style="background: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; border-top: none;">
+    <p style="margin-top: 0;">Hi ${args.candidateFirstName},</p>
+
+    <p>We are pleased to inform you that we would like to extend an offer of employment for the <strong>${args.positionTitle}</strong> position at ${companyName}!</p>
+
+    <div style="background: white; border-radius: 8px; padding: 20px; margin: 20px 0; border: 2px solid #10b981;">
+      <div style="background: #10b981; color: white; padding: 5px 10px; border-radius: 4px; display: inline-block; margin-bottom: 15px; font-size: 12px; font-weight: bold;">YOUR OFFER</div>
+      <table style="width: 100%; border-collapse: collapse;">
+        <tr>
+          <td style="padding: 12px 0; border-bottom: 1px solid #f3f4f6;">
+            <strong>Position:</strong>
+          </td>
+          <td style="padding: 12px 0; border-bottom: 1px solid #f3f4f6; text-align: right;">
+            ${args.positionTitle}
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 12px 0; border-bottom: 1px solid #f3f4f6;">
+            <strong>Compensation:</strong>
+          </td>
+          <td style="padding: 12px 0; border-bottom: 1px solid #f3f4f6; text-align: right; color: #10b981; font-weight: bold;">
+            ${compensationText}
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 12px 0; border-bottom: 1px solid #f3f4f6;">
+            <strong>Start Date:</strong>
+          </td>
+          <td style="padding: 12px 0; border-bottom: 1px solid #f3f4f6; text-align: right;">
+            ${formattedDate}
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 12px 0;">
+            <strong>Start Time:</strong>
+          </td>
+          <td style="padding: 12px 0; text-align: right;">
+            ${formattedTime}
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <div style="background: #dbeafe; border-radius: 8px; padding: 15px; margin: 20px 0; border-left: 4px solid #3b82f6;">
+      <strong style="color: #1e40af;">Questions?</strong>
+      <p style="margin: 10px 0 0 0; color: #1e40af;">
+        If you have any questions about this offer or need additional information, please don't hesitate to reach out.
+      </p>
+    </div>
+
+    <p>We're excited about the possibility of you joining our team and look forward to hearing from you!</p>
+
+    <p style="margin-bottom: 0;">
+      Best regards,<br><br>
+      <strong>Andy Barrows</strong><br>
+      <span style="color: #6b7280;">Chief Technology Officer</span><br>
+      <span style="color: #6b7280;">Technology and Development Department</span><br>
+      <span style="color: #10b981;">📞 (814) 600-6587</span>
+    </p>
+  </div>
+
+  <div style="background: #1f2937; padding: 20px; border-radius: 0 0 10px 10px; text-align: center;">
+    <img src="https://ietires.com/logo.gif" alt="Import Export Tire Co" style="max-width: 150px; margin-bottom: 15px;">
+    <p style="color: #9ca3af; margin: 0; font-size: 12px;">
+      ${companyName} - We're excited to have you join our team!
+    </p>
+  </div>
+</body>
+</html>
+    `;
+
+    const textContent = `
+Congratulations! - Job Offer from ${companyName}
+
+Hi ${args.candidateFirstName},
+
+We are pleased to inform you that we would like to extend an offer of employment for the ${args.positionTitle} position at ${companyName}!
+
+YOUR OFFER DETAILS:
+- Position: ${args.positionTitle}
+- Compensation: ${compensationText}
+- Start Date: ${formattedDate}
+- Start Time: ${formattedTime}
+
+If you have any questions about this offer or need additional information, please don't hesitate to reach out.
+
+We're excited about the possibility of you joining our team and look forward to hearing from you!
+
+Best regards,
+
+Andy Barrows
+Chief Technology Officer
+Technology and Development Department
+Phone: (814) 600-6587
+    `;
+
+    try {
+      const result = await resend.emails.send({
+        from: `Import Export Tire Co <offers@notifications.iecentral.com>`,
+        replyTo: "andy@ietires.com",
+        to: [args.candidateEmail],
+        subject: `Congratulations! Job Offer - ${args.positionTitle} at ${companyName}`,
+        html: emailHtml,
+        text: textContent,
+      });
+
+      console.log("Offer letter email sent:", result, "to:", args.candidateEmail);
+      return { success: true, emailId: result.data?.id, sentTo: [args.candidateEmail] };
+    } catch (error) {
+      console.error("Failed to send offer letter email:", error);
+      return { success: false, error: String(error) };
+    }
+  },
+});
+
 // Send missed interview email (Did Not Show)
 export const sendMissedInterviewEmail = internalAction({
   args: {
