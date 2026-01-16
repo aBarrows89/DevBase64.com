@@ -684,7 +684,7 @@ Phone: (814) 600-6587
 
     try {
       const result = await resend.emails.send({
-        from: `Import Export Tire Co <offers@notifications.iecentral.com>`,
+        from: `Import Export Tire Co <interviews@notifications.iecentral.com>`,
         replyTo: "andy@ietires.com",
         to: [args.candidateEmail],
         subject: `Congratulations! Job Offer - ${args.positionTitle} at ${companyName}`,
