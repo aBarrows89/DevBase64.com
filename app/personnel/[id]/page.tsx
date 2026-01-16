@@ -839,7 +839,7 @@ function PersonnelDetailContent() {
         personnelId,
         milestone: selectedMilestone,
         completedBy: user._id as Id<"users">,
-        completedByName: user.name || user.email,
+        completedByName: user.name || user.email || "Unknown",
         notes: checkInNotes || undefined,
       });
       // Dismiss any notifications for this check-in

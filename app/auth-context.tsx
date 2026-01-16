@@ -9,11 +9,11 @@ export type UserRole = "super_admin" | "admin" | "warehouse_director" | "warehou
 
 export interface User {
   _id: Id<"users">;
-  email: string;
+  email?: string;
   name: string;
   role: UserRole;
   isActive: boolean;
-  forcePasswordChange: boolean;
+  forcePasswordChange?: boolean;
   managedDepartments?: string[];
   managedLocationIds?: Id<"locations">[];
   personnelId?: Id<"personnel">; // For employee role - links to their personnel record

@@ -22,7 +22,7 @@ const ROLE_COLORS: Record<string, string> = {
 interface OrgUser {
   _id: string;
   name: string;
-  email: string;
+  email?: string;
   role: string;
   roleLabel: string;
   managedDepartments: string[];

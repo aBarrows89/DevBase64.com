@@ -119,6 +119,10 @@ export const login = mutation({
       return { success: false, error: "Account is deactivated" };
     }
 
+    if (!user.passwordHash) {
+      return { success: false, error: "Invalid email or password" };
+    }
+
     const passwordValid = await verifyPassword(args.password, user.passwordHash);
     if (!passwordValid) {
       return { success: false, error: "Invalid email or password" };
@@ -134,7 +138,7 @@ export const login = mutation({
       resourceType: "user",
       resourceId: user._id,
       userId: user._id,
-      userEmail: user.email,
+      userEmail: user.email || "unknown",
       details: `User ${user.name} logged in`,
       timestamp: Date.now(),
     });
@@ -238,6 +242,10 @@ export const changePassword = mutation({
     const user = await ctx.db.get(args.userId);
     if (!user) {
       return { success: false, error: "User not found" };
+    }
+
+    if (!user.passwordHash) {
+      return { success: false, error: "Account not configured for password login" };
     }
 
     const passwordValid = await verifyPassword(

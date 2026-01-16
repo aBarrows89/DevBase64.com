@@ -249,7 +249,7 @@ export const createFromApplication = mutation({
           resourceType: "personnel",
           resourceId: personnelId,
           userId: args.userId,
-          userEmail: user.email,
+          userEmail: user.email || "unknown",
           details: `Hired ${application.firstName} ${application.lastName} as ${args.position}`,
           timestamp: now,
         });
@@ -314,7 +314,7 @@ export const create = mutation({
           resourceType: "personnel",
           resourceId: personnelId,
           userId: args.userId,
-          userEmail: user.email,
+          userEmail: user.email || "unknown",
           details: `Created personnel record for ${args.firstName} ${args.lastName}`,
           timestamp: now,
         });
@@ -386,7 +386,7 @@ export const update = mutation({
           resourceType: "personnel",
           resourceId: personnelId,
           userId: userId,
-          userEmail: user.email,
+          userEmail: user.email || "unknown",
           details: `Updated ${existing.firstName} ${existing.lastName}: ${changedFields.join(", ")}`,
           timestamp: now,
         });
@@ -478,7 +478,7 @@ export const terminate = mutation({
             resourceType: "user",
             resourceId: userAccount._id,
             userId: args.userId,
-            userEmail: adminUser.email,
+            userEmail: adminUser.email || "unknown",
             details: `Auto-deactivated user account for ${existing.firstName} ${existing.lastName} due to termination`,
             timestamp: now,
           });
@@ -496,7 +496,7 @@ export const terminate = mutation({
           resourceType: "personnel",
           resourceId: args.personnelId,
           userId: args.userId,
-          userEmail: user.email,
+          userEmail: user.email || "unknown",
           details: `Terminated ${existing.firstName} ${existing.lastName}: ${args.terminationReason}`,
           timestamp: now,
         });
@@ -610,7 +610,7 @@ export const rehire = mutation({
         resourceType: "user",
         resourceId: userAccount._id,
         userId: args.userId,
-        userEmail: authorizedBy.email,
+        userEmail: authorizedBy.email || "unknown",
         details: `Reactivated user account for ${existing.firstName} ${existing.lastName} due to rehire`,
         timestamp: now,
       });
@@ -623,7 +623,7 @@ export const rehire = mutation({
       resourceType: "personnel",
       resourceId: args.personnelId,
       userId: args.userId,
-      userEmail: authorizedBy.email,
+      userEmail: authorizedBy.email || "unknown",
       details: `Rehired ${existing.firstName} ${existing.lastName} as ${args.position} in ${args.department}. Authorized by: ${authorizedBy.name}`,
       timestamp: now,
     });

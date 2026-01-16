@@ -156,7 +156,7 @@ export const softDeleteRecord = mutation({
       resourceType: args.tableName,
       resourceId: args.recordId,
       userId: user._id,
-      userEmail: user.email,
+      userEmail: user.email || "unknown",
       details: `Deleted ${recordSummary}${args.reason ? ` - Reason: ${args.reason}` : ""}`,
       timestamp: Date.now(),
     });
@@ -253,7 +253,7 @@ export const restoreRecord = mutation({
       resourceType: deletedRecord.tableName,
       resourceId: String(newRecordId),
       userId: user._id,
-      userEmail: user.email,
+      userEmail: user.email || "unknown",
       details: `Restored ${deletedRecord.recordSummary} (original ID: ${deletedRecord.originalId})`,
       timestamp: Date.now(),
     });
@@ -297,7 +297,7 @@ export const permanentlyDelete = mutation({
       resourceType: deletedRecord.tableName,
       resourceId: deletedRecord.originalId,
       userId: user._id,
-      userEmail: user.email,
+      userEmail: user.email || "unknown",
       details: `Permanently deleted ${deletedRecord.recordSummary}`,
       timestamp: Date.now(),
     });

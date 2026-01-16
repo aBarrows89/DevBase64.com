@@ -123,8 +123,9 @@ export const getOrgChartData = query({
     // Process in hierarchy order (highest first) so we keep the highest role
     for (const role of ALL_ROLES) {
       for (const user of users) {
-        if (user.role === role && !seenEmails.has(user.email.toLowerCase())) {
-          seenEmails.add(user.email.toLowerCase());
+        const emailKey = (user.email || user._id).toLowerCase();
+        if (user.role === role && !seenEmails.has(emailKey)) {
+          seenEmails.add(emailKey);
           // Only add to display if not an excluded role
           if (!EXCLUDED_ROLES.includes(role)) {
             deduplicatedUsers.push(user);

@@ -123,7 +123,7 @@ export const create = mutation({
         resourceType: "project",
         resourceId: projectId,
         userId: args.createdBy,
-        userEmail: creator.email,
+        userEmail: creator.email || "unknown",
         details: `Created project "${args.name}"`,
         timestamp: now,
       });
@@ -214,7 +214,7 @@ export const updateStatus = mutation({
           resourceType: "project",
           resourceId: args.projectId,
           userId: args.userId,
-          userEmail: user.email,
+          userEmail: user.email || "unknown",
           details: `Changed "${project.name}" from ${oldStatus} to ${args.status}`,
           timestamp: now,
         });
