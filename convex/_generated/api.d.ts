@@ -37,7 +37,6 @@ import type * as jobs from "../jobs.js";
 import type * as locations from "../locations.js";
 import type * as merits from "../merits.js";
 import type * as messages from "../messages.js";
-import type * as migrations from "../migrations.js";
 import type * as mileage from "../mileage.js";
 import type * as notifications from "../notifications.js";
 import type * as offerLetters from "../offerLetters.js";
@@ -99,7 +98,6 @@ declare const fullApi: ApiFromModules<{
   locations: typeof locations;
   merits: typeof merits;
   messages: typeof messages;
-  migrations: typeof migrations;
   mileage: typeof mileage;
   notifications: typeof notifications;
   offerLetters: typeof offerLetters;

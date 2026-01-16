@@ -497,6 +497,54 @@ export const saveInterviewEvaluation = mutation({
   },
 });
 
+// Complete interview round and send thank you email
+export const completeInterviewRound = mutation({
+  args: {
+    applicationId: v.id("applications"),
+    round: v.number(),
+    interviewerName: v.string(),
+    sendThankYouEmail: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const application = await ctx.db.get(args.applicationId);
+    if (!application) {
+      throw new Error("Application not found");
+    }
+
+    // Update status to interviewed
+    await ctx.db.patch(args.applicationId, {
+      status: "interviewed",
+      updatedAt: Date.now(),
+    });
+
+    // Log activity
+    await ctx.db.insert("applicationActivity", {
+      applicationId: args.applicationId,
+      type: "interview_completed",
+      description: `Interview round ${args.round} completed by ${args.interviewerName}`,
+      performedByName: args.interviewerName,
+      createdAt: Date.now(),
+    });
+
+    // Send thank you email if requested
+    if (args.sendThankYouEmail !== false) {
+      await ctx.scheduler.runAfter(0, internal.emails.sendInterviewThankYouEmail, {
+        applicantFirstName: application.firstName,
+        applicantLastName: application.lastName,
+        applicantEmail: application.email,
+        resumeText: application.resumeText,
+        jobTitle: application.appliedJobTitle,
+        interviewDate: application.scheduledInterviewDate || new Date().toISOString().split("T")[0],
+        interviewerName: args.interviewerName,
+        companyName: "Import Export Tire Co",
+        contactEmail: "andy@ietires.com",
+      });
+    }
+
+    return { success: true };
+  },
+});
+
 // Delete an interview round
 export const deleteInterviewRound = mutation({
   args: {
@@ -1306,38 +1354,87 @@ export const updateStatusWithActivity = mutation({
 });
 
 // One-time migration to backfill applicationId on existing interview events
+// Also creates calendar events for applications that have scheduled info but no event
 export const backfillInterviewEventApplicationIds = mutation({
   args: {},
   handler: async (ctx) => {
-    // Get all applications that have a scheduled interview event
+    // Get all applications
     const applications = await ctx.db
       .query("applications")
       .collect();
 
-    let updated = 0;
+    // Get first admin user to set as creator for backfilled events
+    const adminUser = await ctx.db
+      .query("users")
+      .filter((q) => q.or(
+        q.eq(q.field("role"), "admin"),
+        q.eq(q.field("role"), "super_admin")
+      ))
+      .first();
+
+    if (!adminUser) {
+      return { success: false, message: "No admin user found to create events" };
+    }
+
+    let updatedExisting = 0;
+    let createdNew = 0;
     let skipped = 0;
+    const now = Date.now();
 
     for (const application of applications) {
+      // Case 1: Has event ID - just add applicationId if missing
       if (application.scheduledInterviewEventId) {
         const event = await ctx.db.get(application.scheduledInterviewEventId);
 
         if (event && !event.applicationId) {
-          // Update the event to include the applicationId
           await ctx.db.patch(application.scheduledInterviewEventId, {
             applicationId: application._id,
           });
-          updated++;
+          updatedExisting++;
         } else if (event?.applicationId) {
           skipped++;
         }
+      }
+      // Case 2: Has scheduled interview info but no event - create the event
+      else if (application.scheduledInterviewDate && !application.scheduledInterviewEventId) {
+        const interviewDate = application.scheduledInterviewDate;
+        const interviewTime = application.scheduledInterviewTime || "09:00";
+        const startTime = new Date(`${interviewDate}T${interviewTime}:00`).getTime();
+        const endTime = startTime + 60 * 60 * 1000; // 1 hour interview
+
+        // Create the calendar event
+        const eventId = await ctx.db.insert("events", {
+          title: `Interview: ${application.firstName} ${application.lastName}`,
+          description: `Job Interview for ${application.appliedJobTitle}\n\nCandidate: ${application.firstName} ${application.lastName}\nEmail: ${application.email}\nPhone: ${application.phone}`,
+          startTime,
+          endTime,
+          isAllDay: false,
+          location: application.scheduledInterviewLocation,
+          meetingType: application.scheduledInterviewLocation === "Video" ? "video" :
+                       application.scheduledInterviewLocation === "Phone" ? "phone" : "in-person",
+          createdBy: adminUser._id,
+          createdByName: adminUser.name,
+          applicationId: application._id,
+          createdAt: now,
+          updatedAt: now,
+        });
+
+        // Update application with the new event ID
+        await ctx.db.patch(application._id, {
+          scheduledInterviewEventId: eventId,
+          updatedAt: now,
+        });
+
+        createdNew++;
       }
     }
 
     return {
       success: true,
-      updated,
+      updatedExisting,
+      createdNew,
       skipped,
-      message: `Backfilled ${updated} interview events, skipped ${skipped} (already had applicationId)`,
+      message: `Updated ${updatedExisting} existing events, created ${createdNew} new events, skipped ${skipped}`,
     };
   },
 });

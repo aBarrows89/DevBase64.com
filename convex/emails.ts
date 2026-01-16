@@ -420,3 +420,123 @@ The Import Export Tire Co Team
     }
   },
 });
+
+// Send interview thank you email after interview is completed
+export const sendInterviewThankYouEmail = internalAction({
+  args: {
+    applicantFirstName: v.string(),
+    applicantLastName: v.string(),
+    applicantEmail: v.string(),
+    resumeText: v.optional(v.string()),
+    jobTitle: v.string(),
+    interviewDate: v.string(),
+    interviewerName: v.string(),
+    companyName: v.optional(v.string()),
+    contactEmail: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const resendApiKey = process.env.RESEND_API_KEY;
+    if (!resendApiKey) {
+      console.error("RESEND_API_KEY not configured");
+      return { success: false, error: "Email service not configured" };
+    }
+
+    const resend = new Resend(resendApiKey);
+
+    // Collect all email addresses
+    const emailAddresses: string[] = [args.applicantEmail];
+
+    if (args.resumeText) {
+      const extractedEmails = extractEmailsFromText(args.resumeText);
+      extractedEmails.forEach(email => {
+        if (!emailAddresses.includes(email.toLowerCase())) {
+          emailAddresses.push(email.toLowerCase());
+        }
+      });
+    }
+
+    const companyName = args.companyName || "Import Export Tire Co";
+    const formattedDate = formatDateForEmail(args.interviewDate);
+
+    const emailHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Thank You for Interviewing</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 30px; border-radius: 10px 10px 0 0;">
+    <h1 style="color: white; margin: 0; font-size: 24px;">Thank You!</h1>
+    <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0;">We appreciate you taking the time to interview with us</p>
+  </div>
+
+  <div style="background: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; border-top: none;">
+    <p style="margin-top: 0;">Hi ${args.applicantFirstName},</p>
+
+    <p>Thank you for taking the time to interview with us on <strong>${formattedDate}</strong> for the <strong>${args.jobTitle}</strong> position. We truly enjoyed meeting you and learning more about your background and experience.</p>
+
+    <div style="background: white; border-radius: 8px; padding: 20px; margin: 20px 0; border: 1px solid #e5e7eb;">
+      <h3 style="margin-top: 0; color: #374151;">What Happens Next?</h3>
+      <p style="margin-bottom: 0;">Our team is currently reviewing all candidates and will be in touch regarding next steps. We aim to make a decision within the next week or two.</p>
+    </div>
+
+    <p>If you have any questions in the meantime, please don't hesitate to reach out to us at <a href="mailto:${args.contactEmail || 'andy@ietires.com'}" style="color: #10b981;">${args.contactEmail || 'andy@ietires.com'}</a>.</p>
+
+    <p>Thank you again for your interest in joining our team. We'll be in touch soon!</p>
+
+    <p style="margin-bottom: 0;">
+      Best regards,<br>
+      <strong>${args.interviewerName}</strong><br>
+      <span style="color: #6b7280;">${companyName}</span>
+    </p>
+  </div>
+
+  <div style="background: #1f2937; padding: 20px; border-radius: 0 0 10px 10px; text-align: center;">
+    <img src="https://ietires.com/logo.gif" alt="Import Export Tire Co" style="max-width: 150px; margin-bottom: 15px;">
+    <p style="color: #9ca3af; margin: 0; font-size: 12px;">
+      This is an automated message. Please contact us directly if you have any questions.
+    </p>
+  </div>
+</body>
+</html>
+    `;
+
+    const textContent = `
+Thank You for Interviewing - ${companyName}
+
+Hi ${args.applicantFirstName},
+
+Thank you for taking the time to interview with us on ${formattedDate} for the ${args.jobTitle} position. We truly enjoyed meeting you and learning more about your background and experience.
+
+WHAT HAPPENS NEXT?
+Our team is currently reviewing all candidates and will be in touch regarding next steps. We aim to make a decision within the next week or two.
+
+If you have any questions in the meantime, please don't hesitate to reach out to us at ${args.contactEmail || 'andy@ietires.com'}.
+
+Thank you again for your interest in joining our team. We'll be in touch soon!
+
+Best regards,
+${args.interviewerName}
+${companyName}
+    `;
+
+    try {
+      const result = await resend.emails.send({
+        from: `Import Export Tire Co <interviews@notifications.iecentral.com>`,
+        replyTo: args.contactEmail || "andy@ietires.com",
+        to: emailAddresses,
+        subject: `Thank You for Interviewing - ${companyName}`,
+        html: emailHtml,
+        text: textContent,
+      });
+
+      console.log("Thank you email sent:", result, "to:", emailAddresses);
+      return { success: true, emailId: result.data?.id, sentTo: emailAddresses };
+    } catch (error) {
+      console.error("Failed to send thank you email:", error);
+      return { success: false, error: String(error) };
+    }
+  },
+});
