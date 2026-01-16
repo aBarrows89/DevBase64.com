@@ -589,6 +589,7 @@ export const scheduleInterview = mutation({
       meetingType: args.location === "Video" ? "video" : args.location === "Phone" ? "phone" : "in-person",
       createdBy: args.userId,
       createdByName: user.name,
+      applicationId: args.applicationId, // Link to applicant profile
       createdAt: now,
       updatedAt: now,
     });
@@ -787,6 +788,7 @@ export const addInterviewAttendees = mutation({
                      application.scheduledInterviewLocation === "Phone" ? "phone" : "in-person",
         createdBy: creatorId,
         createdByName: creator?.name ?? "Unknown",
+        applicationId: args.applicationId, // Link to applicant profile
         createdAt: now,
         updatedAt: now,
       });

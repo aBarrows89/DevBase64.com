@@ -8,6 +8,7 @@ import { useAuth } from "../auth-context";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
+import Link from "next/link";
 
 function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleTimeString("en-US", {
@@ -772,6 +773,25 @@ function CalendarContent() {
               </div>
 
               <div className="p-4 space-y-4">
+                {/* Applicant Link (for interview events) */}
+                {selectedEvent.applicationId && (
+                  <div className={`p-3 rounded-lg ${isDark ? "bg-cyan-500/10 border border-cyan-500/20" : "bg-blue-50 border border-blue-100"}`}>
+                    <p className={`text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>Applicant Profile</p>
+                    <Link
+                      href={`/applications/${selectedEvent.applicationId}`}
+                      className={`inline-flex items-center gap-2 font-medium ${isDark ? "text-cyan-400 hover:text-cyan-300" : "text-blue-600 hover:text-blue-700"}`}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      View Applicant Profile
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </Link>
+                  </div>
+                )}
+
                 {/* Meeting Link */}
                 {selectedEvent.meetingLink && (
                   <div>
@@ -961,6 +981,21 @@ function CalendarContent() {
                               <p className={`text-xs mt-1 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
                                 📍 {event.location}
                               </p>
+                            )}
+                            {/* Show applicant link for interview events */}
+                            {(event as any).applicationId && (
+                              <Link
+                                href={`/applications/${(event as any).applicationId}`}
+                                onClick={(e) => e.stopPropagation()}
+                                className={`inline-flex items-center gap-1 text-xs mt-1 ${
+                                  isDark ? "text-cyan-400 hover:text-cyan-300" : "text-blue-600 hover:text-blue-700"
+                                }`}
+                              >
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                </svg>
+                                View Applicant
+                              </Link>
                             )}
                           </div>
                           <span

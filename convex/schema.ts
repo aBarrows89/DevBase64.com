@@ -1532,6 +1532,8 @@ export default defineSchema({
     meetingType: v.optional(v.string()), // "zoom" | "teams" | "meet" | "other" | "in_person"
     createdBy: v.id("users"),
     createdByName: v.string(),
+    // Link to application (for interview events)
+    applicationId: v.optional(v.id("applications")),
     // Recurrence (optional - for future)
     isRecurring: v.optional(v.boolean()),
     recurrenceRule: v.optional(v.string()), // RRULE format
@@ -1544,7 +1546,8 @@ export default defineSchema({
   })
     .index("by_start", ["startTime"])
     .index("by_created_by", ["createdBy"])
-    .index("by_created", ["createdAt"]),
+    .index("by_created", ["createdAt"])
+    .index("by_application", ["applicationId"]),
 
   // Event invitations (who's invited and their response)
   eventInvites: defineTable({
