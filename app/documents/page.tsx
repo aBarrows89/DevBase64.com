@@ -54,6 +54,12 @@ function DocumentsContent() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Preview modal state
+  const [previewDocument, setPreviewDocument] = useState<NonNullable<typeof documents>[0] | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+  const previewIframeRef = useRef<HTMLIFrameElement>(null);
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -143,6 +149,44 @@ function DocumentsContent() {
       console.error("Download error:", err);
       setError(err instanceof Error ? err.message : "Download failed");
     }
+  };
+
+  const handlePreview = async (doc: NonNullable<typeof documents>[0]) => {
+    setPreviewDocument(doc);
+    setLoadingPreview(true);
+    setPreviewUrl(null);
+
+    try {
+      const url = await getFileDownloadUrl({ documentId: doc._id });
+      if (url) {
+        setPreviewUrl(url);
+      } else {
+        setError("Could not load document preview");
+        setPreviewDocument(null);
+      }
+    } catch (err) {
+      console.error("Preview error:", err);
+      setError(err instanceof Error ? err.message : "Preview failed");
+      setPreviewDocument(null);
+    } finally {
+      setLoadingPreview(false);
+    }
+  };
+
+  const handlePrintPreview = () => {
+    if (previewIframeRef.current) {
+      previewIframeRef.current.contentWindow?.print();
+    }
+  };
+
+  const closePreview = () => {
+    setPreviewDocument(null);
+    setPreviewUrl(null);
+  };
+
+  // Check if file type supports preview
+  const canPreview = (fileType: string) => {
+    return fileType.includes("pdf") || fileType.includes("image");
   };
 
   const handleUpdate = async (e: React.FormEvent) => {
@@ -273,10 +317,12 @@ function DocumentsContent() {
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {filteredDocuments.map((doc) => {
                 const category = CATEGORIES.find((c) => c.value === doc.category);
+                const previewable = canPreview(doc.fileType);
                 return (
                   <div
                     key={doc._id}
-                    className={`border rounded-xl p-4 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}
+                    className={`border rounded-xl p-4 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"} ${previewable ? "cursor-pointer hover:border-cyan-500/50 transition-colors" : ""}`}
+                    onClick={previewable ? () => handlePreview(doc) : undefined}
                   >
                     <div className="flex items-start gap-3">
                       <div className={`text-2xl p-2 rounded-lg ${isDark ? "bg-slate-700" : "bg-gray-100"}`}>
@@ -308,9 +354,26 @@ function DocumentsContent() {
                         </svg>
                         {doc.downloadCount}
                       </span>
+                      {previewable && (
+                        <span className={`px-2 py-0.5 rounded ${isDark ? "bg-cyan-500/20 text-cyan-400" : "bg-blue-100 text-blue-600"}`}>
+                          Click to preview
+                        </span>
+                      )}
                     </div>
 
-                    <div className="flex gap-2 mt-4 pt-3 border-t border-slate-700/50">
+                    <div className="flex gap-2 mt-4 pt-3 border-t border-slate-700/50" onClick={(e) => e.stopPropagation()}>
+                      {previewable && (
+                        <button
+                          onClick={() => handlePreview(doc)}
+                          className={`flex-1 px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center justify-center gap-1 ${isDark ? "bg-purple-500/20 text-purple-400 hover:bg-purple-500/30" : "bg-purple-100 text-purple-600 hover:bg-purple-200"}`}
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                          Preview
+                        </button>
+                      )}
                       <button
                         onClick={() => handleDownload(doc)}
                         className={`flex-1 px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center justify-center gap-1 ${isDark ? "bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30" : "bg-blue-100 text-blue-600 hover:bg-blue-200"}`}
@@ -339,6 +402,87 @@ function DocumentsContent() {
             </div>
           )}
         </div>
+
+        {/* Preview Modal */}
+        {previewDocument && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex flex-col z-50">
+            {/* Preview Header */}
+            <div className={`flex items-center justify-between px-4 py-3 border-b ${isDark ? "bg-slate-900 border-slate-700" : "bg-white border-gray-200"}`}>
+              <div className="flex items-center gap-3">
+                <span className="text-xl">{CATEGORIES.find((c) => c.value === previewDocument.category)?.icon || "📄"}</span>
+                <div>
+                  <h3 className={`font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>{previewDocument.name}</h3>
+                  <p className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>{previewDocument.fileName}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handlePrintPreview}
+                  disabled={!previewUrl}
+                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 ${isDark ? "bg-purple-500 text-white hover:bg-purple-600" : "bg-purple-600 text-white hover:bg-purple-700"}`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                  </svg>
+                  Print
+                </button>
+                <button
+                  onClick={() => handleDownload(previewDocument)}
+                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${isDark ? "bg-cyan-500 text-white hover:bg-cyan-600" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Download
+                </button>
+                <button
+                  onClick={closePreview}
+                  className={`p-2 rounded-lg transition-colors ${isDark ? "hover:bg-slate-700 text-slate-400 hover:text-white" : "hover:bg-gray-100 text-gray-500 hover:text-gray-700"}`}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Preview Content */}
+            <div className="flex-1 overflow-hidden p-4">
+              {loadingPreview ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center">
+                    <svg className="w-8 h-8 animate-spin text-cyan-500 mx-auto mb-3" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    <p className={isDark ? "text-slate-400" : "text-gray-500"}>Loading preview...</p>
+                  </div>
+                </div>
+              ) : previewUrl ? (
+                previewDocument.fileType.includes("image") ? (
+                  <div className="flex items-center justify-center h-full">
+                    <img
+                      src={previewUrl}
+                      alt={previewDocument.name}
+                      className="max-w-full max-h-full object-contain rounded-lg shadow-lg"
+                    />
+                  </div>
+                ) : (
+                  <iframe
+                    ref={previewIframeRef}
+                    src={previewUrl}
+                    className="w-full h-full rounded-lg bg-white"
+                    title={previewDocument.name}
+                  />
+                )
+              ) : (
+                <div className="flex items-center justify-center h-full">
+                  <p className={isDark ? "text-slate-400" : "text-gray-500"}>Unable to load preview</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Upload/Edit Modal */}
         {showUploadModal && (
