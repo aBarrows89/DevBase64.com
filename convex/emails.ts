@@ -827,3 +827,144 @@ The ${companyName} Team
     }
   },
 });
+
+// Send new user welcome email with login credentials
+export const sendNewUserWelcomeEmail = internalAction({
+  args: {
+    userName: v.string(),
+    userEmail: v.string(),
+    temporaryPassword: v.string(),
+    role: v.string(),
+    loginUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const resendApiKey = process.env.RESEND_API_KEY;
+    if (!resendApiKey) {
+      console.error("RESEND_API_KEY not configured");
+      return { success: false, error: "Email service not configured" };
+    }
+
+    const resend = new Resend(resendApiKey);
+
+    const loginUrl = args.loginUrl || "https://iecentral.com/login";
+    const firstName = args.userName.split(" ")[0];
+
+    // Format role for display
+    const roleDisplay = args.role
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+
+    const emailHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome to IE Central!</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%); padding: 30px; border-radius: 10px 10px 0 0;">
+    <h1 style="color: white; margin: 0; font-size: 24px;">Welcome to IE Central!</h1>
+    <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0;">Your account has been created</p>
+  </div>
+
+  <div style="background: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; border-top: none;">
+    <p style="margin-top: 0;">Hi ${firstName},</p>
+
+    <p>Your IE Central account has been created! You can now access the employee portal and all the tools you need.</p>
+
+    <div style="background: white; border-radius: 8px; padding: 20px; margin: 20px 0; border: 1px solid #e5e7eb;">
+      <h3 style="margin-top: 0; color: #374151; border-bottom: 1px solid #e5e7eb; padding-bottom: 10px;">Your Login Credentials</h3>
+      <table style="width: 100%; border-collapse: collapse;">
+        <tr>
+          <td style="padding: 8px 0; color: #6b7280; width: 120px;">Email:</td>
+          <td style="padding: 8px 0; font-weight: bold;">${args.userEmail}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; color: #6b7280;">Password:</td>
+          <td style="padding: 8px 0; font-weight: bold; font-family: monospace; background: #fef3c7; padding: 5px 10px; border-radius: 4px; display: inline-block;">${args.temporaryPassword}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; color: #6b7280;">Role:</td>
+          <td style="padding: 8px 0;">${roleDisplay}</td>
+        </tr>
+      </table>
+    </div>
+
+    <div style="background: #fef3c7; border-radius: 8px; padding: 15px; margin: 20px 0; border-left: 4px solid #f59e0b;">
+      <p style="margin: 0; color: #92400e;">
+        <strong>Important:</strong> You will be asked to change your password when you first log in.
+      </p>
+    </div>
+
+    <div style="background: #e0f2fe; border-radius: 8px; padding: 15px; margin: 20px 0; border-left: 4px solid #0ea5e9;">
+      <p style="margin: 0; color: #0369a1;">
+        <strong>Please Note:</strong> This website and app are a work in progress and constantly being updated. Please see Andy Barrows with any questions, comments, or additions you would like to see!
+      </p>
+    </div>
+
+    <div style="text-align: center; margin: 25px 0;">
+      <a href="${loginUrl}" style="display: inline-block; background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%); color: white; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">
+        Log In to IE Central
+      </a>
+    </div>
+
+    <p style="margin-bottom: 0;">
+      If you have any questions, contact your manager or HR.<br><br>
+      Welcome to the team!<br>
+      <strong>Import Export Tire Co</strong>
+    </p>
+  </div>
+
+  <div style="background: #1f2937; padding: 20px; border-radius: 0 0 10px 10px; text-align: center;">
+    <img src="https://ietires.com/logo.gif" alt="Import Export Tire Co" style="max-width: 150px; margin-bottom: 15px;">
+    <p style="color: #9ca3af; margin: 0; font-size: 12px;">
+      This is an automated message from IE Central.
+    </p>
+  </div>
+</body>
+</html>
+    `;
+
+    const textContent = `
+Welcome to IE Central!
+
+Hi ${firstName},
+
+Your IE Central account has been created! You can now access the employee portal and all the tools you need.
+
+YOUR LOGIN CREDENTIALS
+----------------------
+Email: ${args.userEmail}
+Password: ${args.temporaryPassword}
+Role: ${roleDisplay}
+
+IMPORTANT: You will be asked to change your password when you first log in.
+
+PLEASE NOTE: This website and app are a work in progress and constantly being updated. Please see Andy Barrows with any questions, comments, or additions you would like to see!
+
+Log in at: ${loginUrl}
+
+If you have any questions, contact your manager or HR.
+
+Welcome to the team!
+Import Export Tire Co
+    `;
+
+    try {
+      const result = await resend.emails.send({
+        from: `IE Central <notifications@notifications.iecentral.com>`,
+        to: args.userEmail,
+        subject: `Welcome to IE Central - Your Account is Ready!`,
+        html: emailHtml,
+        text: textContent,
+      });
+
+      console.log("New user welcome email sent:", result, "to:", args.userEmail);
+      return { success: true, emailId: result.data?.id };
+    } catch (error) {
+      console.error("Failed to send new user welcome email:", error);
+      return { success: false, error: String(error) };
+    }
+  },
+});

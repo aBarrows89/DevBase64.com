@@ -44,6 +44,7 @@ function UsersContent() {
     email: "",
     password: "",
     role: "member",
+    sendWelcomeEmail: true,
   });
 
   // Form state for edit
@@ -77,12 +78,13 @@ function UsersContent() {
       email: newUser.email,
       password: newUser.password,
       role: newUser.role,
+      sendWelcomeEmail: newUser.sendWelcomeEmail,
     });
 
     if (result.success) {
-      setSuccess("User created successfully");
+      setSuccess(newUser.sendWelcomeEmail ? "User created and welcome email sent!" : "User created successfully");
       setShowAddModal(false);
-      setNewUser({ name: "", email: "", password: "", role: "member" });
+      setNewUser({ name: "", email: "", password: "", role: "member", sendWelcomeEmail: true });
     } else {
       setError(result.error || "Failed to create user");
     }
@@ -561,6 +563,18 @@ function UsersContent() {
                   <option value="office_manager">Office Manager</option>
                   <option value="member">Member</option>
                 </select>
+              </div>
+              <div className="flex items-center gap-3 p-3 bg-slate-900/50 rounded-lg border border-slate-700">
+                <input
+                  type="checkbox"
+                  id="sendWelcomeEmail"
+                  checked={newUser.sendWelcomeEmail}
+                  onChange={(e) => setNewUser({ ...newUser, sendWelcomeEmail: e.target.checked })}
+                  className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-cyan-500"
+                />
+                <label htmlFor="sendWelcomeEmail" className="text-sm text-slate-300 cursor-pointer">
+                  Send welcome email with login credentials
+                </label>
               </div>
               <div className="flex gap-3 pt-4">
                 <button

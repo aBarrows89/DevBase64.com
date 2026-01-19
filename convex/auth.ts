@@ -1,5 +1,6 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 
 // Number of PBKDF2 iterations
 const PBKDF2_ITERATIONS = 100000;
@@ -203,6 +204,7 @@ export const createUser = mutation({
     password: v.string(),
     name: v.string(),
     role: v.string(),
+    sendWelcomeEmail: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     // Check for existing email
@@ -226,6 +228,17 @@ export const createUser = mutation({
       forcePasswordChange: true, // Force password change on first login
       createdAt: Date.now(),
     });
+
+    // Send welcome email if requested
+    if (args.sendWelcomeEmail) {
+      await ctx.scheduler.runAfter(0, internal.emails.sendNewUserWelcomeEmail, {
+        userName: args.name,
+        userEmail: args.email.toLowerCase(),
+        temporaryPassword: args.password,
+        role: args.role,
+        loginUrl: "https://iecentral.com/login",
+      });
+    }
 
     return { success: true, userId };
   },
