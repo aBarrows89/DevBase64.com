@@ -37,7 +37,8 @@ function MileageContent() {
   const [editingEntry, setEditingEntry] = useState<Id<"mileageEntries"> | null>(null);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
-  const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
+  const [selectedStatus, setSelectedStatus] = useState<string | null>("pending"); // Default to pending
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split("T")[0],
@@ -73,7 +74,41 @@ function MileageContent() {
   const createEntry = useMutation(api.mileage.create);
   const updateEntry = useMutation(api.mileage.update);
   const updateStatus = useMutation(api.mileage.updateStatus);
+  const bulkUpdateStatus = useMutation(api.mileage.bulkUpdateStatus);
   const removeEntry = useMutation(api.mileage.remove);
+
+  // Get pending entries for submit report
+  const pendingEntries = useMemo(() => {
+    return entries?.filter(e => e.status === "pending") || [];
+  }, [entries]);
+
+  const pendingTotal = useMemo(() => {
+    return pendingEntries.reduce((sum, e) => sum + e.reimbursementAmount, 0);
+  }, [pendingEntries]);
+
+  // Submit all pending entries as a report
+  const handleSubmitReport = async () => {
+    if (pendingEntries.length === 0) return;
+
+    if (!confirm(`Submit ${pendingEntries.length} entries totaling ${formatCurrency(pendingTotal)} for reimbursement?`)) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await bulkUpdateStatus({
+        entryIds: pendingEntries.map(e => e._id),
+        status: "submitted",
+      });
+      // Switch view to show submitted entries
+      setSelectedStatus("submitted");
+    } catch (err) {
+      console.error("Failed to submit report:", err);
+      alert("Failed to submit report");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   // Years for filter
   const years = useMemo(() => {
@@ -261,6 +296,32 @@ function MileageContent() {
               </p>
             </div>
             <div className="flex gap-2">
+              {/* Submit Report Button - only show when there are pending entries */}
+              {pendingEntries.length > 0 && (
+                <button
+                  onClick={handleSubmitReport}
+                  disabled={isSubmitting}
+                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
+                    isDark
+                      ? "bg-green-500 text-white hover:bg-green-600 disabled:opacity-50"
+                      : "bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+                  }`}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Submitting...
+                    </>
+                  ) : (
+                    <>
+                      Submit Report ({pendingEntries.length})
+                    </>
+                  )}
+                </button>
+              )}
               <button
                 onClick={handlePrint}
                 className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
