@@ -46,6 +46,7 @@ function DocumentsContent() {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [editingDocument, setEditingDocument] = useState<Id<"documents"> | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [formData, setFormData] = useState({
@@ -307,9 +308,20 @@ function DocumentsContent() {
     }
   };
 
-  const filteredDocuments = selectedCategory
-    ? documents?.filter((d) => d.category === selectedCategory)
-    : documents;
+  const filteredDocuments = documents?.filter((d) => {
+    // Filter by category
+    if (selectedCategory && d.category !== selectedCategory) return false;
+    // Filter by search query
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      return (
+        d.name.toLowerCase().includes(query) ||
+        d.fileName.toLowerCase().includes(query) ||
+        (d.description && d.description.toLowerCase().includes(query))
+      );
+    }
+    return true;
+  });
 
   return (
     <div className={`flex h-screen ${isDark ? "bg-slate-900" : "bg-gray-50"}`}>
@@ -349,6 +361,39 @@ function DocumentsContent() {
               <button onClick={() => setError("")} className="ml-4 text-red-300 hover:text-red-100">Dismiss</button>
             </div>
           )}
+
+          {/* Search Bar */}
+          <div className="relative mb-4">
+            <svg
+              className={`absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 ${isDark ? "text-slate-500" : "text-gray-400"}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Search documents..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className={`w-full pl-10 pr-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 ${
+                isDark
+                  ? "bg-slate-800 border-slate-700 text-white placeholder-slate-500 focus:ring-cyan-500/50 focus:border-cyan-500"
+                  : "bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:ring-blue-500/50 focus:border-blue-500"
+              }`}
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className={`absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full ${isDark ? "hover:bg-slate-700 text-slate-400" : "hover:bg-gray-100 text-gray-500"}`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
 
           {/* Category Filters */}
           <div className="flex flex-wrap gap-2 mb-6">
