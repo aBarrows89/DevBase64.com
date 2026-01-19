@@ -150,6 +150,29 @@ export const getCategoryCounts = query({
   },
 });
 
+// Get archived documents (for admin view)
+export const getArchived = query({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.db
+      .query("documents")
+      .withIndex("by_active", (q) => q.eq("isActive", false))
+      .order("desc")
+      .collect();
+  },
+});
+
+// Restore an archived document
+export const restore = mutation({
+  args: { documentId: v.id("documents") },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.documentId, {
+      isActive: true,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
 // Action to get download URL (can be called imperatively)
 export const getFileDownloadUrl = action({
   args: { documentId: v.id("documents") },

@@ -33,20 +33,26 @@ function DocumentsContent() {
   const isDark = theme === "dark";
 
   const documents = useQuery(api.documents.getAll);
+  const archivedDocuments = useQuery(api.documents.getArchived);
   const categoryCounts = useQuery(api.documents.getCategoryCounts);
   const generateUploadUrl = useMutation(api.documents.generateUploadUrl);
   const createDocument = useMutation(api.documents.create);
   const updateDocument = useMutation(api.documents.update);
   const archiveDocument = useMutation(api.documents.archive);
+  const restoreDocument = useMutation(api.documents.restore);
   const removeDocument = useMutation(api.documents.remove);
   const incrementDownload = useMutation(api.documents.incrementDownload);
   const getFileDownloadUrl = useAction(api.documents.getFileDownloadUrl);
   const togglePublic = useMutation(api.documents.togglePublic);
 
+  // Check if user is admin
+  const isAdmin = user?.role === "admin" || user?.role === "super_admin";
+
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [editingDocument, setEditingDocument] = useState<Id<"documents"> | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [formData, setFormData] = useState({
@@ -308,7 +314,18 @@ function DocumentsContent() {
     }
   };
 
-  const filteredDocuments = documents?.filter((d) => {
+  const handleRestore = async (docId: Id<"documents">) => {
+    try {
+      await restoreDocument({ documentId: docId });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Restore failed");
+    }
+  };
+
+  // Use archived or active documents based on view
+  const sourceDocuments = showArchived ? archivedDocuments : documents;
+
+  const filteredDocuments = sourceDocuments?.filter((d) => {
     // Filter by category
     if (selectedCategory && d.category !== selectedCategory) return false;
     // Filter by search query
@@ -332,25 +349,51 @@ function DocumentsContent() {
         <header className={`sticky top-0 z-10 backdrop-blur-sm border-b px-4 sm:px-8 py-4 ${isDark ? "bg-slate-900/80 border-slate-700" : "bg-white/80 border-gray-200"}`}>
           <div className="flex items-center justify-between">
             <div>
-              <h1 className={`text-xl sm:text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>Doc Hub</h1>
+              <h1 className={`text-xl sm:text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
+                Doc Hub {showArchived && <span className="text-amber-500">(Archived)</span>}
+              </h1>
               <p className={`text-xs sm:text-sm mt-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                Frequently used documents and forms
+                {showArchived ? "Manage archived documents" : "Frequently used documents and forms"}
               </p>
             </div>
-            <button
-              onClick={() => {
-                setShowUploadModal(true);
-                setEditingDocument(null);
-                setSelectedFile(null);
-                setFormData({ name: "", description: "", category: "forms" });
-              }}
-              className={`px-3 sm:px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${isDark ? "bg-cyan-500 text-white hover:bg-cyan-600" : "bg-blue-600 text-white hover:bg-blue-700"}`}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-              </svg>
-              <span className="hidden sm:inline">Upload Document</span>
-            </button>
+            <div className="flex items-center gap-2">
+              {isAdmin && (
+                <button
+                  onClick={() => setShowArchived(!showArchived)}
+                  className={`px-3 sm:px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
+                    showArchived
+                      ? isDark ? "bg-amber-500 text-white hover:bg-amber-600" : "bg-amber-600 text-white hover:bg-amber-700"
+                      : isDark ? "bg-slate-700 text-slate-300 hover:bg-slate-600" : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                  }`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                  </svg>
+                  <span className="hidden sm:inline">{showArchived ? "View Active" : "View Archived"}</span>
+                  {archivedDocuments && archivedDocuments.length > 0 && !showArchived && (
+                    <span className={`px-1.5 py-0.5 text-xs rounded-full ${isDark ? "bg-amber-500/30 text-amber-300" : "bg-amber-100 text-amber-700"}`}>
+                      {archivedDocuments.length}
+                    </span>
+                  )}
+                </button>
+              )}
+              {!showArchived && (
+                <button
+                  onClick={() => {
+                    setShowUploadModal(true);
+                    setEditingDocument(null);
+                    setSelectedFile(null);
+                    setFormData({ name: "", description: "", category: "forms" });
+                  }}
+                  className={`px-3 sm:px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${isDark ? "bg-cyan-500 text-white hover:bg-cyan-600" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                  </svg>
+                  <span className="hidden sm:inline">Upload Document</span>
+                </button>
+              )}
+            </div>
           </div>
         </header>
 
@@ -426,8 +469,8 @@ function DocumentsContent() {
           {/* Documents Grid */}
           {!filteredDocuments || filteredDocuments.length === 0 ? (
             <div className={`text-center py-12 border rounded-xl ${isDark ? "bg-slate-800/50 border-slate-700 text-slate-400" : "bg-white border-gray-200 text-gray-500"}`}>
-              <div className="text-4xl mb-3">📄</div>
-              <p>No documents yet. Upload your first document to get started.</p>
+              <div className="text-4xl mb-3">{showArchived ? "📦" : "📄"}</div>
+              <p>{showArchived ? "No archived documents." : "No documents yet. Upload your first document to get started."}</p>
             </div>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -499,27 +542,51 @@ function DocumentsContent() {
                         </svg>
                         Download
                       </button>
-                      <button
-                        onClick={() => handleShare(doc)}
-                        className={`px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center justify-center gap-1 ${doc.isPublic ? (isDark ? "bg-green-500/20 text-green-400 hover:bg-green-500/30" : "bg-green-100 text-green-600 hover:bg-green-200") : (isDark ? "bg-amber-500/20 text-amber-400 hover:bg-amber-500/30" : "bg-amber-100 text-amber-600 hover:bg-amber-200")}`}
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                        </svg>
-                        {doc.isPublic ? "Shared" : "Share"}
-                      </button>
-                      <button
-                        onClick={() => handleEdit(doc)}
-                        className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${isDark ? "bg-slate-700 text-slate-300 hover:bg-slate-600" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleArchive(doc._id)}
-                        className="px-3 py-1.5 text-xs font-medium rounded transition-colors bg-red-500/10 text-red-400 hover:bg-red-500/20"
-                      >
-                        Archive
-                      </button>
+                      {!showArchived && (
+                        <button
+                          onClick={() => handleShare(doc)}
+                          className={`px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center justify-center gap-1 ${doc.isPublic ? (isDark ? "bg-green-500/20 text-green-400 hover:bg-green-500/30" : "bg-green-100 text-green-600 hover:bg-green-200") : (isDark ? "bg-amber-500/20 text-amber-400 hover:bg-amber-500/30" : "bg-amber-100 text-amber-600 hover:bg-amber-200")}`}
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                          </svg>
+                          {doc.isPublic ? "Shared" : "Share"}
+                        </button>
+                      )}
+                      {showArchived ? (
+                        <>
+                          <button
+                            onClick={() => handleRestore(doc._id)}
+                            className={`flex-1 px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center justify-center gap-1 ${isDark ? "bg-green-500/20 text-green-400 hover:bg-green-500/30" : "bg-green-100 text-green-600 hover:bg-green-200"}`}
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            Restore
+                          </button>
+                          <button
+                            onClick={() => handleDelete(doc._id)}
+                            className="px-3 py-1.5 text-xs font-medium rounded transition-colors bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                          >
+                            Delete Forever
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => handleEdit(doc)}
+                            className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${isDark ? "bg-slate-700 text-slate-300 hover:bg-slate-600" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleArchive(doc._id)}
+                            className="px-3 py-1.5 text-xs font-medium rounded transition-colors bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                          >
+                            Archive
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 );
