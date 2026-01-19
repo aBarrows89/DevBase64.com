@@ -846,13 +846,49 @@ export const sendNewUserWelcomeEmail = internalAction({
 
     const resend = new Resend(resendApiKey);
 
-    const loginUrl = args.loginUrl || "https://iecentral.com/login";
     const firstName = args.userName.split(" ")[0];
+
+    // Determine if this is an admin/manager or regular employee
+    const isAdmin = ["super_admin", "admin", "warehouse_director", "warehouse_manager", "department_manager", "office_manager", "payroll_manager"].includes(args.role);
+
+    // Set appropriate login URL based on role
+    const loginUrl = args.loginUrl || (isAdmin ? "https://iecentral.com/login" : "https://iecentral.com/portal");
 
     // Format role for display
     const roleDisplay = args.role
       .replace(/_/g, " ")
       .replace(/\b\w/g, (c) => c.toUpperCase());
+
+    // Different content based on role
+    const welcomeMessage = isAdmin
+      ? "Your IE Central admin account has been created! You now have access to the management dashboard and all administrative tools."
+      : "Your IE Central account has been created! You can now access the Employee Portal to clock in/out, view your schedule, request time off, and more.";
+
+    const featuresHtml = isAdmin
+      ? `
+        <div style="background: white; border-radius: 8px; padding: 20px; margin: 20px 0; border: 1px solid #e5e7eb;">
+          <h3 style="margin-top: 0; color: #374151;">What You Can Do:</h3>
+          <ul style="margin: 0; padding-left: 20px; color: #4b5563;">
+            <li>Manage employees and schedules</li>
+            <li>Review time entries and approve timesheets</li>
+            <li>Handle time-off requests</li>
+            <li>Access reports and analytics</li>
+            <li>And much more...</li>
+          </ul>
+        </div>`
+      : `
+        <div style="background: white; border-radius: 8px; padding: 20px; margin: 20px 0; border: 1px solid #e5e7eb;">
+          <h3 style="margin-top: 0; color: #374151;">What You Can Do:</h3>
+          <ul style="margin: 0; padding-left: 20px; color: #4b5563;">
+            <li>Clock in and out</li>
+            <li>View your schedule</li>
+            <li>Request time off</li>
+            <li>View your pay stubs</li>
+            <li>Update your information</li>
+          </ul>
+        </div>`;
+
+    const buttonText = isAdmin ? "Log In to Dashboard" : "Log In to Employee Portal";
 
     const emailHtml = `
 <!DOCTYPE html>
@@ -871,7 +907,7 @@ export const sendNewUserWelcomeEmail = internalAction({
   <div style="background: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; border-top: none;">
     <p style="margin-top: 0;">Hi ${firstName},</p>
 
-    <p>Your IE Central account has been created! You can now access the employee portal and all the tools you need.</p>
+    <p>${welcomeMessage}</p>
 
     <div style="background: white; border-radius: 8px; padding: 20px; margin: 20px 0; border: 1px solid #e5e7eb;">
       <h3 style="margin-top: 0; color: #374151; border-bottom: 1px solid #e5e7eb; padding-bottom: 10px;">Your Login Credentials</h3>
@@ -884,12 +920,10 @@ export const sendNewUserWelcomeEmail = internalAction({
           <td style="padding: 8px 0; color: #6b7280;">Password:</td>
           <td style="padding: 8px 0; font-weight: bold; font-family: monospace; background: #fef3c7; padding: 5px 10px; border-radius: 4px; display: inline-block;">${args.temporaryPassword}</td>
         </tr>
-        <tr>
-          <td style="padding: 8px 0; color: #6b7280;">Role:</td>
-          <td style="padding: 8px 0;">${roleDisplay}</td>
-        </tr>
       </table>
     </div>
+
+    ${featuresHtml}
 
     <div style="background: #fef3c7; border-radius: 8px; padding: 15px; margin: 20px 0; border-left: 4px solid #f59e0b;">
       <p style="margin: 0; color: #92400e;">
@@ -905,7 +939,7 @@ export const sendNewUserWelcomeEmail = internalAction({
 
     <div style="text-align: center; margin: 25px 0;">
       <a href="${loginUrl}" style="display: inline-block; background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%); color: white; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">
-        Log In to IE Central
+        ${buttonText}
       </a>
     </div>
 
@@ -926,18 +960,35 @@ export const sendNewUserWelcomeEmail = internalAction({
 </html>
     `;
 
+    const featuresText = isAdmin
+      ? `WHAT YOU CAN DO:
+- Manage employees and schedules
+- Review time entries and approve timesheets
+- Handle time-off requests
+- Access reports and analytics
+- And much more...`
+      : `WHAT YOU CAN DO:
+- Clock in and out
+- View your schedule
+- Request time off
+- View your pay stubs
+- Update your information`;
+
     const textContent = `
 Welcome to IE Central!
 
 Hi ${firstName},
 
-Your IE Central account has been created! You can now access the employee portal and all the tools you need.
+${isAdmin
+  ? "Your IE Central admin account has been created! You now have access to the management dashboard and all administrative tools."
+  : "Your IE Central account has been created! You can now access the Employee Portal to clock in/out, view your schedule, request time off, and more."}
 
 YOUR LOGIN CREDENTIALS
 ----------------------
 Email: ${args.userEmail}
 Password: ${args.temporaryPassword}
-Role: ${roleDisplay}
+
+${featuresText}
 
 IMPORTANT: You will be asked to change your password when you first log in.
 
