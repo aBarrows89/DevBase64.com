@@ -239,7 +239,25 @@ function DocumentsContent() {
 
   // Check if file type supports preview
   const canPreview = (fileType: string) => {
-    return fileType.includes("pdf") || fileType.includes("image");
+    return fileType.includes("pdf") || fileType.includes("image") || isOfficeDocument(fileType);
+  };
+
+  // Check if file is an Office document (Word, Excel, PowerPoint)
+  const isOfficeDocument = (fileType: string) => {
+    return (
+      fileType.includes("word") ||
+      fileType.includes("document") ||
+      fileType.includes("msword") ||
+      fileType.includes("spreadsheet") ||
+      fileType.includes("excel") ||
+      fileType.includes("presentation") ||
+      fileType.includes("powerpoint")
+    );
+  };
+
+  // Get Office Online viewer URL for Office documents
+  const getOfficeViewerUrl = (fileUrl: string) => {
+    return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}`;
   };
 
   const handleUpdate = async (e: React.FormEvent) => {
@@ -529,6 +547,13 @@ function DocumentsContent() {
                       className="max-w-full max-h-full object-contain rounded-lg shadow-lg"
                     />
                   </div>
+                ) : isOfficeDocument(previewDocument.fileType) ? (
+                  <iframe
+                    ref={previewIframeRef}
+                    src={getOfficeViewerUrl(previewUrl)}
+                    className="w-full h-full rounded-lg bg-white"
+                    title={previewDocument.name}
+                  />
                 ) : (
                   <iframe
                     ref={previewIframeRef}

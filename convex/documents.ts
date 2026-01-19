@@ -185,15 +185,24 @@ export const togglePublic = mutation({
     if (!doc) throw new Error("Document not found");
 
     const isPublic = !doc.isPublic;
-    const publicSlug = isPublic ? generateSlug(doc.name) + "-" + args.documentId.slice(-6) : undefined;
 
-    await ctx.db.patch(args.documentId, {
-      isPublic,
-      publicSlug,
-      updatedAt: Date.now(),
-    });
-
-    return { isPublic, publicSlug };
+    if (isPublic) {
+      // Turning ON public access - generate a slug
+      const publicSlug = generateSlug(doc.name) + "-" + args.documentId.slice(-6);
+      await ctx.db.patch(args.documentId, {
+        isPublic: true,
+        publicSlug,
+        updatedAt: Date.now(),
+      });
+      return { isPublic: true, publicSlug };
+    } else {
+      // Turning OFF public access - keep the slug but mark as not public
+      await ctx.db.patch(args.documentId, {
+        isPublic: false,
+        updatedAt: Date.now(),
+      });
+      return { isPublic: false, publicSlug: doc.publicSlug };
+    }
   },
 });
 

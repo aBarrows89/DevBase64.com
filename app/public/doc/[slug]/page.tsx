@@ -38,6 +38,17 @@ function PublicDocumentContent({ slug }: { slug: string }) {
 
   const isImage = document.fileType.includes("image");
   const isPdf = document.fileType.includes("pdf");
+  const isOffice = document.fileType.includes("word") ||
+    document.fileType.includes("document") ||
+    document.fileType.includes("msword") ||
+    document.fileType.includes("spreadsheet") ||
+    document.fileType.includes("excel") ||
+    document.fileType.includes("presentation") ||
+    document.fileType.includes("powerpoint");
+
+  const getOfficeViewerUrl = (url: string) => {
+    return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`;
+  };
 
   const handlePrint = () => {
     window.print();
@@ -118,6 +129,12 @@ function PublicDocumentContent({ slug }: { slug: string }) {
           ) : isPdf ? (
             <iframe
               src={fileUrl}
+              className="w-full h-[calc(100vh-120px)] rounded-lg bg-white print-full"
+              title={document.name}
+            />
+          ) : isOffice ? (
+            <iframe
+              src={getOfficeViewerUrl(fileUrl)}
               className="w-full h-[calc(100vh-120px)] rounded-lg bg-white print-full"
               title={document.name}
             />
