@@ -188,7 +188,9 @@ export const togglePublic = mutation({
 
     if (isPublic) {
       // Turning ON public access - generate a slug
-      const publicSlug = generateSlug(doc.name) + "-" + args.documentId.slice(-6);
+      // Convert document ID to string for slicing
+      const idString = String(args.documentId);
+      const publicSlug = generateSlug(doc.name) + "-" + idString.slice(-6);
       await ctx.db.patch(args.documentId, {
         isPublic: true,
         publicSlug,
