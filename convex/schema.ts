@@ -1003,12 +1003,16 @@ export default defineSchema({
     uploadedByName: v.string(), // For display purposes
     isActive: v.boolean(),
     downloadCount: v.number(), // Track usage
+    // Public access settings
+    isPublic: v.optional(v.boolean()), // Whether document is publicly accessible
+    publicSlug: v.optional(v.string()), // URL-friendly slug for public access
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_category", ["category"])
     .index("by_active", ["isActive"])
-    .index("by_created", ["createdAt"]),
+    .index("by_created", ["createdAt"])
+    .index("by_public_slug", ["publicSlug"]),
 
   // ============ HOLIDAYS & SCHEDULE OVERRIDES ============
   // Global holidays and schedule overrides (prevents NCNS triggers)

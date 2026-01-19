@@ -165,3 +165,68 @@ export const getFileDownloadUrl = action({
     return url;
   },
 });
+
+// ============ PUBLIC DOCUMENT ACCESS ============
+
+// Generate a URL-friendly slug from a name
+function generateSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .substring(0, 50);
+}
+
+// Toggle public access for a document
+export const togglePublic = mutation({
+  args: { documentId: v.id("documents") },
+  handler: async (ctx, args) => {
+    const doc = await ctx.db.get(args.documentId);
+    if (!doc) throw new Error("Document not found");
+
+    const isPublic = !doc.isPublic;
+    const publicSlug = isPublic ? generateSlug(doc.name) + "-" + args.documentId.slice(-6) : undefined;
+
+    await ctx.db.patch(args.documentId, {
+      isPublic,
+      publicSlug,
+      updatedAt: Date.now(),
+    });
+
+    return { isPublic, publicSlug };
+  },
+});
+
+// Get public document by slug (no auth required)
+export const getPublicBySlug = query({
+  args: { slug: v.string() },
+  handler: async (ctx, args) => {
+    const doc = await ctx.db
+      .query("documents")
+      .withIndex("by_public_slug", (q) => q.eq("publicSlug", args.slug))
+      .first();
+
+    if (!doc || !doc.isPublic || !doc.isActive) {
+      return null;
+    }
+
+    return doc;
+  },
+});
+
+// Get public document file URL by slug (no auth required)
+export const getPublicFileUrl = query({
+  args: { slug: v.string() },
+  handler: async (ctx, args) => {
+    const doc = await ctx.db
+      .query("documents")
+      .withIndex("by_public_slug", (q) => q.eq("publicSlug", args.slug))
+      .first();
+
+    if (!doc || !doc.isPublic || !doc.isActive) {
+      return null;
+    }
+
+    return await ctx.storage.getUrl(doc.fileId);
+  },
+});
