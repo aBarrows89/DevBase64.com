@@ -179,7 +179,7 @@ export const sendInterviewScheduledEmail = internalAction({
   </div>
 
   <div style="background: #1f2937; padding: 20px; border-radius: 0 0 10px 10px; text-align: center;">
-    <img src="https://ietires.com/logo.gif" alt="Import Export Tire Co" style="max-width: 150px; margin-bottom: 15px;">
+    <img src="https://iecentral.com/logo.gif" alt="Import Export Tire Co" style="max-width: 150px; margin-bottom: 15px;">
     <p style="color: #9ca3af; margin: 0; font-size: 12px;">
       This email was sent to confirm your interview. Please do not reply directly to this email.
     </p>
@@ -361,7 +361,7 @@ export const sendInterviewRescheduledEmail = internalAction({
   </div>
 
   <div style="background: #1f2937; padding: 20px; border-radius: 0 0 10px 10px; text-align: center;">
-    <img src="https://ietires.com/logo.gif" alt="Import Export Tire Co" style="max-width: 150px; margin-bottom: 15px;">
+    <img src="https://iecentral.com/logo.gif" alt="Import Export Tire Co" style="max-width: 150px; margin-bottom: 15px;">
     <p style="color: #9ca3af; margin: 0; font-size: 12px;">
       This email was sent to notify you of a schedule change. Please do not reply directly to this email.
     </p>
@@ -494,7 +494,7 @@ export const sendInterviewThankYouEmail = internalAction({
   </div>
 
   <div style="background: #1f2937; padding: 20px; border-radius: 0 0 10px 10px; text-align: center;">
-    <img src="https://ietires.com/logo.gif" alt="Import Export Tire Co" style="max-width: 150px; margin-bottom: 15px;">
+    <img src="https://iecentral.com/logo.gif" alt="Import Export Tire Co" style="max-width: 150px; margin-bottom: 15px;">
     <p style="color: #9ca3af; margin: 0; font-size: 12px;">
       This is an automated message. Please contact us directly if you have any questions.
     </p>
@@ -648,7 +648,7 @@ export const sendOfferLetterEmail = internalAction({
   </div>
 
   <div style="background: #1f2937; padding: 20px; border-radius: 0 0 10px 10px; text-align: center;">
-    <img src="https://ietires.com/logo.gif" alt="Import Export Tire Co" style="max-width: 150px; margin-bottom: 15px;">
+    <img src="https://iecentral.com/logo.gif" alt="Import Export Tire Co" style="max-width: 150px; margin-bottom: 15px;">
     <p style="color: #9ca3af; margin: 0; font-size: 12px;">
       ${companyName} - We're excited to have you join our team!
     </p>
@@ -779,7 +779,7 @@ export const sendMissedInterviewEmail = internalAction({
   </div>
 
   <div style="background: #1f2937; padding: 20px; border-radius: 0 0 10px 10px; text-align: center;">
-    <img src="https://ietires.com/logo.gif" alt="Import Export Tire Co" style="max-width: 150px; margin-bottom: 15px;">
+    <img src="https://iecentral.com/logo.gif" alt="Import Export Tire Co" style="max-width: 150px; margin-bottom: 15px;">
     <p style="color: #9ca3af; margin: 0; font-size: 12px;">
       This is an automated message regarding your scheduled interview.
     </p>
@@ -917,7 +917,7 @@ export const sendNewUserWelcomeEmail = internalAction({
   </div>
 
   <div style="background: #1f2937; padding: 20px; border-radius: 0 0 10px 10px; text-align: center;">
-    <img src="https://ietires.com/logo.gif" alt="Import Export Tire Co" style="max-width: 150px; margin-bottom: 15px;">
+    <img src="https://iecentral.com/logo.gif" alt="Import Export Tire Co" style="max-width: 150px; margin-bottom: 15px;">
     <p style="color: #9ca3af; margin: 0; font-size: 12px;">
       This is an automated message from IE Central.
     </p>
