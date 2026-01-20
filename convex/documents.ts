@@ -2,15 +2,42 @@ import { query, mutation, action } from "./_generated/server";
 import { v } from "convex/values";
 import { api } from "./_generated/api";
 
-// Get all active documents
+// Get all active documents (optionally filter by folder)
 export const getAll = query({
-  args: {},
-  handler: async (ctx) => {
-    return await ctx.db
+  args: {
+    folderId: v.optional(v.union(v.id("documentFolders"), v.null())),
+    rootOnly: v.optional(v.boolean()), // If true, only return documents not in any folder
+  },
+  handler: async (ctx, args) => {
+    let documents = await ctx.db
       .query("documents")
       .withIndex("by_active", (q) => q.eq("isActive", true))
       .order("desc")
       .collect();
+
+    // Filter by folder if specified
+    if (args.folderId !== undefined) {
+      documents = documents.filter((d) => d.folderId === args.folderId);
+    } else if (args.rootOnly) {
+      // Only return documents not in any folder
+      documents = documents.filter((d) => !d.folderId);
+    }
+
+    return documents;
+  },
+});
+
+// Get root documents (not in any folder)
+export const getRootDocuments = query({
+  args: {},
+  handler: async (ctx) => {
+    const documents = await ctx.db
+      .query("documents")
+      .withIndex("by_active", (q) => q.eq("isActive", true))
+      .order("desc")
+      .collect();
+
+    return documents.filter((d) => !d.folderId);
   },
 });
 
@@ -57,6 +84,7 @@ export const create = mutation({
     name: v.string(),
     description: v.optional(v.string()),
     category: v.string(),
+    folderId: v.optional(v.id("documentFolders")),
     fileId: v.id("_storage"),
     fileName: v.string(),
     fileType: v.string(),

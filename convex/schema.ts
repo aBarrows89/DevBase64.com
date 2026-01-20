@@ -995,6 +995,7 @@ export default defineSchema({
     name: v.string(), // Document name/title
     description: v.optional(v.string()), // Brief description
     category: v.string(), // "forms" | "policies" | "sops" | "templates" | "training" | "other"
+    folderId: v.optional(v.id("documentFolders")), // Optional folder for organization
     fileId: v.id("_storage"), // Convex storage ID for the file
     fileName: v.string(), // Original filename
     fileType: v.string(), // MIME type (application/pdf, etc.)
@@ -1012,7 +1013,22 @@ export default defineSchema({
     .index("by_category", ["category"])
     .index("by_active", ["isActive"])
     .index("by_created", ["createdAt"])
-    .index("by_public_slug", ["publicSlug"]),
+    .index("by_public_slug", ["publicSlug"])
+    .index("by_folder", ["folderId"]),
+
+  // ============ DOCUMENT FOLDERS ============
+  documentFolders: defineTable({
+    name: v.string(),
+    description: v.optional(v.string()),
+    passwordHash: v.optional(v.string()), // Optional - null = unprotected, set = protected
+    createdBy: v.id("users"),
+    createdByName: v.string(),
+    isActive: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_active", ["isActive"])
+    .index("by_created", ["createdAt"]),
 
   // ============ HOLIDAYS & SCHEDULE OVERRIDES ============
   // Global holidays and schedule overrides (prevents NCNS triggers)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Protected from "../protected";
 import Sidebar from "@/components/Sidebar";
 import { useTheme } from "../theme-context";
@@ -32,7 +32,7 @@ function DocumentsContent() {
   const { user } = useAuth();
   const isDark = theme === "dark";
 
-  const documents = useQuery(api.documents.getAll);
+  const documents = useQuery(api.documents.getAll, { rootOnly: true });
   const archivedDocuments = useQuery(api.documents.getArchived);
   const categoryCounts = useQuery(api.documents.getCategoryCounts);
   const generateUploadUrl = useMutation(api.documents.generateUploadUrl);
@@ -45,8 +45,20 @@ function DocumentsContent() {
   const getFileDownloadUrl = useAction(api.documents.getFileDownloadUrl);
   const togglePublic = useMutation(api.documents.togglePublic);
 
-  // Check if user is admin
+  // Folder APIs
+  const folders = useQuery(api.documentFolders.getAll);
+  const createFolder = useMutation(api.documentFolders.create);
+  const updateFolder = useMutation(api.documentFolders.update);
+  const archiveFolder = useMutation(api.documentFolders.archive);
+  const setFolderPasswordMutation = useMutation(api.documentFolders.setPassword);
+  const removeFolderPasswordMutation = useMutation(api.documentFolders.removePassword);
+  const verifyFolderPassword = useAction(api.documentFolders.verifyPassword);
+  const getProtectedDocuments = useAction(api.documentFolders.getProtectedDocuments);
+  const moveDocumentToFolder = useMutation(api.documentFolders.moveDocument);
+
+  // Check if user is admin or super_admin
   const isAdmin = user?.role === "admin" || user?.role === "super_admin";
+  const isSuperAdmin = user?.role === "super_admin";
 
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [editingDocument, setEditingDocument] = useState<Id<"documents"> | null>(null);
@@ -62,6 +74,51 @@ function DocumentsContent() {
   });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Folder state
+  const [currentFolderId, setCurrentFolderId] = useState<Id<"documentFolders"> | null>(null);
+  const [showFolderModal, setShowFolderModal] = useState(false);
+  const [editingFolderId, setEditingFolderId] = useState<Id<"documentFolders"> | null>(null);
+  const [folderFormData, setFolderFormData] = useState({
+    name: "",
+    description: "",
+    password: "",
+    isProtected: false,
+  });
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordModalFolderId, setPasswordModalFolderId] = useState<Id<"documentFolders"> | null>(null);
+  const [unlockedFolders, setUnlockedFolders] = useState<Set<string>>(new Set());
+  const [folderPassword, setFolderPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [folderDocuments, setFolderDocuments] = useState<NonNullable<typeof documents> | null>(null);
+  const [loadingFolderDocs, setLoadingFolderDocs] = useState(false);
+
+  // Load unlocked folders from sessionStorage on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const stored = sessionStorage.getItem("unlockedFolders");
+      if (stored) {
+        try {
+          setUnlockedFolders(new Set(JSON.parse(stored)));
+        } catch (e) {
+          console.error("Failed to parse unlocked folders", e);
+        }
+      }
+    }
+  }, []);
+
+  // Save unlocked folders to sessionStorage
+  const unlockFolder = (folderId: string) => {
+    const newUnlocked = new Set(unlockedFolders);
+    newUnlocked.add(folderId);
+    setUnlockedFolders(newUnlocked);
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("unlockedFolders", JSON.stringify([...newUnlocked]));
+    }
+  };
+
+  // Get current folder info
+  const currentFolder = currentFolderId ? folders?.find(f => f._id === currentFolderId) : null;
 
   // Preview modal state
   const [previewDocument, setPreviewDocument] = useState<NonNullable<typeof documents>[0] | null>(null);
@@ -126,6 +183,7 @@ function DocumentsContent() {
         name: formData.name,
         description: formData.description || undefined,
         category: formData.category,
+        folderId: currentFolderId || undefined,
         fileId: storageId,
         fileName: selectedFile.name,
         fileType: selectedFile.type,
@@ -133,6 +191,14 @@ function DocumentsContent() {
         uploadedBy: user._id,
         uploadedByName: user.name,
       });
+
+      // Refresh folder documents if we're in a folder
+      if (currentFolderId) {
+        const folder = folders?.find(f => f._id === currentFolderId);
+        if (folder) {
+          await loadFolderDocuments(currentFolderId, folder.isProtected);
+        }
+      }
 
       // Reset form
       setShowUploadModal(false);
@@ -322,8 +388,146 @@ function DocumentsContent() {
     }
   };
 
-  // Use archived or active documents based on view
-  const sourceDocuments = showArchived ? archivedDocuments : documents;
+  // Folder handlers
+  const handleCreateFolder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+
+    try {
+      await createFolder({
+        name: folderFormData.name,
+        description: folderFormData.description || undefined,
+        password: folderFormData.isProtected ? folderFormData.password : undefined,
+        createdBy: user._id,
+        createdByName: user.name,
+      });
+      setShowFolderModal(false);
+      setFolderFormData({ name: "", description: "", password: "", isProtected: false });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create folder");
+    }
+  };
+
+  const handleUpdateFolder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingFolderId) return;
+
+    try {
+      await updateFolder({
+        folderId: editingFolderId,
+        name: folderFormData.name,
+        description: folderFormData.description || undefined,
+      });
+      setShowFolderModal(false);
+      setEditingFolderId(null);
+      setFolderFormData({ name: "", description: "", password: "", isProtected: false });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update folder");
+    }
+  };
+
+  const handleOpenFolder = async (folder: NonNullable<typeof folders>[0]) => {
+    // Super admin can bypass password protection
+    if (folder.isProtected && !unlockedFolders.has(folder._id) && !isSuperAdmin) {
+      // Show password modal
+      setPasswordModalFolderId(folder._id);
+      setShowPasswordModal(true);
+      setFolderPassword("");
+      setPasswordError("");
+    } else {
+      // Open folder directly (super_admin bypasses password)
+      await loadFolderDocuments(folder._id, folder.isProtected);
+    }
+  };
+
+  const loadFolderDocuments = async (folderId: Id<"documentFolders">, isProtected: boolean) => {
+    setLoadingFolderDocs(true);
+    setCurrentFolderId(folderId);
+
+    try {
+      // Super admin bypasses password verification
+      const result = await getProtectedDocuments({
+        folderId,
+        password: "",
+        isSuperAdmin: isSuperAdmin
+      });
+      if (result.success && result.documents) {
+        setFolderDocuments(result.documents as NonNullable<typeof documents>);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load folder documents");
+    } finally {
+      setLoadingFolderDocs(false);
+    }
+  };
+
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!passwordModalFolderId) return;
+
+    try {
+      const result = await verifyFolderPassword({
+        folderId: passwordModalFolderId,
+        password: folderPassword,
+      });
+
+      if (result.success) {
+        unlockFolder(passwordModalFolderId);
+        setShowPasswordModal(false);
+
+        // Load documents using the password
+        setLoadingFolderDocs(true);
+        setCurrentFolderId(passwordModalFolderId);
+
+        const docsResult = await getProtectedDocuments({
+          folderId: passwordModalFolderId,
+          password: folderPassword,
+          isSuperAdmin: isSuperAdmin,
+        });
+
+        if (docsResult.success && docsResult.documents) {
+          setFolderDocuments(docsResult.documents as NonNullable<typeof documents>);
+        }
+        setLoadingFolderDocs(false);
+      } else {
+        setPasswordError(result.error || "Invalid password");
+      }
+    } catch (err) {
+      setPasswordError(err instanceof Error ? err.message : "Verification failed");
+    }
+  };
+
+  const handleBackToRoot = () => {
+    setCurrentFolderId(null);
+    setFolderDocuments(null);
+  };
+
+  const handleEditFolder = (folder: NonNullable<typeof folders>[0]) => {
+    setEditingFolderId(folder._id);
+    setFolderFormData({
+      name: folder.name,
+      description: folder.description || "",
+      password: "",
+      isProtected: folder.isProtected,
+    });
+    setShowFolderModal(true);
+  };
+
+  const handleArchiveFolder = async (folderId: Id<"documentFolders">) => {
+    if (!confirm("Are you sure you want to archive this folder? Documents will remain in the folder.")) return;
+    try {
+      await archiveFolder({ folderId });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to archive folder");
+    }
+  };
+
+  // Use archived, folder, or root documents based on view
+  const sourceDocuments = showArchived
+    ? archivedDocuments
+    : currentFolderId
+      ? folderDocuments
+      : documents;
 
   const filteredDocuments = sourceDocuments?.filter((d) => {
     // Filter by category
@@ -349,15 +553,55 @@ function DocumentsContent() {
         <header className={`sticky top-0 z-10 backdrop-blur-sm border-b px-4 sm:px-8 py-4 ${isDark ? "bg-slate-900/80 border-slate-700" : "bg-white/80 border-gray-200"}`}>
           <div className="flex items-center justify-between">
             <div>
-              <h1 className={`text-xl sm:text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
-                Doc Hub {showArchived && <span className="text-amber-500">(Archived)</span>}
-              </h1>
-              <p className={`text-xs sm:text-sm mt-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                {showArchived ? "Manage archived documents" : "Frequently used documents and forms"}
+              {/* Breadcrumb */}
+              <div className="flex items-center gap-2 mb-1">
+                <button
+                  onClick={handleBackToRoot}
+                  className={`text-xl sm:text-2xl font-bold transition-colors ${
+                    currentFolderId
+                      ? isDark ? "text-slate-400 hover:text-cyan-400" : "text-gray-500 hover:text-blue-600"
+                      : isDark ? "text-white" : "text-gray-900"
+                  }`}
+                >
+                  Doc Hub
+                </button>
+                {currentFolder && (
+                  <>
+                    <span className={isDark ? "text-slate-500" : "text-gray-400"}>/</span>
+                    <span className={`text-xl sm:text-2xl font-bold flex items-center gap-2 ${isDark ? "text-white" : "text-gray-900"}`}>
+                      {currentFolder.isProtected && (
+                        <svg className="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                      )}
+                      {currentFolder.name}
+                    </span>
+                  </>
+                )}
+                {showArchived && <span className="text-amber-500 text-xl sm:text-2xl font-bold">(Archived)</span>}
+              </div>
+              <p className={`text-xs sm:text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                {showArchived
+                  ? "Manage archived documents"
+                  : currentFolder
+                    ? currentFolder.description || `${currentFolder.documentCount} document${currentFolder.documentCount !== 1 ? "s" : ""}`
+                    : "Frequently used documents and forms"}
               </p>
             </div>
             <div className="flex items-center gap-2">
-              {isAdmin && (
+              {/* Back button when in folder */}
+              {currentFolderId && (
+                <button
+                  onClick={handleBackToRoot}
+                  className={`px-3 sm:px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${isDark ? "bg-slate-700 text-slate-300 hover:bg-slate-600" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                  </svg>
+                  <span className="hidden sm:inline">Back</span>
+                </button>
+              )}
+              {isAdmin && !currentFolderId && (
                 <button
                   onClick={() => setShowArchived(!showArchived)}
                   className={`px-3 sm:px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
@@ -375,6 +619,21 @@ function DocumentsContent() {
                       {archivedDocuments.length}
                     </span>
                   )}
+                </button>
+              )}
+              {!showArchived && !currentFolderId && (
+                <button
+                  onClick={() => {
+                    setShowFolderModal(true);
+                    setEditingFolderId(null);
+                    setFolderFormData({ name: "", description: "", password: "", isProtected: false });
+                  }}
+                  className={`px-3 sm:px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${isDark ? "bg-slate-700 text-slate-300 hover:bg-slate-600" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                  </svg>
+                  <span className="hidden sm:inline">New Folder</span>
                 </button>
               )}
               {!showArchived && (
@@ -438,43 +697,125 @@ function DocumentsContent() {
             )}
           </div>
 
+          {/* Folders Section - Only show at root level */}
+          {!currentFolderId && !showArchived && folders && folders.length > 0 && (
+            <div className="mb-6">
+              <h2 className={`text-sm font-semibold mb-3 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                Folders
+              </h2>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {folders.map((folder) => (
+                  <div
+                    key={folder._id}
+                    onClick={() => handleOpenFolder(folder)}
+                    className={`border rounded-xl p-4 cursor-pointer transition-all hover:scale-[1.02] ${
+                      isDark
+                        ? "bg-slate-800/50 border-slate-700 hover:border-cyan-500/50"
+                        : "bg-white border-gray-200 shadow-sm hover:border-blue-500/50"
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={`text-2xl p-2 rounded-lg ${isDark ? "bg-slate-700" : "bg-gray-100"}`}>
+                        {folder.isProtected ? (
+                          <svg className="w-6 h-6 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                          </svg>
+                        ) : (
+                          <svg className={`w-6 h-6 ${isDark ? "text-cyan-400" : "text-blue-500"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                          </svg>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className={`font-semibold truncate ${isDark ? "text-white" : "text-gray-900"}`}>
+                          {folder.name}
+                        </h3>
+                        <p className={`text-xs mt-0.5 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                          {folder.documentCount} document{folder.documentCount !== 1 ? "s" : ""}
+                        </p>
+                        {folder.description && (
+                          <p className={`text-sm mt-1 line-clamp-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                            {folder.description}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    {/* Folder actions */}
+                    <div className="flex gap-2 mt-3 pt-3 border-t border-slate-700/50" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => handleEditFolder(folder)}
+                        className={`flex-1 px-3 py-1.5 text-xs font-medium rounded transition-colors ${isDark ? "bg-slate-700 text-slate-300 hover:bg-slate-600" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleArchiveFolder(folder._id)}
+                        className="px-3 py-1.5 text-xs font-medium rounded transition-colors bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                      >
+                        Archive
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Loading state for folder documents */}
+          {loadingFolderDocs && (
+            <div className="flex items-center justify-center py-12">
+              <svg className="w-8 h-8 animate-spin text-cyan-500" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            </div>
+          )}
+
           {/* Category Filters */}
-          <div className="flex flex-wrap gap-2 mb-6">
-            <button
-              onClick={() => setSelectedCategory(null)}
-              className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-                selectedCategory === null
-                  ? isDark ? "bg-cyan-500 text-white" : "bg-blue-600 text-white"
-                  : isDark ? "bg-slate-800 text-slate-300 hover:bg-slate-700" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              All ({documents?.length || 0})
-            </button>
-            {CATEGORIES.map((cat) => (
+          {!loadingFolderDocs && (
+            <div className="flex flex-wrap gap-2 mb-6">
               <button
-                key={cat.value}
-                onClick={() => setSelectedCategory(cat.value)}
-                className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors flex items-center gap-1.5 ${
-                  selectedCategory === cat.value
+                onClick={() => setSelectedCategory(null)}
+                className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                  selectedCategory === null
                     ? isDark ? "bg-cyan-500 text-white" : "bg-blue-600 text-white"
                     : isDark ? "bg-slate-800 text-slate-300 hover:bg-slate-700" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
               >
-                <span>{cat.icon}</span>
-                {cat.label} ({categoryCounts?.[cat.value] || 0})
+                All ({sourceDocuments?.length || 0})
               </button>
-            ))}
-          </div>
+              {CATEGORIES.map((cat) => (
+                <button
+                  key={cat.value}
+                  onClick={() => setSelectedCategory(cat.value)}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors flex items-center gap-1.5 ${
+                    selectedCategory === cat.value
+                      ? isDark ? "bg-cyan-500 text-white" : "bg-blue-600 text-white"
+                      : isDark ? "bg-slate-800 text-slate-300 hover:bg-slate-700" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
+                >
+                  <span>{cat.icon}</span>
+                  {cat.label} ({currentFolderId ? sourceDocuments?.filter(d => d.category === cat.value).length || 0 : categoryCounts?.[cat.value] || 0})
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Documents Grid */}
-          {!filteredDocuments || filteredDocuments.length === 0 ? (
+          {!loadingFolderDocs && (!filteredDocuments || filteredDocuments.length === 0) ? (
             <div className={`text-center py-12 border rounded-xl ${isDark ? "bg-slate-800/50 border-slate-700 text-slate-400" : "bg-white border-gray-200 text-gray-500"}`}>
-              <div className="text-4xl mb-3">{showArchived ? "📦" : "📄"}</div>
-              <p>{showArchived ? "No archived documents." : "No documents yet. Upload your first document to get started."}</p>
+              <div className="text-4xl mb-3">{showArchived ? "📦" : currentFolderId ? "📁" : "📄"}</div>
+              <p>
+                {showArchived
+                  ? "No archived documents."
+                  : currentFolderId
+                    ? "This folder is empty. Upload a document to get started."
+                    : "No documents yet. Upload your first document to get started."}
+              </p>
             </div>
-          ) : (
+          ) : !loadingFolderDocs && (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {filteredDocuments.map((doc) => {
+              {filteredDocuments?.map((doc) => {
                 const category = CATEGORIES.find((c) => c.value === doc.category);
                 const previewable = canPreview(doc.fileType);
                 return (
@@ -918,6 +1259,190 @@ function DocumentsContent() {
                     className={`flex-1 px-4 py-3 font-medium rounded-lg transition-colors disabled:opacity-50 ${isDark ? "bg-cyan-500 text-white hover:bg-cyan-600" : "bg-blue-600 text-white hover:bg-blue-700"}`}
                   >
                     {uploading ? "Uploading..." : editingDocument ? "Update" : "Upload"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Password Modal for Protected Folders */}
+        {showPasswordModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className={`border rounded-xl p-4 sm:p-6 w-full max-w-sm ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200"}`}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className={`text-xl font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  Enter Password
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowPasswordModal(false);
+                    setPasswordModalFolderId(null);
+                    setFolderPassword("");
+                    setPasswordError("");
+                  }}
+                  className={`p-2 rounded-lg transition-colors ${isDark ? "hover:bg-slate-700 text-slate-400" : "hover:bg-gray-100 text-gray-500"}`}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className={`flex items-center gap-3 p-3 rounded-lg mb-4 ${isDark ? "bg-slate-700/50" : "bg-gray-50"}`}>
+                <svg className="w-8 h-8 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                <p className={`text-sm ${isDark ? "text-slate-300" : "text-gray-600"}`}>
+                  This folder is password protected. Enter the password to view its contents.
+                </p>
+              </div>
+
+              <form onSubmit={handlePasswordSubmit} className="space-y-4">
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                    Password
+                  </label>
+                  <input
+                    type="password"
+                    value={folderPassword}
+                    onChange={(e) => {
+                      setFolderPassword(e.target.value);
+                      setPasswordError("");
+                    }}
+                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                    placeholder="Enter folder password"
+                    autoFocus
+                  />
+                  {passwordError && (
+                    <p className="text-red-400 text-sm mt-2">{passwordError}</p>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  className={`w-full px-4 py-3 font-medium rounded-lg transition-colors ${isDark ? "bg-cyan-500 text-white hover:bg-cyan-600" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+                >
+                  Unlock Folder
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Folder Create/Edit Modal */}
+        {showFolderModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className={`border rounded-xl p-4 sm:p-6 w-full max-w-md ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200"}`}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className={`text-xl font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  {editingFolderId ? "Edit Folder" : "Create Folder"}
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowFolderModal(false);
+                    setEditingFolderId(null);
+                    setFolderFormData({ name: "", description: "", password: "", isProtected: false });
+                  }}
+                  className={`p-2 rounded-lg transition-colors ${isDark ? "hover:bg-slate-700 text-slate-400" : "hover:bg-gray-100 text-gray-500"}`}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <form onSubmit={editingFolderId ? handleUpdateFolder : handleCreateFolder} className="space-y-4">
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                    Folder Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={folderFormData.name}
+                    onChange={(e) => setFolderFormData({ ...folderFormData, name: e.target.value })}
+                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                    required
+                    placeholder="e.g., HR Documents"
+                  />
+                </div>
+
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                    Description
+                  </label>
+                  <textarea
+                    value={folderFormData.description}
+                    onChange={(e) => setFolderFormData({ ...folderFormData, description: e.target.value })}
+                    rows={2}
+                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none resize-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                    placeholder="Brief description of this folder..."
+                  />
+                </div>
+
+                {/* Password protection toggle - only for new folders and only admins can create protected folders */}
+                {!editingFolderId && isAdmin && (
+                  <div className={`p-4 rounded-lg border ${isDark ? "bg-slate-700/30 border-slate-600" : "bg-gray-50 border-gray-200"}`}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>Password Protection</p>
+                        <p className={`text-xs mt-0.5 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                          Require password to view documents
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setFolderFormData({ ...folderFormData, isProtected: !folderFormData.isProtected, password: "" })}
+                        className={`relative w-12 h-6 rounded-full transition-colors ${
+                          folderFormData.isProtected
+                            ? isDark ? "bg-amber-500" : "bg-amber-600"
+                            : isDark ? "bg-slate-600" : "bg-gray-300"
+                        }`}
+                      >
+                        <span
+                          className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                            folderFormData.isProtected ? "translate-x-7" : "translate-x-1"
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                    {folderFormData.isProtected && (
+                      <div className="mt-4">
+                        <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                          Folder Password *
+                        </label>
+                        <input
+                          type="password"
+                          value={folderFormData.password}
+                          onChange={(e) => setFolderFormData({ ...folderFormData, password: e.target.value })}
+                          className={`w-full px-4 py-3 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                          placeholder="Enter a secure password"
+                          required={folderFormData.isProtected}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowFolderModal(false);
+                      setEditingFolderId(null);
+                      setFolderFormData({ name: "", description: "", password: "", isProtected: false });
+                    }}
+                    className={`flex-1 px-4 py-3 font-medium rounded-lg transition-colors ${isDark ? "bg-slate-700 text-white hover:bg-slate-600" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!folderFormData.name || (folderFormData.isProtected && !folderFormData.password)}
+                    className={`flex-1 px-4 py-3 font-medium rounded-lg transition-colors disabled:opacity-50 ${isDark ? "bg-cyan-500 text-white hover:bg-cyan-600" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+                  >
+                    {editingFolderId ? "Update Folder" : "Create Folder"}
                   </button>
                 </div>
               </form>
