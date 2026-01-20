@@ -42,7 +42,7 @@ function UsersContent() {
   const [newUser, setNewUser] = useState({
     name: "",
     email: "",
-    password: "",
+    password: "IETires2026!",
     role: "member",
     sendWelcomeEmail: true,
   });
@@ -68,11 +68,6 @@ function UsersContent() {
     setError("");
     setSuccess("");
 
-    if (newUser.password.length < 8) {
-      setError("Password must be at least 8 characters");
-      return;
-    }
-
     const result = await createUser({
       name: newUser.name,
       email: newUser.email,
@@ -84,7 +79,7 @@ function UsersContent() {
     if (result.success) {
       setSuccess(newUser.sendWelcomeEmail ? "User created and welcome email sent!" : "User created successfully");
       setShowAddModal(false);
-      setNewUser({ name: "", email: "", password: "", role: "member", sendWelcomeEmail: true });
+      setNewUser({ name: "", email: "", password: "IETires2026!", role: "member", sendWelcomeEmail: true });
     } else {
       setError(result.error || "Failed to create user");
     }
@@ -535,18 +530,6 @@ function UsersContent() {
                   className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-cyan-500"
                   required
                 />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-1">Password</label>
-                <input
-                  type="password"
-                  value={newUser.password}
-                  onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                  className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-cyan-500"
-                  required
-                  minLength={8}
-                />
-                <p className="text-xs text-slate-500 mt-1">Minimum 8 characters. User will be required to change on first login.</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-400 mb-1">Role</label>
