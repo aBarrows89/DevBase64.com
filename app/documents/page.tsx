@@ -1692,11 +1692,11 @@ function DocumentsContent() {
                 <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
                   Add User
                 </label>
-                <div className="flex gap-2">
+                <div className="space-y-2">
                   <select
                     value={selectedUserToShare || ""}
                     onChange={(e) => setSelectedUserToShare(e.target.value as Id<"users"> | null)}
-                    className={`flex-1 px-4 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
                   >
                     <option value="">Select a user...</option>
                     {usersForSharing
@@ -1729,9 +1729,9 @@ function DocumentsContent() {
                       }
                     }}
                     disabled={!selectedUserToShare || sharingInProgress}
-                    className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 ${isDark ? "bg-cyan-500 text-white hover:bg-cyan-600" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+                    className={`w-full px-4 py-2 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 ${isDark ? "bg-cyan-500 text-white hover:bg-cyan-600" : "bg-blue-600 text-white hover:bg-blue-700"}`}
                   >
-                    {sharingInProgress ? "..." : "Add"}
+                    {sharingInProgress ? "Adding..." : "Add User"}
                   </button>
                 </div>
               </div>
