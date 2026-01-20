@@ -1032,6 +1032,23 @@ export default defineSchema({
     .index("by_created", ["createdAt"])
     .index("by_parent", ["parentFolderId"]),
 
+  // Folder access grants (sharing protected folders)
+  folderAccessGrants: defineTable({
+    folderId: v.id("documentFolders"),
+    grantedToUserId: v.id("users"),
+    grantedToUserName: v.string(),
+    grantedByUserId: v.id("users"),
+    grantedByUserName: v.string(),
+    grantedAt: v.number(),
+    expiresAt: v.optional(v.number()), // Optional expiration
+    isRevoked: v.boolean(),
+    revokedAt: v.optional(v.number()),
+    revokedByUserId: v.optional(v.id("users")),
+  })
+    .index("by_folder", ["folderId"])
+    .index("by_user", ["grantedToUserId"])
+    .index("by_folder_user", ["folderId", "grantedToUserId"]),
+
   // ============ HOLIDAYS & SCHEDULE OVERRIDES ============
   // Global holidays and schedule overrides (prevents NCNS triggers)
   holidays: defineTable({

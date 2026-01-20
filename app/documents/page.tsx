@@ -56,6 +56,15 @@ function DocumentsContent() {
   const getProtectedDocuments = useAction(api.documentFolders.getProtectedDocuments);
   const moveDocumentToFolder = useMutation(api.documentFolders.moveDocument);
 
+  // Folder sharing APIs
+  const grantFolderAccess = useMutation(api.documentFolders.grantAccess);
+  const revokeFolderAccess = useMutation(api.documentFolders.revokeAccess);
+  const usersForSharing = useQuery(api.documentFolders.getUsersForSharing);
+  const sharedFoldersWithMe = useQuery(
+    api.documentFolders.getSharedFolders,
+    user ? { userId: user._id } : "skip"
+  );
+
   // Check if user is admin or super_admin
   const isAdmin = user?.role === "admin" || user?.role === "super_admin";
   const isSuperAdmin = user?.role === "super_admin";
@@ -98,6 +107,12 @@ function DocumentsContent() {
   const [draggedFolderId, setDraggedFolderId] = useState<Id<"documentFolders"> | null>(null);
   const [dropTargetFolderId, setDropTargetFolderId] = useState<Id<"documentFolders"> | null>(null);
 
+  // Folder sharing state
+  const [showShareFolderModal, setShowShareFolderModal] = useState(false);
+  const [shareFolderId, setShareFolderId] = useState<Id<"documentFolders"> | null>(null);
+  const [selectedUserToShare, setSelectedUserToShare] = useState<Id<"users"> | null>(null);
+  const [sharingInProgress, setSharingInProgress] = useState(false);
+
   // Load unlocked folders from sessionStorage on mount
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -131,6 +146,18 @@ function DocumentsContent() {
   const currentFolder = useQuery(
     api.documentFolders.getById,
     currentFolderId ? { folderId: currentFolderId } : "skip"
+  );
+
+  // Get access grants for folder being shared
+  const folderAccessGrants = useQuery(
+    api.documentFolders.getFolderAccessGrants,
+    shareFolderId ? { folderId: shareFolderId } : "skip"
+  );
+
+  // Check if current user has access to a protected folder (for bypass)
+  const userAccessCheck = useQuery(
+    api.documentFolders.checkUserAccess,
+    user && currentFolderId ? { folderId: currentFolderId, userId: user._id } : "skip"
   );
 
   // Preview modal state
@@ -440,16 +467,17 @@ function DocumentsContent() {
     }
   };
 
-  const handleOpenFolder = async (folder: NonNullable<typeof folders>[0]) => {
+  const handleOpenFolder = async (folder: NonNullable<typeof folders>[0], hasAccessGrant = false) => {
     // Super admin can bypass password protection
-    if (folder.isProtected && !unlockedFolders.has(folder._id) && !isSuperAdmin) {
+    // Users with access grants can also bypass password
+    if (folder.isProtected && !unlockedFolders.has(folder._id) && !isSuperAdmin && !hasAccessGrant) {
       // Show password modal
       setPasswordModalFolderId(folder._id);
       setShowPasswordModal(true);
       setFolderPassword("");
       setPasswordError("");
     } else {
-      // Open folder directly (super_admin bypasses password)
+      // Open folder directly (super_admin or access grant bypasses password)
       await loadFolderDocuments(folder._id, folder.isProtected);
     }
   };
@@ -460,10 +488,12 @@ function DocumentsContent() {
 
     try {
       // Super admin bypasses password verification
+      // Users with access grants also bypass via userId check on backend
       const result = await getProtectedDocuments({
         folderId,
         password: "",
-        isSuperAdmin: isSuperAdmin
+        isSuperAdmin: isSuperAdmin,
+        userId: user?._id,
       });
       if (result.success && result.documents) {
         setFolderDocuments(result.documents as NonNullable<typeof documents>);
@@ -846,6 +876,22 @@ function DocumentsContent() {
                       >
                         Edit
                       </button>
+                      {/* Share button - only for protected folders and admins */}
+                      {folder.isProtected && isAdmin && (
+                        <button
+                          onClick={() => {
+                            setShareFolderId(folder._id);
+                            setShowShareFolderModal(true);
+                            setSelectedUserToShare(null);
+                          }}
+                          className={`px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1 ${isDark ? "bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30" : "bg-blue-100 text-blue-600 hover:bg-blue-200"}`}
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                          </svg>
+                          Share
+                        </button>
+                      )}
                       <button
                         onClick={() => handleArchiveFolder(folder._id)}
                         className="px-3 py-1.5 text-xs font-medium rounded transition-colors bg-red-500/10 text-red-400 hover:bg-red-500/20"
@@ -855,6 +901,53 @@ function DocumentsContent() {
                     </div>
                   </div>
                 )})}
+              </div>
+            </div>
+          )}
+
+          {/* Shared With Me Section - show at root level only */}
+          {!showArchived && !currentFolderId && sharedFoldersWithMe && sharedFoldersWithMe.length > 0 && (
+            <div className="mb-6">
+              <h2 className={`text-sm font-semibold mb-3 flex items-center gap-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                </svg>
+                Shared With Me
+              </h2>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {sharedFoldersWithMe.map((folder) => (
+                  <div
+                    key={folder._id}
+                    onClick={() => handleOpenFolder(folder as NonNullable<typeof folders>[0], true)}
+                    className={`border rounded-xl p-4 cursor-pointer transition-all hover:scale-[1.02] ${
+                      isDark
+                        ? "bg-slate-800/50 border-slate-700 hover:border-cyan-500/50"
+                        : "bg-white border-gray-200 shadow-sm hover:border-blue-500/50"
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={`text-2xl p-2 rounded-lg ${isDark ? "bg-cyan-500/20" : "bg-blue-100"}`}>
+                        <svg className="w-6 h-6 text-cyan-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                        </svg>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className={`font-semibold truncate flex items-center gap-2 ${isDark ? "text-white" : "text-gray-900"}`}>
+                          {folder.name}
+                          <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                          </svg>
+                        </h3>
+                        <p className={`text-xs mt-0.5 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                          {folder.documentCount} document{folder.documentCount !== 1 ? "s" : ""}
+                        </p>
+                        <p className={`text-xs mt-1 ${isDark ? "text-cyan-400/70" : "text-blue-500"}`}>
+                          Shared by {folder.grantedByUserName}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -1554,6 +1647,158 @@ function DocumentsContent() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Folder Sharing Modal */}
+        {showShareFolderModal && shareFolderId && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className={`border rounded-xl p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200"}`}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className={`text-xl font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  Share Protected Folder
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowShareFolderModal(false);
+                    setShareFolderId(null);
+                    setSelectedUserToShare(null);
+                  }}
+                  className={`p-2 rounded-lg transition-colors ${isDark ? "hover:bg-slate-700 text-slate-400" : "hover:bg-gray-100 text-gray-500"}`}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className={`flex items-center gap-3 p-3 rounded-lg mb-4 ${isDark ? "bg-slate-700/50" : "bg-gray-50"}`}>
+                <svg className="w-8 h-8 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                <div>
+                  <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                    {folders?.find(f => f._id === shareFolderId)?.name || "Protected Folder"}
+                  </p>
+                  <p className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    Grant users access without needing the password
+                  </p>
+                </div>
+              </div>
+
+              {/* Grant Access Section */}
+              <div className="mb-6">
+                <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                  Add User
+                </label>
+                <div className="flex gap-2">
+                  <select
+                    value={selectedUserToShare || ""}
+                    onChange={(e) => setSelectedUserToShare(e.target.value as Id<"users"> | null)}
+                    className={`flex-1 px-4 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                  >
+                    <option value="">Select a user...</option>
+                    {usersForSharing
+                      ?.filter(u => u._id !== user?._id && !folderAccessGrants?.some(g => g.grantedToUserId === u._id))
+                      .map(u => (
+                        <option key={u._id} value={u._id}>
+                          {u.name} ({u.email})
+                        </option>
+                      ))
+                    }
+                  </select>
+                  <button
+                    onClick={async () => {
+                      if (!selectedUserToShare || !user) return;
+                      setSharingInProgress(true);
+                      try {
+                        const selectedUser = usersForSharing?.find(u => u._id === selectedUserToShare);
+                        await grantFolderAccess({
+                          folderId: shareFolderId,
+                          grantedToUserId: selectedUserToShare,
+                          grantedToUserName: selectedUser?.name || "User",
+                          grantedByUserId: user._id,
+                          grantedByUserName: user.name,
+                        });
+                        setSelectedUserToShare(null);
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : "Failed to grant access");
+                      } finally {
+                        setSharingInProgress(false);
+                      }
+                    }}
+                    disabled={!selectedUserToShare || sharingInProgress}
+                    className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 ${isDark ? "bg-cyan-500 text-white hover:bg-cyan-600" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+                  >
+                    {sharingInProgress ? "..." : "Add"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Current Access Grants */}
+              <div>
+                <h3 className={`text-sm font-medium mb-3 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                  Users with Access
+                </h3>
+                {folderAccessGrants && folderAccessGrants.length > 0 ? (
+                  <div className="space-y-2">
+                    {folderAccessGrants.map(grant => (
+                      <div
+                        key={grant._id}
+                        className={`flex items-center justify-between p-3 rounded-lg ${isDark ? "bg-slate-700/50" : "bg-gray-50"}`}
+                      >
+                        <div>
+                          <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                            {grant.grantedToUserName}
+                          </p>
+                          <p className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                            Shared by {grant.grantedByUserName} · {new Date(grant.grantedAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            if (!user) return;
+                            setSharingInProgress(true);
+                            try {
+                              await revokeFolderAccess({
+                                grantId: grant._id,
+                                revokedByUserId: user._id,
+                              });
+                            } catch (err) {
+                              setError(err instanceof Error ? err.message : "Failed to revoke access");
+                            } finally {
+                              setSharingInProgress(false);
+                            }
+                          }}
+                          disabled={sharingInProgress}
+                          className="px-3 py-1.5 text-xs font-medium rounded transition-colors bg-red-500/10 text-red-400 hover:bg-red-500/20 disabled:opacity-50"
+                        >
+                          Revoke
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className={`text-center py-6 border rounded-lg ${isDark ? "border-slate-700 text-slate-500" : "border-gray-200 text-gray-400"}`}>
+                    <svg className="w-8 h-8 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                    <p className="text-sm">No users have been granted access</p>
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={() => {
+                  setShowShareFolderModal(false);
+                  setShareFolderId(null);
+                  setSelectedUserToShare(null);
+                }}
+                className={`w-full mt-6 px-4 py-3 font-medium rounded-lg transition-colors ${isDark ? "bg-slate-700 text-white hover:bg-slate-600" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+              >
+                Done
+              </button>
             </div>
           </div>
         )}

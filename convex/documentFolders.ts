@@ -445,12 +445,13 @@ export const verifyPassword = action({
   },
 });
 
-// Get documents from protected folder (requires password verification, super_admin bypasses)
+// Get documents from protected folder (requires password verification, super_admin bypasses, or has access grant)
 export const getProtectedDocuments = action({
   args: {
     folderId: v.id("documentFolders"),
     password: v.string(),
     isSuperAdmin: v.optional(v.boolean()), // Super admin can bypass password
+    userId: v.optional(v.id("users")), // To check access grants
   },
   handler: async (ctx, args): Promise<{ success: boolean; error?: string; documents?: unknown[] }> => {
     const folder = await ctx.runQuery(api.documentFolders.getFolderWithPassword, {
@@ -461,8 +462,18 @@ export const getProtectedDocuments = action({
       return { success: false, error: "Folder not found" };
     }
 
-    // Super admin bypasses password verification
-    if (folder.passwordHash && args.password && !args.isSuperAdmin) {
+    // Check if user has been granted access (bypasses password)
+    let hasGrantedAccess = false;
+    if (args.userId && folder.passwordHash) {
+      const accessCheck = await ctx.runQuery(api.documentFolders.checkUserAccess, {
+        folderId: args.folderId,
+        userId: args.userId,
+      });
+      hasGrantedAccess = accessCheck.hasAccess;
+    }
+
+    // Super admin or granted access bypasses password verification
+    if (folder.passwordHash && args.password && !args.isSuperAdmin && !hasGrantedAccess) {
       const valid = await verifyPasswordHash(args.password, folder.passwordHash);
       if (!valid) {
         return { success: false, error: "Invalid password" };
@@ -475,5 +486,163 @@ export const getProtectedDocuments = action({
     });
 
     return { success: true, documents };
+  },
+});
+
+// ============ FOLDER SHARING ============
+
+// Get all access grants for a folder
+export const getFolderAccessGrants = query({
+  args: { folderId: v.id("documentFolders") },
+  handler: async (ctx, args) => {
+    const grants = await ctx.db
+      .query("folderAccessGrants")
+      .withIndex("by_folder", (q) => q.eq("folderId", args.folderId))
+      .collect();
+
+    // Filter out revoked grants and return active ones
+    return grants.filter((g) => !g.isRevoked);
+  },
+});
+
+// Check if a user has access to a folder (via grant)
+export const checkUserAccess = query({
+  args: {
+    folderId: v.id("documentFolders"),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const grants = await ctx.db
+      .query("folderAccessGrants")
+      .withIndex("by_folder_user", (q) =>
+        q.eq("folderId", args.folderId).eq("grantedToUserId", args.userId)
+      )
+      .collect();
+
+    // Check for active, non-expired grant
+    const now = Date.now();
+    const activeGrant = grants.find(
+      (g) => !g.isRevoked && (!g.expiresAt || g.expiresAt > now)
+    );
+
+    return { hasAccess: !!activeGrant, grant: activeGrant || null };
+  },
+});
+
+// Grant access to a folder
+export const grantAccess = mutation({
+  args: {
+    folderId: v.id("documentFolders"),
+    grantedToUserId: v.id("users"),
+    grantedToUserName: v.string(),
+    grantedByUserId: v.id("users"),
+    grantedByUserName: v.string(),
+    expiresAt: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    // Check if grant already exists
+    const existing = await ctx.db
+      .query("folderAccessGrants")
+      .withIndex("by_folder_user", (q) =>
+        q.eq("folderId", args.folderId).eq("grantedToUserId", args.grantedToUserId)
+      )
+      .filter((q) => q.eq(q.field("isRevoked"), false))
+      .first();
+
+    if (existing) {
+      // Update existing grant
+      await ctx.db.patch(existing._id, {
+        expiresAt: args.expiresAt,
+        grantedAt: Date.now(),
+        grantedByUserId: args.grantedByUserId,
+        grantedByUserName: args.grantedByUserName,
+      });
+      return existing._id;
+    }
+
+    // Create new grant
+    return await ctx.db.insert("folderAccessGrants", {
+      folderId: args.folderId,
+      grantedToUserId: args.grantedToUserId,
+      grantedToUserName: args.grantedToUserName,
+      grantedByUserId: args.grantedByUserId,
+      grantedByUserName: args.grantedByUserName,
+      grantedAt: Date.now(),
+      expiresAt: args.expiresAt,
+      isRevoked: false,
+    });
+  },
+});
+
+// Revoke access to a folder
+export const revokeAccess = mutation({
+  args: {
+    grantId: v.id("folderAccessGrants"),
+    revokedByUserId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.grantId, {
+      isRevoked: true,
+      revokedAt: Date.now(),
+      revokedByUserId: args.revokedByUserId,
+    });
+  },
+});
+
+// Get all folders shared with a user
+export const getSharedFolders = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const grants = await ctx.db
+      .query("folderAccessGrants")
+      .withIndex("by_user", (q) => q.eq("grantedToUserId", args.userId))
+      .filter((q) => q.eq(q.field("isRevoked"), false))
+      .collect();
+
+    // Get folder details for each grant
+    const now = Date.now();
+    const sharedFolders = await Promise.all(
+      grants
+        .filter((g) => !g.expiresAt || g.expiresAt > now)
+        .map(async (grant) => {
+          const folder = await ctx.db.get(grant.folderId);
+          if (!folder || !folder.isActive) return null;
+
+          const docs = await ctx.db
+            .query("documents")
+            .withIndex("by_folder", (q) => q.eq("folderId", folder._id))
+            .filter((q) => q.eq(q.field("isActive"), true))
+            .collect();
+
+          return {
+            ...folder,
+            documentCount: docs.length,
+            isProtected: !!folder.passwordHash,
+            grantedAt: grant.grantedAt,
+            grantedByUserName: grant.grantedByUserName,
+            expiresAt: grant.expiresAt,
+          };
+        })
+    );
+
+    return sharedFolders.filter(Boolean);
+  },
+});
+
+// Get all users for sharing dropdown
+export const getUsersForSharing = query({
+  args: {},
+  handler: async (ctx) => {
+    const users = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("isActive"), true))
+      .collect();
+
+    return users.map((u) => ({
+      _id: u._id,
+      name: u.name,
+      email: u.email,
+      role: u.role,
+    }));
   },
 });
