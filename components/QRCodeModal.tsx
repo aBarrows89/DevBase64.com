@@ -27,7 +27,7 @@ export default function QRCodeModal({
   if (!isOpen) return null;
 
   // Build the URL for the safety check page
-  const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://ie-central.com";
+  const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://iecentral.com";
   const safetyCheckUrl = `${baseUrl}/safety-check/${equipmentId}`;
 
   const handlePrint = () => {

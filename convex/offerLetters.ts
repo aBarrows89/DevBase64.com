@@ -509,7 +509,7 @@ export const generateOfferHtml = query({
 </head>
 <body>
   <div class="header">
-    <img src="https://ietires.com/logo.gif" alt="Import Export Tire Co" class="logo">
+    <img src="https://iecentral.com/logo.gif" alt="Import Export Tire Co" class="logo">
     <h2>EMPLOYMENT OFFER LETTER</h2>
   </div>
 
