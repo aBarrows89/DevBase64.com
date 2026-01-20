@@ -237,6 +237,9 @@ export default function Sidebar() {
               className="h-10 w-auto"
               priority
             />
+            <span className={`text-[10px] font-semibold tracking-wider px-1.5 py-0.5 rounded ${isDark ? "bg-cyan-500/20 text-cyan-400" : "bg-cyan-100 text-cyan-700"}`}>
+              BETA
+            </span>
           </div>
           {/* Close button for mobile */}
           <button
@@ -852,7 +855,7 @@ export function MobileHeader() {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
         </svg>
       </button>
-      <div className="flex-1">
+      <div className="flex-1 flex items-center gap-2">
         <Image
           src="/logo.gif"
           alt="Import Export Tire Company"
@@ -860,6 +863,9 @@ export function MobileHeader() {
           height={28}
           className="h-7 w-auto"
         />
+        <span className={`text-[9px] font-semibold tracking-wider px-1 py-0.5 rounded ${isDark ? "bg-cyan-500/20 text-cyan-400" : "bg-cyan-100 text-cyan-700"}`}>
+          BETA
+        </span>
       </div>
       {/* Notification bell for mobile */}
       <Link
