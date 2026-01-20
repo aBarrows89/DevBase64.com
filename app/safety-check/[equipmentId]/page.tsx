@@ -194,6 +194,8 @@ function SafetyCheckContent() {
         <div className="text-white text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500 mx-auto mb-4"></div>
           <p>Loading checklist...</p>
+          <p className="text-xs text-slate-500 mt-2">ID: {equipmentId}</p>
+          <p className="text-xs text-slate-500">DB: {process.env.NEXT_PUBLIC_CONVEX_URL}</p>
         </div>
       </div>
     );
