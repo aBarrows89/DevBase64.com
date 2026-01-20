@@ -915,10 +915,10 @@ function DocumentsContent() {
                 Shared With Me
               </h2>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                {sharedFoldersWithMe.map((folder) => (
+                {sharedFoldersWithMe.filter((f): f is NonNullable<typeof f> => f !== null).map((folder) => (
                   <div
                     key={folder._id}
-                    onClick={() => handleOpenFolder(folder as NonNullable<typeof folders>[0], true)}
+                    onClick={() => handleOpenFolder({ ...folder, subfolderCount: 0 } as NonNullable<typeof folders>[0], true)}
                     className={`border rounded-xl p-4 cursor-pointer transition-all hover:scale-[1.02] ${
                       isDark
                         ? "bg-slate-800/50 border-slate-700 hover:border-cyan-500/50"
