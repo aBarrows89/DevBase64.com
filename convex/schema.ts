@@ -1021,6 +1021,7 @@ export default defineSchema({
     name: v.string(),
     description: v.optional(v.string()),
     passwordHash: v.optional(v.string()), // Optional - null = unprotected, set = protected
+    parentFolderId: v.optional(v.id("documentFolders")), // For nested folders
     createdBy: v.id("users"),
     createdByName: v.string(),
     isActive: v.boolean(),
@@ -1028,7 +1029,8 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_active", ["isActive"])
-    .index("by_created", ["createdAt"]),
+    .index("by_created", ["createdAt"])
+    .index("by_parent", ["parentFolderId"]),
 
   // ============ HOLIDAYS & SCHEDULE OVERRIDES ============
   // Global holidays and schedule overrides (prevents NCNS triggers)

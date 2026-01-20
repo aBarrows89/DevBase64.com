@@ -46,8 +46,8 @@ function DocumentsContent() {
   const togglePublic = useMutation(api.documents.togglePublic);
 
   // Folder APIs
-  const folders = useQuery(api.documentFolders.getAll);
   const createFolder = useMutation(api.documentFolders.create);
+  const moveFolder = useMutation(api.documentFolders.moveFolder);
   const updateFolder = useMutation(api.documentFolders.update);
   const archiveFolder = useMutation(api.documentFolders.archive);
   const setFolderPasswordMutation = useMutation(api.documentFolders.setPassword);
@@ -93,6 +93,11 @@ function DocumentsContent() {
   const [folderDocuments, setFolderDocuments] = useState<NonNullable<typeof documents> | null>(null);
   const [loadingFolderDocs, setLoadingFolderDocs] = useState(false);
 
+  // Drag and drop state
+  const [draggedDocId, setDraggedDocId] = useState<Id<"documents"> | null>(null);
+  const [draggedFolderId, setDraggedFolderId] = useState<Id<"documentFolders"> | null>(null);
+  const [dropTargetFolderId, setDropTargetFolderId] = useState<Id<"documentFolders"> | null>(null);
+
   // Load unlocked folders from sessionStorage on mount
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -117,8 +122,16 @@ function DocumentsContent() {
     }
   };
 
+  // Get folders for current level (root or inside a folder)
+  const folders = useQuery(api.documentFolders.getAll, {
+    parentFolderId: currentFolderId ?? null,
+  });
+
   // Get current folder info
-  const currentFolder = currentFolderId ? folders?.find(f => f._id === currentFolderId) : null;
+  const currentFolder = useQuery(
+    api.documentFolders.getById,
+    currentFolderId ? { folderId: currentFolderId } : "skip"
+  );
 
   // Preview modal state
   const [previewDocument, setPreviewDocument] = useState<NonNullable<typeof documents>[0] | null>(null);
@@ -398,6 +411,7 @@ function DocumentsContent() {
         name: folderFormData.name,
         description: folderFormData.description || undefined,
         password: folderFormData.isProtected ? folderFormData.password : undefined,
+        parentFolderId: currentFolderId || undefined,
         createdBy: user._id,
         createdByName: user.name,
       });
@@ -522,6 +536,76 @@ function DocumentsContent() {
     }
   };
 
+  // Drag and drop handlers for documents
+  const handleDragStart = (e: React.DragEvent, docId: Id<"documents">) => {
+    e.dataTransfer.setData("text/plain", `doc:${docId}`);
+    e.dataTransfer.effectAllowed = "move";
+    setDraggedDocId(docId);
+  };
+
+  // Drag handlers for folders
+  const handleFolderDragStart = (e: React.DragEvent, folderId: Id<"documentFolders">) => {
+    e.dataTransfer.setData("text/plain", `folder:${folderId}`);
+    e.dataTransfer.effectAllowed = "move";
+    setDraggedFolderId(folderId);
+    e.stopPropagation();
+  };
+
+  const handleDragEnd = () => {
+    setDraggedDocId(null);
+    setDraggedFolderId(null);
+    setDropTargetFolderId(null);
+  };
+
+  const handleFolderDragOver = (e: React.DragEvent, folderId: Id<"documentFolders">) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    // Don't allow dropping a folder on itself
+    if (draggedFolderId !== folderId) {
+      setDropTargetFolderId(folderId);
+    }
+  };
+
+  const handleFolderDragLeave = () => {
+    setDropTargetFolderId(null);
+  };
+
+  const handleFolderDrop = async (e: React.DragEvent, targetFolderId: Id<"documentFolders">) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const data = e.dataTransfer.getData("text/plain");
+
+    if (data.startsWith("doc:")) {
+      // Moving a document
+      const docId = data.replace("doc:", "") as Id<"documents">;
+      try {
+        await moveDocumentToFolder({
+          documentId: docId,
+          folderId: targetFolderId,
+        });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to move document");
+      }
+    } else if (data.startsWith("folder:")) {
+      // Moving a folder
+      const folderId = data.replace("folder:", "") as Id<"documentFolders">;
+      if (folderId !== targetFolderId) {
+        try {
+          await moveFolder({
+            folderId: folderId,
+            parentFolderId: targetFolderId,
+          });
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Failed to move folder");
+        }
+      }
+    }
+
+    setDraggedDocId(null);
+    setDraggedFolderId(null);
+    setDropTargetFolderId(null);
+  };
+
   // Use archived, folder, or root documents based on view
   const sourceDocuments = showArchived
     ? archivedDocuments
@@ -621,7 +705,7 @@ function DocumentsContent() {
                   )}
                 </button>
               )}
-              {!showArchived && !currentFolderId && (
+              {!showArchived && (
                 <button
                   onClick={() => {
                     setShowFolderModal(true);
@@ -633,7 +717,7 @@ function DocumentsContent() {
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
                   </svg>
-                  <span className="hidden sm:inline">New Folder</span>
+                  <span className="hidden sm:inline">{currentFolderId ? "New Subfolder" : "New Folder"}</span>
                 </button>
               )}
               {!showArchived && (
@@ -697,21 +781,35 @@ function DocumentsContent() {
             )}
           </div>
 
-          {/* Folders Section - Only show at root level */}
-          {!currentFolderId && !showArchived && folders && folders.length > 0 && (
+          {/* Folders Section - Show at any level (supports nested folders) */}
+          {!showArchived && folders && folders.length > 0 && (
             <div className="mb-6">
               <h2 className={`text-sm font-semibold mb-3 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                 Folders
               </h2>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                {folders.map((folder) => (
+                {folders.map((folder) => {
+                  const isDraggingThisFolder = draggedFolderId === folder._id;
+                  return (
                   <div
                     key={folder._id}
+                    draggable
+                    onDragStart={(e) => handleFolderDragStart(e, folder._id)}
+                    onDragEnd={handleDragEnd}
                     onClick={() => handleOpenFolder(folder)}
+                    onDragOver={(e) => handleFolderDragOver(e, folder._id)}
+                    onDragLeave={handleFolderDragLeave}
+                    onDrop={(e) => handleFolderDrop(e, folder._id)}
                     className={`border rounded-xl p-4 cursor-pointer transition-all hover:scale-[1.02] ${
-                      isDark
-                        ? "bg-slate-800/50 border-slate-700 hover:border-cyan-500/50"
-                        : "bg-white border-gray-200 shadow-sm hover:border-blue-500/50"
+                      isDraggingThisFolder
+                        ? "opacity-50 scale-95"
+                        : dropTargetFolderId === folder._id
+                          ? isDark
+                            ? "bg-cyan-500/20 border-cyan-500 scale-[1.02]"
+                            : "bg-blue-50 border-blue-500 scale-[1.02]"
+                          : isDark
+                            ? "bg-slate-800/50 border-slate-700 hover:border-cyan-500/50"
+                            : "bg-white border-gray-200 shadow-sm hover:border-blue-500/50"
                     }`}
                   >
                     <div className="flex items-start gap-3">
@@ -756,7 +854,7 @@ function DocumentsContent() {
                       </button>
                     </div>
                   </div>
-                ))}
+                )})}
               </div>
             </div>
           )}
@@ -818,10 +916,20 @@ function DocumentsContent() {
               {filteredDocuments?.map((doc) => {
                 const category = CATEGORIES.find((c) => c.value === doc.category);
                 const previewable = canPreview(doc.fileType);
+                const isDragging = draggedDocId === doc._id;
                 return (
                   <div
                     key={doc._id}
-                    className={`border rounded-xl p-4 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"} ${previewable ? "cursor-pointer hover:border-cyan-500/50 transition-colors" : ""}`}
+                    draggable={!currentFolderId && !showArchived}
+                    onDragStart={(e) => handleDragStart(e, doc._id)}
+                    onDragEnd={handleDragEnd}
+                    className={`border rounded-xl p-4 transition-all ${
+                      isDragging
+                        ? "opacity-50 scale-95"
+                        : ""
+                    } ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"} ${
+                      previewable ? "cursor-pointer hover:border-cyan-500/50" : ""
+                    } ${!currentFolderId && !showArchived ? "cursor-grab active:cursor-grabbing" : ""}`}
                     onClick={previewable ? () => handlePreview(doc) : undefined}
                   >
                     <div className="flex items-start gap-3">

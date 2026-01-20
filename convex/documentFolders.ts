@@ -103,26 +103,50 @@ async function verifyPasswordHash(
 // ============ QUERIES ============
 
 // Get all active folders (metadata only, no documents)
+// Optionally filter by parentFolderId (null = root folders)
 export const getAll = query({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    parentFolderId: v.optional(v.union(v.id("documentFolders"), v.null())),
+  },
+  handler: async (ctx, args) => {
     const folders = await ctx.db
       .query("documentFolders")
       .withIndex("by_active", (q) => q.eq("isActive", true))
       .order("desc")
       .collect();
 
-    // Get document counts for each folder
+    // Filter by parent folder
+    const filteredFolders = folders.filter((f) => {
+      if (args.parentFolderId === undefined) {
+        // Return all folders
+        return true;
+      } else if (args.parentFolderId === null) {
+        // Return only root folders (no parent)
+        return !f.parentFolderId;
+      } else {
+        // Return folders with specific parent
+        return f.parentFolderId === args.parentFolderId;
+      }
+    });
+
+    // Get document counts and subfolder counts for each folder
     const foldersWithCounts = await Promise.all(
-      folders.map(async (folder) => {
+      filteredFolders.map(async (folder) => {
         const docs = await ctx.db
           .query("documents")
           .withIndex("by_folder", (q) => q.eq("folderId", folder._id))
           .filter((q) => q.eq(q.field("isActive"), true))
           .collect();
+
+        // Count subfolders
+        const subfolders = folders.filter(
+          (f) => f.parentFolderId === folder._id && f.isActive
+        );
+
         return {
           ...folder,
           documentCount: docs.length,
+          subfolderCount: subfolders.length,
           isProtected: !!folder.passwordHash,
         };
       })
@@ -186,6 +210,7 @@ export const create = mutation({
     name: v.string(),
     description: v.optional(v.string()),
     password: v.optional(v.string()),
+    parentFolderId: v.optional(v.id("documentFolders")),
     createdBy: v.id("users"),
     createdByName: v.string(),
   },
@@ -201,6 +226,7 @@ export const create = mutation({
       name: args.name,
       description: args.description,
       passwordHash,
+      parentFolderId: args.parentFolderId,
       createdBy: args.createdBy,
       createdByName: args.createdByName,
       isActive: true,
@@ -271,10 +297,32 @@ export const removePassword = mutation({
   },
 });
 
-// Archive a folder (soft delete)
+// Archive a folder (soft delete) - only if empty
 export const archive = mutation({
   args: { folderId: v.id("documentFolders") },
   handler: async (ctx, args) => {
+    // Check if folder has documents
+    const docs = await ctx.db
+      .query("documents")
+      .withIndex("by_folder", (q) => q.eq("folderId", args.folderId))
+      .filter((q) => q.eq(q.field("isActive"), true))
+      .collect();
+
+    if (docs.length > 0) {
+      throw new Error("Cannot archive folder with documents. Move or delete documents first.");
+    }
+
+    // Check if folder has subfolders
+    const subfolders = await ctx.db
+      .query("documentFolders")
+      .withIndex("by_parent", (q) => q.eq("parentFolderId", args.folderId))
+      .filter((q) => q.eq(q.field("isActive"), true))
+      .collect();
+
+    if (subfolders.length > 0) {
+      throw new Error("Cannot archive folder with subfolders. Move or delete subfolders first.");
+    }
+
     await ctx.db.patch(args.folderId, {
       isActive: false,
       updatedAt: Date.now(),
@@ -310,6 +358,36 @@ export const moveDocument = mutation({
   handler: async (ctx, args) => {
     await ctx.db.patch(args.documentId, {
       folderId: args.folderId ?? undefined,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+// Move a folder into another folder (nested folders)
+export const moveFolder = mutation({
+  args: {
+    folderId: v.id("documentFolders"),
+    parentFolderId: v.union(v.id("documentFolders"), v.null()),
+  },
+  handler: async (ctx, args) => {
+    // Prevent moving a folder into itself
+    if (args.folderId === args.parentFolderId) {
+      throw new Error("Cannot move a folder into itself");
+    }
+
+    // Prevent circular references - check if target is a descendant
+    if (args.parentFolderId) {
+      let current = await ctx.db.get(args.parentFolderId);
+      while (current?.parentFolderId) {
+        if (current.parentFolderId === args.folderId) {
+          throw new Error("Cannot move a folder into its own descendant");
+        }
+        current = await ctx.db.get(current.parentFolderId);
+      }
+    }
+
+    await ctx.db.patch(args.folderId, {
+      parentFolderId: args.parentFolderId ?? undefined,
       updatedAt: Date.now(),
     });
   },
