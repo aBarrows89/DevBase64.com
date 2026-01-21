@@ -4,7 +4,7 @@ import { Id } from "./_generated/dataModel";
 
 // ============ QUERIES ============
 
-// Get all personnel (with optional filters)
+// Get all personnel (with optional filters) - Updated with location filtering
 export const list = query({
   args: {
     department: v.optional(v.string()),
