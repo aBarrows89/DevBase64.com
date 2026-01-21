@@ -443,7 +443,13 @@ function ShiftsContent() {
   // Handle create default departments
   const handleCreateDefaultDepartments = async () => {
     if (!user) return;
+    // Get existing department names to avoid duplicates
+    const existingDepartments = new Set(shifts.map(s => s.department));
+
     for (const dept of DEFAULT_DEPARTMENTS) {
+      // Skip if department already exists
+      if (existingDepartments.has(dept)) continue;
+
       await createShift({
         date: selectedDate,
         name: dept,

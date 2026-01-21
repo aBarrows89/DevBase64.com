@@ -11,22 +11,33 @@ export const listByDate = query({
     locationId: v.optional(v.id("locations")),
   },
   handler: async (ctx, args) => {
-    let shifts;
+    // Get all shifts for the date first
+    const allShifts = await ctx.db
+      .query("shifts")
+      .withIndex("by_date", (q) => q.eq("date", args.date))
+      .collect();
 
+    let shifts;
     if (args.locationId) {
-      // Filter by date and location
-      shifts = await ctx.db
-        .query("shifts")
-        .withIndex("by_date_location", (q) =>
-          q.eq("date", args.date).eq("locationId", args.locationId)
-        )
-        .collect();
+      // Filter by location, but also include shifts without locationId (backwards compatibility)
+      const filtered = allShifts.filter(
+        (s) => s.locationId === args.locationId || !s.locationId
+      );
+
+      // Deduplicate by department - prefer shifts WITH locationId over those without
+      const deptMap = new Map<string, typeof filtered[0]>();
+      for (const shift of filtered) {
+        const existing = deptMap.get(shift.department);
+        if (!existing) {
+          deptMap.set(shift.department, shift);
+        } else if (!existing.locationId && shift.locationId) {
+          // Replace the one without locationId with the one that has it
+          deptMap.set(shift.department, shift);
+        }
+      }
+      shifts = Array.from(deptMap.values());
     } else {
-      // Get all shifts for the date
-      shifts = await ctx.db
-        .query("shifts")
-        .withIndex("by_date", (q) => q.eq("date", args.date))
-        .collect();
+      shifts = allShifts;
     }
 
     // Enrich with personnel names and lead info
