@@ -167,6 +167,13 @@ function EquipmentContent() {
   const [deleteNumber, setDeleteNumber] = useState("");
   const isSuperuser = user?.role === "super_admin";
 
+  // Equipment status options
+  const EQUIPMENT_STATUS_OPTIONS = [
+    { value: "available", label: "Available" },
+    { value: "inactive", label: "Inactive" },
+    { value: "inoperable", label: "Inoperable" },
+  ];
+
   // Form state
   const [formData, setFormData] = useState({
     number: "",
@@ -177,6 +184,7 @@ function EquipmentContent() {
     purchaseDate: "",
     notes: "",
     conditionNotes: "",
+    status: "available",
   });
 
   // Vehicle form state
@@ -231,6 +239,7 @@ function EquipmentContent() {
             purchaseDate: formData.purchaseDate || undefined,
             notes: formData.notes || undefined,
             conditionNotes: formData.conditionNotes || undefined,
+            status: formData.status || undefined,
             userId: user?._id, // For PIN change tracking
           });
         } else {
@@ -244,6 +253,7 @@ function EquipmentContent() {
             purchaseDate: formData.purchaseDate || undefined,
             notes: formData.notes || undefined,
             conditionNotes: formData.conditionNotes || undefined,
+            status: formData.status || undefined,
             userId: user?._id, // For PIN change tracking
           });
         }
@@ -309,6 +319,7 @@ function EquipmentContent() {
       purchaseDate: "",
       notes: "",
       conditionNotes: "",
+      status: "available",
     });
   };
 
@@ -323,6 +334,7 @@ function EquipmentContent() {
       purchaseDate: item.purchaseDate || "",
       notes: item.notes || "",
       conditionNotes: item.conditionNotes || "",
+      status: item.status || "available",
     });
     setShowNewEquipment(true);
   };
@@ -647,33 +659,45 @@ By signing below, the Employee acknowledges that they have read, understand, and
                 Manage scanners, pickers, and vehicles
               </p>
             </div>
-            {canEditEquipment && (
-              <button
-                onClick={() => {
-                  if (activeTab === "vehicles") {
-                    setShowNewVehicle(true);
-                    setEditingVehicleId(null);
-                    setVehicleFormData({
-                      vin: "", plateNumber: "", year: "", make: "", model: "", trim: "",
-                      color: "", fuelType: "", locationId: "", currentMileage: "",
-                      insurancePolicyNumber: "", insuranceProvider: "", insuranceExpirationDate: "",
-                      registrationExpirationDate: "", registrationState: "", purchaseDate: "",
-                      purchasePrice: "", purchasedFrom: "", notes: "",
-                    });
-                  } else {
-                    setShowNewEquipment(true);
-                    setEditingId(null);
-                    resetForm();
-                  }
-                }}
-                className={`px-3 sm:px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${isDark ? "bg-cyan-500 text-white hover:bg-cyan-600" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+            <div className="flex items-center gap-2">
+              {/* View Equipment Report Button */}
+              <a
+                href={`/reports?type=equipment&equipmentType=${activeTab === "scanners" ? "Scanner" : activeTab === "pickers" ? "Picker" : activeTab === "vehicles" ? "Vehicle" : "all"}`}
+                className={`px-3 sm:px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${isDark ? "bg-slate-700 text-white hover:bg-slate-600" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                <span className="hidden sm:inline">Add {activeTab === "scanners" ? "Scanner" : activeTab === "pickers" ? "Picker" : activeTab === "computers" ? "Computer" : "Vehicle"}</span>
-              </button>
-            )}
+                <span className="hidden sm:inline">View Report</span>
+              </a>
+              {canEditEquipment && (
+                <button
+                  onClick={() => {
+                    if (activeTab === "vehicles") {
+                      setShowNewVehicle(true);
+                      setEditingVehicleId(null);
+                      setVehicleFormData({
+                        vin: "", plateNumber: "", year: "", make: "", model: "", trim: "",
+                        color: "", fuelType: "", locationId: "", currentMileage: "",
+                        insurancePolicyNumber: "", insuranceProvider: "", insuranceExpirationDate: "",
+                        registrationExpirationDate: "", registrationState: "", purchaseDate: "",
+                        purchasePrice: "", purchasedFrom: "", notes: "",
+                      });
+                    } else {
+                      setShowNewEquipment(true);
+                      setEditingId(null);
+                      resetForm();
+                    }
+                  }}
+                  className={`px-3 sm:px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${isDark ? "bg-cyan-500 text-white hover:bg-cyan-600" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  <span className="hidden sm:inline">Add {activeTab === "scanners" ? "Scanner" : activeTab === "pickers" ? "Picker" : activeTab === "computers" ? "Computer" : "Vehicle"}</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Tabs and Filters */}
@@ -1333,6 +1357,23 @@ By signing below, the Employee acknowledges that they have read, understand, and
                     placeholder="Current condition (e.g., screen scratched, battery weak)"
                   />
                 </div>
+
+                {editingId && (
+                  <div>
+                    <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                      Status
+                    </label>
+                    <select
+                      value={formData.status}
+                      onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                      className={`w-full px-4 py-3 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                    >
+                      {EQUIPMENT_STATUS_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 <div className="flex gap-3 pt-4">
                   <button

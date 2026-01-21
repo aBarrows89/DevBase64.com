@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import Protected from "../protected";
 import Sidebar, { MobileHeader } from "@/components/Sidebar";
 import { useTheme } from "../theme-context";
@@ -40,12 +41,26 @@ type ReportType = "personnel" | "applications" | "hiring" | "attendance" | "equi
 function ReportsContent() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
+  const searchParams = useSearchParams();
 
   const [activeReport, setActiveReport] = useState<ReportType>("personnel");
   const [appStatus, setAppStatus] = useState("all");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [equipmentTypeFilter, setEquipmentTypeFilter] = useState("all");
+
+  // Read URL params on mount
+  useEffect(() => {
+    const type = searchParams.get("type");
+    const equipmentType = searchParams.get("equipmentType");
+
+    if (type && ["personnel", "applications", "hiring", "attendance", "equipment"].includes(type)) {
+      setActiveReport(type as ReportType);
+    }
+    if (equipmentType) {
+      setEquipmentTypeFilter(equipmentType);
+    }
+  }, [searchParams]);
 
   // Queries
   const personnel = useQuery(api.reports.getPersonnelExport);
@@ -543,6 +558,8 @@ function ReportsContent() {
                             <span className={`px-2 py-0.5 text-xs rounded-full ${
                               eq.status === "available" ? "bg-green-500/20 text-green-400" :
                               eq.status === "assigned" ? "bg-cyan-500/20 text-cyan-400" :
+                              eq.status === "inactive" ? "bg-slate-500/20 text-slate-400" :
+                              eq.status === "inoperable" ? "bg-red-500/20 text-red-400" :
                               "bg-amber-500/20 text-amber-400"
                             }`}>
                               {eq.status}
