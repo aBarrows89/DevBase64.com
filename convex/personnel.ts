@@ -9,6 +9,8 @@ export const list = query({
   args: {
     department: v.optional(v.string()),
     status: v.optional(v.string()),
+    locationId: v.optional(v.id("locations")),
+    locationIds: v.optional(v.array(v.id("locations"))),
   },
   handler: async (ctx, args) => {
     let personnel;
@@ -25,6 +27,16 @@ export const list = query({
         .collect();
     } else {
       personnel = await ctx.db.query("personnel").collect();
+    }
+
+    // Filter by single locationId
+    if (args.locationId) {
+      personnel = personnel.filter(p => p.locationId === args.locationId);
+    }
+
+    // Filter by multiple locationIds (for managers with multiple locations)
+    if (args.locationIds && args.locationIds.length > 0) {
+      personnel = personnel.filter(p => p.locationId && args.locationIds!.includes(p.locationId as Id<"locations">));
     }
 
     return personnel.sort((a, b) => a.lastName.localeCompare(b.lastName));

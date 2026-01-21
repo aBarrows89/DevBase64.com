@@ -87,7 +87,16 @@ function ShiftsContent() {
       ? { date: selectedDate, locationId: selectedLocationId }
       : { date: selectedDate }
   ) || [];
-  const activePersonnel = useQuery(api.personnel.list, { status: "active" }) || [];
+  // Get accessible location IDs for the query
+  const accessibleLocationIds = getAccessibleLocationIds();
+
+  // Query personnel filtered by location on the server
+  const activePersonnel = useQuery(
+    api.personnel.list,
+    accessibleLocationIds === "all"
+      ? { status: "active" }
+      : { status: "active", locationIds: accessibleLocationIds }
+  ) || [];
   const locations = useQuery(api.locations.list) || [];
   const templates = useQuery(api.shiftTemplates.list, selectedLocationId ? { locationId: selectedLocationId } : {}) || [];
   const dailyTasks = useQuery(api.shifts.getDailyTasksByDate, { date: selectedDate }) || {};
