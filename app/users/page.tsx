@@ -34,9 +34,13 @@ function UsersContent() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showContactAndyModal, setShowContactAndyModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  // Check if current user is Terry Myers (restricted from adding users initially)
+  const isTerryMyers = currentUser?.email?.toLowerCase() === "terry@ietires.com";
 
   // Form state for new user
   const [newUser, setNewUser] = useState({
@@ -266,7 +270,13 @@ function UsersContent() {
               </p>
             </div>
             <button
-              onClick={() => setShowAddModal(true)}
+              onClick={() => {
+                if (isTerryMyers) {
+                  setShowContactAndyModal(true);
+                } else {
+                  setShowAddModal(true);
+                }
+              }}
               className="px-3 sm:px-4 py-2 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg font-medium transition-colors flex items-center gap-2 whitespace-nowrap flex-shrink-0"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -805,6 +815,29 @@ function UsersContent() {
                 Delete User
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Contact Andy Modal (for Terry Myers) */}
+      {showContactAndyModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 w-full max-w-md text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-cyan-500/20 flex items-center justify-center">
+              <svg className="w-8 h-8 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h2 className="text-xl font-bold text-white mb-3">Need Help Adding Users?</h2>
+            <p className="text-slate-400 mb-6">
+              Please see Andy for help with adding new users for the first time. He&apos;ll walk you through the process.
+            </p>
+            <button
+              onClick={() => setShowContactAndyModal(false)}
+              className="px-6 py-2 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg font-medium transition-colors"
+            >
+              Got It
+            </button>
           </div>
         </div>
       )}
