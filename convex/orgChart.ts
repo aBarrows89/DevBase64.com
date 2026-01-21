@@ -31,7 +31,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     "Full system access",
     "Manage all users & admins",
     "View all locations",
-    "Delete records",
+    "Delete records (approve)",
     "Edit personnel info",
     "Approve time off",
     "Manage announcements",
@@ -46,6 +46,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     "Manage announcements",
     "Moderate chat",
     "Hiring & ATS",
+    "Request deletion",
   ],
   warehouse_director: [
     "Manage users",
