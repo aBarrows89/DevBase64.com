@@ -21,6 +21,10 @@ function EquipmentContent() {
   const isDark = theme === "dark";
   const { user } = useAuth();
 
+  // Warehouse manager has view-only access to equipment
+  const isWarehouseManager = user?.role === "warehouse_manager";
+  const canEditEquipment = !isWarehouseManager;
+
   const [activeTab, setActiveTab] = useState<EquipmentType>("scanners");
   const [selectedLocation, setSelectedLocation] = useState<Id<"locations"> | "all">("all");
   const [showNewEquipment, setShowNewEquipment] = useState(false);
@@ -643,31 +647,33 @@ By signing below, the Employee acknowledges that they have read, understand, and
                 Manage scanners, pickers, and vehicles
               </p>
             </div>
-            <button
-              onClick={() => {
-                if (activeTab === "vehicles") {
-                  setShowNewVehicle(true);
-                  setEditingVehicleId(null);
-                  setVehicleFormData({
-                    vin: "", plateNumber: "", year: "", make: "", model: "", trim: "",
-                    color: "", fuelType: "", locationId: "", currentMileage: "",
-                    insurancePolicyNumber: "", insuranceProvider: "", insuranceExpirationDate: "",
-                    registrationExpirationDate: "", registrationState: "", purchaseDate: "",
-                    purchasePrice: "", purchasedFrom: "", notes: "",
-                  });
-                } else {
-                  setShowNewEquipment(true);
-                  setEditingId(null);
-                  resetForm();
-                }
-              }}
-              className={`px-3 sm:px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${isDark ? "bg-cyan-500 text-white hover:bg-cyan-600" : "bg-blue-600 text-white hover:bg-blue-700"}`}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              <span className="hidden sm:inline">Add {activeTab === "scanners" ? "Scanner" : activeTab === "pickers" ? "Picker" : activeTab === "computers" ? "Computer" : "Vehicle"}</span>
-            </button>
+            {canEditEquipment && (
+              <button
+                onClick={() => {
+                  if (activeTab === "vehicles") {
+                    setShowNewVehicle(true);
+                    setEditingVehicleId(null);
+                    setVehicleFormData({
+                      vin: "", plateNumber: "", year: "", make: "", model: "", trim: "",
+                      color: "", fuelType: "", locationId: "", currentMileage: "",
+                      insurancePolicyNumber: "", insuranceProvider: "", insuranceExpirationDate: "",
+                      registrationExpirationDate: "", registrationState: "", purchaseDate: "",
+                      purchasePrice: "", purchasedFrom: "", notes: "",
+                    });
+                  } else {
+                    setShowNewEquipment(true);
+                    setEditingId(null);
+                    resetForm();
+                  }
+                }}
+                className={`px-3 sm:px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${isDark ? "bg-cyan-500 text-white hover:bg-cyan-600" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                <span className="hidden sm:inline">Add {activeTab === "scanners" ? "Scanner" : activeTab === "pickers" ? "Picker" : activeTab === "computers" ? "Computer" : "Vehicle"}</span>
+              </button>
+            )}
           </div>
 
           {/* Tabs and Filters */}
@@ -1132,13 +1138,15 @@ By signing below, the Employee acknowledges that they have read, understand, and
                       </svg>
                       History
                     </button>
-                    <button
-                      onClick={() => handleEdit(item)}
-                      className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${isDark ? "bg-slate-700 text-slate-300 hover:bg-slate-600" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
-                    >
-                      Edit
-                    </button>
-                    {item.status === "available" && (
+                    {canEditEquipment && (
+                      <button
+                        onClick={() => handleEdit(item)}
+                        className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${isDark ? "bg-slate-700 text-slate-300 hover:bg-slate-600" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+                      >
+                        Edit
+                      </button>
+                    )}
+                    {canEditEquipment && item.status === "available" && (
                       <button
                         onClick={() => openAssignModal(item)}
                         className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${isDark ? "bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30" : "bg-blue-50 text-blue-600 hover:bg-blue-100"}`}
@@ -1146,7 +1154,7 @@ By signing below, the Employee acknowledges that they have read, understand, and
                         Assign
                       </button>
                     )}
-                    {item.status === "assigned" && (
+                    {canEditEquipment && item.status === "assigned" && (
                       <>
                         <button
                           onClick={() => openReassignModal(item)}
@@ -1162,7 +1170,7 @@ By signing below, the Employee acknowledges that they have read, understand, and
                         </button>
                       </>
                     )}
-                    {item.status !== "retired" && (
+                    {canEditEquipment && item.status !== "retired" && (
                       <button
                         onClick={() => openRetireModal(item._id as Id<"scanners"> | Id<"pickers">)}
                         className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${isDark ? "bg-red-500/20 text-red-400 hover:bg-red-500/30" : "bg-red-50 text-red-600 hover:bg-red-100"}`}

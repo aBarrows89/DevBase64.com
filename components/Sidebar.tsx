@@ -189,8 +189,8 @@ export default function Sidebar() {
 
   // Filter nav groups based on permissions
   const filteredNavGroups = NAV_GROUPS.filter((group) => {
-    // Warehouse manager shouldn't see Equipment group or Employee Portal group
-    if (isWarehouseManager && (group.id === "equipment" || group.id === "employee-portal")) return false;
+    // Warehouse manager shouldn't see Employee Portal group (but can see Equipment for view-only)
+    if (isWarehouseManager && group.id === "employee-portal") return false;
     if (!group.requiresPermission) return true;
     if (group.requiresPermission === "viewPersonnel") return canViewPersonnel;
     if (group.requiresPermission === "viewShifts") return canViewShifts;
