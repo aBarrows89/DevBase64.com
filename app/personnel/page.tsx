@@ -29,7 +29,15 @@ function PersonnelContent() {
   const { canViewPersonnel, canManagePersonnel } = useAuth();
   const personnel = useQuery(api.personnel.list, {}) || [];
   const departments = useQuery(api.personnel.getDepartments) || [];
+  const locations = useQuery(api.locations.list) || [];
   const clockStatuses = useQuery(api.timeClock.getAllClockStatuses) || {};
+
+  // Helper to get location name
+  const getLocationName = (locationId: string | undefined) => {
+    if (!locationId) return "—";
+    const location = locations.find(l => l._id === locationId);
+    return location?.name || "—";
+  };
 
   // Helper to get clock status indicator
   const getClockStatusIndicator = (personnelId: string) => {
@@ -215,6 +223,9 @@ function PersonnelContent() {
                       Department
                     </th>
                     <th className={`text-left px-6 py-4 text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                      Location
+                    </th>
+                    <th className={`text-left px-6 py-4 text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                       Status
                     </th>
                     <th className={`text-center px-6 py-4 text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
@@ -253,6 +264,9 @@ function PersonnelContent() {
                       </td>
                       <td className={`px-6 py-4 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
                         {person.department}
+                      </td>
+                      <td className={`px-6 py-4 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                        {getLocationName(person.locationId)}
                       </td>
                       <td className="px-6 py-4">
                         <span
