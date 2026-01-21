@@ -134,7 +134,7 @@ export const create = mutation({
   },
 });
 
-// Update application status
+// Update application status (auto-archives on hired/rejected)
 export const updateStatus = mutation({
   args: {
     applicationId: v.id("applications"),
@@ -142,10 +142,18 @@ export const updateStatus = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const now = Date.now();
+    const shouldArchive = args.status === "hired" || args.status === "rejected";
+
     await ctx.db.patch(args.applicationId, {
       status: args.status,
       notes: args.notes,
-      updatedAt: Date.now(),
+      updatedAt: now,
+      // Auto-archive when hired or rejected
+      ...(shouldArchive && {
+        isArchived: true,
+        archivedAt: now,
+      }),
     });
   },
 });
@@ -1396,7 +1404,7 @@ export const updateResumeFile = mutation({
   },
 });
 
-// Update status with activity logging
+// Update status with activity logging (auto-archives on hired/rejected)
 export const updateStatusWithActivity = mutation({
   args: {
     applicationId: v.id("applications"),
@@ -1411,23 +1419,30 @@ export const updateStatusWithActivity = mutation({
     if (!user) throw new Error("User not found");
 
     const previousStatus = application.status;
+    const now = Date.now();
+    const shouldArchive = args.newStatus === "hired" || args.newStatus === "rejected";
 
-    // Update the status
+    // Update the status (auto-archive on hired/rejected)
     await ctx.db.patch(args.applicationId, {
       status: args.newStatus,
-      updatedAt: Date.now(),
+      updatedAt: now,
+      // Auto-archive when hired or rejected
+      ...(shouldArchive && {
+        isArchived: true,
+        archivedAt: now,
+      }),
     });
 
     // Log the activity
     await ctx.db.insert("applicationActivity", {
       applicationId: args.applicationId,
       type: "status_change",
-      description: `Status changed from ${previousStatus} to ${args.newStatus}`,
+      description: `Status changed from ${previousStatus} to ${args.newStatus}${shouldArchive ? " (auto-archived)" : ""}`,
       previousValue: previousStatus,
       newValue: args.newStatus,
       performedBy: args.userId,
       performedByName: user.name,
-      createdAt: Date.now(),
+      createdAt: now,
     });
 
     return args.applicationId;
@@ -1469,6 +1484,33 @@ export const archiveRejected = mutation({
     const applications = await ctx.db
       .query("applications")
       .withIndex("by_status", (q) => q.eq("status", "rejected"))
+      .collect();
+
+    let archived = 0;
+    const now = Date.now();
+
+    for (const app of applications) {
+      if (!app.isArchived) {
+        await ctx.db.patch(app._id, {
+          isArchived: true,
+          archivedAt: now,
+          updatedAt: now,
+        });
+        archived++;
+      }
+    }
+
+    return { archived, total: applications.length };
+  },
+});
+
+// Archive all hired applications
+export const archiveHired = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const applications = await ctx.db
+      .query("applications")
+      .withIndex("by_status", (q) => q.eq("status", "hired"))
       .collect();
 
     let archived = 0;
