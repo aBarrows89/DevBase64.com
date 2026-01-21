@@ -229,11 +229,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return [];
   };
 
-  // Super admin, warehouse director and warehouse manager - can delete write-ups and attendance records
-  const canDeleteRecords =
-    user?.role === "super_admin" ||
-    user?.role === "warehouse_director" ||
-    user?.role === "warehouse_manager";
+  // Super admin only - can delete write-ups and attendance records
+  const canDeleteRecords = user?.role === "super_admin";
 
   // Edit personnel info (email, phone, etc.) - super_admin, admin, warehouse_director
   const canEditPersonnelInfo =

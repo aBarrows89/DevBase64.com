@@ -51,7 +51,6 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     "Manage users",
     "View all locations",
     "Edit shifts",
-    "Delete records",
     "Edit personnel info",
     "Approve time off",
     "Manage call-offs",
@@ -62,7 +61,6 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     "View assigned locations only",
     "View & manage personnel",
     "Edit shifts (assigned locations)",
-    "Delete records",
     "Manage call-offs",
   ],
   department_manager: [
