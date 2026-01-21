@@ -2,15 +2,37 @@ import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 
-// Get all applications
+// Get all applications (excludes archived by default)
 export const getAll = query({
-  args: {},
-  handler: async (ctx) => {
-    return await ctx.db
+  args: {
+    includeArchived: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const applications = await ctx.db
       .query("applications")
       .withIndex("by_created")
       .order("desc")
       .collect();
+
+    // Filter out archived unless explicitly requested
+    if (!args.includeArchived) {
+      return applications.filter(app => !app.isArchived);
+    }
+    return applications;
+  },
+});
+
+// Get archived applications only
+export const getArchived = query({
+  args: {},
+  handler: async (ctx) => {
+    const applications = await ctx.db
+      .query("applications")
+      .withIndex("by_created")
+      .order("desc")
+      .collect();
+
+    return applications.filter(app => app.isArchived === true);
   },
 });
 
@@ -155,6 +177,8 @@ export const updateAIAnalysis = mutation({
         overallScore: v.number(),
         stabilityScore: v.number(),
         experienceScore: v.number(),
+        graduationYear: v.optional(v.number()),
+        yearsSinceGraduation: v.optional(v.number()),
         employmentHistory: v.array(
           v.object({
             company: v.string(),
@@ -233,6 +257,8 @@ export const submitApplication = mutation({
       overallScore: v.number(),
       stabilityScore: v.number(),
       experienceScore: v.number(),
+      graduationYear: v.optional(v.number()),
+      yearsSinceGraduation: v.optional(v.number()),
       employmentHistory: v.array(v.object({
         company: v.string(),
         title: v.string(),
@@ -1300,15 +1326,22 @@ export const getActivityTimeline = query({
   },
 });
 
-// Get applications grouped by status for Kanban view
+// Get applications grouped by status for Kanban view (excludes archived)
 export const getByStatusGrouped = query({
-  args: {},
-  handler: async (ctx) => {
-    const applications = await ctx.db
+  args: {
+    includeArchived: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const allApplications = await ctx.db
       .query("applications")
       .withIndex("by_created")
       .order("desc")
       .collect();
+
+    // Filter out archived unless explicitly requested
+    const applications = args.includeArchived
+      ? allApplications
+      : allApplications.filter(app => !app.isArchived);
 
     // Group by status
     const grouped: Record<string, typeof applications> = {
@@ -1398,6 +1431,61 @@ export const updateStatusWithActivity = mutation({
     });
 
     return args.applicationId;
+  },
+});
+
+// Archive a single application
+export const archive = mutation({
+  args: {
+    applicationId: v.id("applications"),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.applicationId, {
+      isArchived: true,
+      archivedAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+// Unarchive a single application
+export const unarchive = mutation({
+  args: {
+    applicationId: v.id("applications"),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.applicationId, {
+      isArchived: false,
+      archivedAt: undefined,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+// Archive all rejected applications
+export const archiveRejected = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const applications = await ctx.db
+      .query("applications")
+      .withIndex("by_status", (q) => q.eq("status", "rejected"))
+      .collect();
+
+    let archived = 0;
+    const now = Date.now();
+
+    for (const app of applications) {
+      if (!app.isArchived) {
+        await ctx.db.patch(app._id, {
+          isArchived: true,
+          archivedAt: now,
+          updatedAt: now,
+        });
+        archived++;
+      }
+    }
+
+    return { archived, total: applications.length };
   },
 });
 

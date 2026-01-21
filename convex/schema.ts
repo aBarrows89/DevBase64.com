@@ -164,6 +164,9 @@ export default defineSchema({
         overallScore: v.number(),
         stabilityScore: v.number(),
         experienceScore: v.number(),
+        // Graduation date for career stage scoring
+        graduationYear: v.optional(v.number()),
+        yearsSinceGraduation: v.optional(v.number()),
         employmentHistory: v.array(
           v.object({
             company: v.string(),
@@ -195,6 +198,8 @@ export default defineSchema({
       })
     ),
     status: v.string(), // "new" | "reviewed" | "contacted" | "scheduled" | "interviewed" | "dns" | "hired" | "rejected"
+    isArchived: v.optional(v.boolean()), // For archiving rejected applicants
+    archivedAt: v.optional(v.number()),
     notes: v.optional(v.string()),
     // Scheduled interview info
     scheduledInterviewDate: v.optional(v.string()), // ISO date string (YYYY-MM-DD)

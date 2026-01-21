@@ -48,8 +48,9 @@ function ApplicationsContent() {
   const isDark = theme === "dark";
   const { user } = useAuth();
   const router = useRouter();
-  const applications = useQuery(api.applications.getAll) || [];
-  const groupedApplications = useQuery(api.applications.getByStatusGrouped);
+  const [showArchived, setShowArchived] = useState(false);
+  const applications = useQuery(api.applications.getAll, { includeArchived: showArchived }) || [];
+  const groupedApplications = useQuery(api.applications.getByStatusGrouped, { includeArchived: showArchived });
   const stats = useQuery(api.applications.getStats);
   const recentInterviews = useQuery(api.applications.getRecentlyInterviewed) || [];
   const jobs = useQuery(api.jobs.getAll) || [];
@@ -57,13 +58,16 @@ function ApplicationsContent() {
   const updateStatusWithActivity = useMutation(api.applications.updateStatusWithActivity);
   const updateAppliedJob = useMutation(api.applications.updateAppliedJob);
   const deleteApplication = useMutation(api.applications.remove);
+  const archiveApplication = useMutation(api.applications.archive);
+  const unarchiveApplication = useMutation(api.applications.unarchive);
+  const archiveRejected = useMutation(api.applications.archiveRejected);
 
   const [viewMode, setViewMode] = useState<"table" | "kanban">("table");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState<Id<"applications"> | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [sortBy, setSortBy] = useState<"score" | "position" | "date">("date");
+  const [sortBy, setSortBy] = useState<"score" | "position" | "date" | "status">("date");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [draggedApp, setDraggedApp] = useState<Id<"applications"> | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
@@ -79,7 +83,18 @@ function ApplicationsContent() {
     }
   };
 
-  const handleSort = (column: "score" | "position" | "date") => {
+  // Status order for sorting
+  const STATUS_ORDER: Record<string, number> = {
+    new: 0,
+    reviewed: 1,
+    contacted: 2,
+    scheduled: 3,
+    interviewed: 4,
+    hired: 5,
+    rejected: 6,
+  };
+
+  const handleSort = (column: "score" | "position" | "date" | "status") => {
     if (sortBy === column) {
       setSortOrder(sortOrder === "asc" ? "desc" : "asc");
     } else {
@@ -118,6 +133,10 @@ function ApplicationsContent() {
         comparison = a.appliedJobTitle.localeCompare(b.appliedJobTitle);
       } else if (sortBy === "date") {
         comparison = a.createdAt - b.createdAt;
+      } else if (sortBy === "status") {
+        const statusA = STATUS_ORDER[a.status] ?? 99;
+        const statusB = STATUS_ORDER[b.status] ?? 99;
+        comparison = statusA - statusB;
       }
 
       return sortOrder === "asc" ? comparison : -comparison;
@@ -237,6 +256,37 @@ function ApplicationsContent() {
                   <span className="hidden sm:inline">Kanban</span>
                 </button>
               </div>
+
+              {/* Show Archived Toggle */}
+              <label className={`flex items-center gap-2 cursor-pointer ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                <input
+                  type="checkbox"
+                  checked={showArchived}
+                  onChange={(e) => setShowArchived(e.target.checked)}
+                  className="w-4 h-4 rounded"
+                />
+                <span className="text-xs sm:text-sm hidden sm:inline">Show Archived</span>
+              </label>
+
+              {/* Archive Rejected Button */}
+              <button
+                onClick={async () => {
+                  if (confirm("Archive all rejected applications? They will be hidden from the main view.")) {
+                    const result = await archiveRejected();
+                    alert(`Archived ${result.archived} applications`);
+                  }
+                }}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg font-medium transition-colors text-sm ${
+                  isDark
+                    ? "bg-slate-700 hover:bg-slate-600 text-slate-300"
+                    : "bg-gray-100 hover:bg-gray-200 text-gray-700"
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                </svg>
+                <span className="hidden sm:inline">Archive Rejected</span>
+              </button>
 
               <button
                 onClick={() => router.push("/applications/bulk-upload")}
@@ -786,8 +836,22 @@ function ApplicationsContent() {
                         )}
                       </div>
                     </th>
-                    <th className={`text-left px-6 py-4 text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                      Status
+                    <th
+                      onClick={() => handleSort("status")}
+                      className={`text-left px-6 py-4 text-sm font-medium cursor-pointer select-none transition-colors ${
+                        isDark
+                          ? sortBy === "status" ? "text-cyan-400" : "text-slate-400 hover:text-slate-300"
+                          : sortBy === "status" ? "text-blue-600" : "text-gray-500 hover:text-gray-700"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1">
+                        Status
+                        {sortBy === "status" && (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={sortOrder === "asc" ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"} />
+                          </svg>
+                        )}
+                      </div>
                     </th>
                     <th
                       onClick={() => handleSort("date")}
@@ -820,9 +884,16 @@ function ApplicationsContent() {
                     >
                       <td className="px-6 py-4">
                         <div>
-                          <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
-                            {app.firstName} {app.lastName}
-                          </p>
+                          <div className="flex items-center gap-2">
+                            <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                              {app.firstName} {app.lastName}
+                            </p>
+                            {app.isArchived && (
+                              <span className={`text-xs px-1.5 py-0.5 rounded ${isDark ? "bg-slate-700 text-slate-400" : "bg-gray-200 text-gray-500"}`}>
+                                Archived
+                              </span>
+                            )}
+                          </div>
                           <p className={`text-sm ${isDark ? "text-slate-500" : "text-gray-500"}`}>{app.email}</p>
                         </div>
                       </td>
@@ -928,6 +999,28 @@ function ApplicationsContent() {
                           >
                             View
                           </button>
+                          {/* Archive/Unarchive button */}
+                          {app.isArchived ? (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                unarchiveApplication({ applicationId: app._id });
+                              }}
+                              className={`text-sm ${isDark ? "text-green-400 hover:text-green-300" : "text-green-600 hover:text-green-700"}`}
+                            >
+                              Restore
+                            </button>
+                          ) : (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                archiveApplication({ applicationId: app._id });
+                              }}
+                              className={`text-sm ${isDark ? "text-slate-400 hover:text-slate-300" : "text-gray-500 hover:text-gray-700"}`}
+                            >
+                              Archive
+                            </button>
+                          )}
                           {canDeleteApplications && (
                             <button
                               onClick={(e) => {

@@ -28,6 +28,8 @@ export const analyzeResume = action({
       overallScore: number;
       stabilityScore: number;
       experienceScore: number;
+      graduationYear?: number;
+      yearsSinceGraduation?: number;
       employmentHistory: Array<{
         company: string;
         title: string;
@@ -120,6 +122,8 @@ Return JSON in this exact format (no other text, just JSON):
     "overallScore": 75,
     "stabilityScore": 80,
     "experienceScore": 70,
+    "graduationYear": 2018,
+    "yearsSinceGraduation": 8,
     "employmentHistory": [
       {"company": "Company Name", "title": "Job Title", "duration": "2 years 3 months", "durationMonths": 27, "startDate": "Jan 2022", "endDate": "Apr 2024"}
     ],
@@ -172,9 +176,22 @@ You MUST populate the candidateAnalysis section with detailed analysis:
    - Education should be noted as a green flag if present
 
 5. SCORING:
-   - overallScore: Weighted combination (35% experience, 35% stability, 20% skills fit, 10% education)
+   - overallScore: Weighted combination (30% experience, 30% stability, 20% skills fit, 10% education, 10% career stage fit)
    - stabilityScore: Based on average tenure and job hopping patterns
    - experienceScore: How relevant is their background + education bonus
+
+6. CAREER STAGE SCORING (for physical/warehouse roles):
+   - Extract graduation year (high school, GED, or most recent education) from the resume
+   - Calculate years since graduation: ${currentYear} - graduation_year
+   - Add to candidateAnalysis: "graduationYear" (the year, or null if not found)
+   - Add to candidateAnalysis: "yearsSinceGraduation" (number of years, or null)
+   - Career stage bonus for warehouse/physical roles:
+     * Graduated 0-5 years ago: +10 points to overall (early career, high energy)
+     * Graduated 6-10 years ago: +7 points (prime working years)
+     * Graduated 11-15 years ago: +4 points (experienced but active)
+     * Graduated 16-20 years ago: +2 points (seasoned worker)
+     * Graduated 20+ years ago or unknown: +0 points (focus on experience instead)
+   - Note: This is about career stage and typical physical stamina for demanding roles, NOT age discrimination
 
 6. RECOMMENDED ACTION:
    - "strong_candidate": 80+ overall, no major red flags
@@ -275,10 +292,19 @@ Return ONLY valid JSON, no markdown code blocks, no other text.`;
 
       // Extract and validate candidate analysis
       const rawAnalysis = aiResponse.candidateAnalysis || {};
+
+      // Extract graduation year and calculate years since graduation
+      const graduationYear = rawAnalysis.graduationYear ? Number(rawAnalysis.graduationYear) : undefined;
+      const yearsSinceGraduation = rawAnalysis.yearsSinceGraduation
+        ? Number(rawAnalysis.yearsSinceGraduation)
+        : (graduationYear ? currentYear - graduationYear : undefined);
+
       const candidateAnalysis = {
         overallScore: Math.min(100, Math.max(0, Number(rawAnalysis.overallScore) || 50)),
         stabilityScore: Math.min(100, Math.max(0, Number(rawAnalysis.stabilityScore) || 50)),
         experienceScore: Math.min(100, Math.max(0, Number(rawAnalysis.experienceScore) || 50)),
+        graduationYear,
+        yearsSinceGraduation,
         employmentHistory: (rawAnalysis.employmentHistory || []).map((job: any) => ({
           company: job.company || "Unknown",
           title: job.title || "Unknown",
@@ -414,7 +440,7 @@ export const reanalyzeAllApplications = action({
   args: {},
   handler: async (ctx): Promise<{ total: number; processed: number; skipped: number; errors: number; scores: { name: string; score: number; action: string }[] }> => {
     // Get all applications
-    const applications = await ctx.runQuery(api.applications.getAll) as any[];
+    const applications = await ctx.runQuery(api.applications.getAll, { includeArchived: true }) as any[];
 
     const results: { total: number; processed: number; skipped: number; errors: number; scores: { name: string; score: number; action: string }[] } = {
       total: applications.length,
