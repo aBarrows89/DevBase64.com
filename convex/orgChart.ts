@@ -7,12 +7,10 @@ const ROLE_HIERARCHY = [
   "warehouse_director",
   "warehouse_manager",
   "department_manager",
-  "payroll_manager",
-  "coo",
+  "office_manager",
 ] as const;
 
 // Roles to exclude from org chart display (these are base-level roles)
-// Users with these roles aren't shown since higher roles inherit their permissions
 const EXCLUDED_ROLES = ["employee", "member"];
 
 // Role display names
@@ -22,79 +20,74 @@ const ROLE_LABELS: Record<string, string> = {
   warehouse_director: "Warehouse Director",
   warehouse_manager: "Warehouse Manager",
   department_manager: "Department Manager",
-  payroll_manager: "Payroll Manager",
-  coo: "COO",
+  office_manager: "Office Manager",
   employee: "Employee",
   member: "Member",
 };
 
-// Base employee permissions that all roles inherit
-const EMPLOYEE_PERMISSIONS = [
-  "View own schedule",
-  "Request time off",
-  "View announcements",
-  "Calendar",
-  "Messages",
-];
-
-// Role-specific permissions - what makes each role unique
+// Role-specific permissions - aligned with auth-context.tsx
 const ROLE_PERMISSIONS: Record<string, string[]> = {
   super_admin: [
     "Full system access",
-    "Manage all users",
-    "View all data",
-    "System configuration",
+    "Manage all users & admins",
+    "View all locations",
     "Delete records",
-    "Restore deleted records",
-    "Hiring & HR",
-    ...EMPLOYEE_PERMISSIONS,
+    "Edit personnel info",
+    "Approve time off",
+    "Manage announcements",
+    "Moderate chat",
+    "Hiring & ATS",
   ],
   admin: [
-    "Manage personnel",
-    "Manage shifts & schedules",
+    "Manage users (not admins)",
+    "View all locations",
+    "Edit personnel info",
     "Approve time off",
-    "View reports",
-    "Manage equipment",
-    "Delete records (archived)",
-    "Hiring & HR",
-    "Onboarding docs",
-    ...EMPLOYEE_PERMISSIONS,
+    "Manage announcements",
+    "Moderate chat",
+    "Hiring & ATS",
   ],
   warehouse_director: [
-    "Manage assigned locations",
-    "View personnel",
+    "Manage users",
+    "View all locations",
+    "Edit shifts",
+    "Delete records",
+    "Edit personnel info",
     "Approve time off",
-    "View reports",
-    "Onboarding docs",
-    ...EMPLOYEE_PERMISSIONS,
+    "Manage call-offs",
+    "Manage announcements",
+    "Moderate chat",
   ],
   warehouse_manager: [
-    "Manage assigned locations",
-    "View personnel",
-    "Approve time off",
-    "Manage shifts",
-    "Onboarding docs",
-    ...EMPLOYEE_PERMISSIONS,
+    "View assigned locations only",
+    "View & manage personnel",
+    "Edit shifts (assigned locations)",
+    "Delete records",
+    "Manage call-offs",
   ],
   department_manager: [
-    "Manage assigned departments",
-    "View department personnel",
+    "View assigned departments",
+    "Manage department personnel",
+    "Manage call-offs",
+    "Moderate chat",
+    "Department portal access",
   ],
-  payroll_manager: [
-    "View timesheets",
-    "Approve payroll",
-    "Export to QuickBooks",
+  office_manager: [
+    "Limited access",
+    "No personnel management",
+    "No equipment access",
+    "No employee portal admin",
   ],
-  coo: [
-    "View operations",
-    "View reports",
-    "Manage announcements",
-    ...EMPLOYEE_PERMISSIONS,
+  employee: [
+    "Employee portal access",
+    "View own schedule",
+    "Request time off",
+    "Call off",
+    "View announcements",
   ],
-  employee: EMPLOYEE_PERMISSIONS,
   member: [
-    "Basic access",
-    "View dashboard",
+    "View shifts",
+    "Basic dashboard access",
   ],
 };
 

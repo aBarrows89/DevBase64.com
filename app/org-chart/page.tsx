@@ -13,8 +13,7 @@ const ROLE_COLORS: Record<string, string> = {
   warehouse_director: "bg-blue-500/20 text-blue-400 border-blue-500/30",
   warehouse_manager: "bg-green-500/20 text-green-400 border-green-500/30",
   department_manager: "bg-amber-500/20 text-amber-400 border-amber-500/30",
-  payroll_manager: "bg-pink-500/20 text-pink-400 border-pink-500/30",
-  coo: "bg-indigo-500/20 text-indigo-400 border-indigo-500/30",
+  office_manager: "bg-pink-500/20 text-pink-400 border-pink-500/30",
   employee: "bg-slate-500/20 text-slate-400 border-slate-500/30",
   member: "bg-slate-500/20 text-slate-400 border-slate-500/30",
 };
