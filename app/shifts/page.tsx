@@ -499,35 +499,37 @@ function ShiftsContent() {
   // Print mode layout
   if (isPrintMode) {
     return (
-      <div className="p-6 bg-white min-h-screen print:p-4">
+      <div className="p-3 bg-white min-h-screen print:p-2">
         <style jsx global>{`
           @media print {
             body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             .no-print { display: none !important; }
-            @page { margin: 0.5in; }
+            @page { margin: 0.25in; size: landscape; }
           }
         `}</style>
 
-        {/* Professional Header */}
-        <div className="mb-6">
-          <div className="bg-gradient-to-r from-slate-800 to-slate-700 text-white rounded-t-lg px-6 py-4">
-            <h1 className="text-2xl font-bold tracking-wide">
-              {printDepartment ? `${printDepartment} Department` : "Daily Shift Schedule"}
-            </h1>
-            <p className="text-slate-300 mt-1">{formatDisplayDate(currentDate)}</p>
+        {/* Compact Header */}
+        <div className="mb-3">
+          <div className="bg-gradient-to-r from-slate-800 to-slate-700 text-white rounded-t-lg px-4 py-2">
+            <div className="flex items-center justify-between">
+              <h1 className="text-lg font-bold tracking-wide">
+                {printDepartment ? `${printDepartment} Department` : "Daily Shift Schedule"}
+              </h1>
+              <p className="text-slate-300 text-sm">{formatDisplayDate(currentDate)}</p>
+            </div>
           </div>
           {selectedLocation && (selectedLocation.warehouseManagerName || selectedLocation.name) && (
-            <div className="bg-slate-100 border-x border-b border-slate-300 rounded-b-lg px-6 py-3 flex flex-wrap items-center justify-between gap-4">
+            <div className="bg-slate-100 border-x border-b border-slate-300 rounded-b-lg px-4 py-1.5 flex flex-wrap items-center justify-between gap-2 text-xs">
               <div>
                 {selectedLocation.name && (
-                  <span className="text-sm font-medium text-slate-600">Location: {selectedLocation.name}</span>
+                  <span className="font-medium text-slate-600">Location: {selectedLocation.name}</span>
                 )}
               </div>
               {selectedLocation.warehouseManagerName && (
-                <div className="text-sm text-slate-600">
-                  <span className="font-semibold">Warehouse Manager:</span> {selectedLocation.warehouseManagerName}
+                <div className="text-slate-600">
+                  <span className="font-semibold">Manager:</span> {selectedLocation.warehouseManagerName}
                   {selectedLocation.warehouseManagerPhone && (
-                    <span className="ml-4">Tel: {selectedLocation.warehouseManagerPhone}</span>
+                    <span className="ml-2">Tel: {selectedLocation.warehouseManagerPhone}</span>
                   )}
                 </div>
               )}
@@ -611,59 +613,55 @@ function ShiftsContent() {
             })}
           </div>
         ) : (
-          /* All Departments Grid View */
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          /* All Departments Grid View - Compact for single page */
+          <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
             {shiftsToPrint.map((shift) => {
               const deptTasks = dailyTasks[shift.department] || [];
               return (
-                <div key={shift._id} className="border-2 border-slate-200 rounded-lg overflow-hidden bg-white shadow-sm">
+                <div key={shift._id} className="border border-slate-300 rounded overflow-hidden bg-white text-[11px]">
                   {/* Compact Department Header */}
-                  <div className="bg-slate-700 text-white px-4 py-2">
-                    <h3 className="font-bold text-sm uppercase tracking-wide">
+                  <div className="bg-slate-700 text-white px-2 py-1">
+                    <h3 className="font-bold text-xs uppercase tracking-wide truncate">
                       {shift.name || shift.department || "Department"}
                     </h3>
                   </div>
 
-                  <div className="p-3 space-y-2">
+                  <div className="p-1.5 space-y-1">
                     {/* Lead */}
                     {shift.leadName && (
-                      <div className="bg-amber-50 rounded px-2 py-1.5 border border-amber-200">
-                        <p className="text-[10px] font-semibold text-amber-700 uppercase">Lead</p>
-                        <p className="font-semibold text-slate-800 text-sm flex items-center gap-1">
+                      <div className="bg-amber-50 rounded px-1.5 py-0.5 border border-amber-200">
+                        <p className="font-semibold text-slate-800 text-[10px] flex items-center gap-1">
                           <span className="text-amber-500">★</span> {shift.leadName}
                         </p>
                       </div>
                     )}
 
-                    {/* Goals (compact) */}
+                    {/* Tasks - Show ALL */}
                     {deptTasks.length > 0 && (
-                      <div className="bg-green-50 rounded px-2 py-1.5 border border-green-200">
-                        <p className="text-[10px] font-semibold text-green-700 uppercase mb-1">Goals</p>
-                        <ul className="space-y-0.5">
-                          {deptTasks.slice(0, 3).map((task: { id: string; text: string; completed?: boolean }) => (
-                            <li key={task.id} className="text-xs text-slate-600 flex items-start gap-1">
-                              <span className="text-slate-400">{task.completed ? "✓" : "○"}</span>
-                              <span className={`line-clamp-1 ${task.completed ? "line-through text-slate-400" : ""}`}>
+                      <div className="bg-green-50 rounded px-1.5 py-0.5 border border-green-200">
+                        <p className="text-[9px] font-semibold text-green-700 uppercase">Tasks</p>
+                        <ul className="space-y-0">
+                          {deptTasks.map((task: { id: string; text: string; completed?: boolean }) => (
+                            <li key={task.id} className="text-[10px] text-slate-600 flex items-start gap-0.5">
+                              <span className="text-slate-400 flex-shrink-0">{task.completed ? "✓" : "○"}</span>
+                              <span className={task.completed ? "line-through text-slate-400" : ""}>
                                 {task.text}
                               </span>
                             </li>
                           ))}
-                          {deptTasks.length > 3 && (
-                            <li className="text-xs text-slate-400">+{deptTasks.length - 3} more</li>
-                          )}
                         </ul>
                       </div>
                     )}
 
-                    {/* Crew */}
+                    {/* Crew - Compact list */}
                     <div>
-                      <p className="text-[10px] font-semibold text-slate-500 uppercase mb-1">Crew ({shift.assignedNames.length})</p>
-                      <ul className="space-y-0.5">
+                      <p className="text-[9px] font-semibold text-slate-500 uppercase">Crew ({shift.assignedNames.length})</p>
+                      <ul className="space-y-0">
                         {shift.assignedNames.map((name, idx) => (
-                          <li key={idx} className="text-sm text-slate-700">• {name}</li>
+                          <li key={idx} className="text-[10px] text-slate-700 leading-tight">• {name}</li>
                         ))}
                         {shift.assignedNames.length === 0 && !shift.leadName && (
-                          <li className="text-xs text-slate-400 italic">No staff</li>
+                          <li className="text-[10px] text-slate-400 italic">No staff</li>
                         )}
                       </ul>
                     </div>
@@ -675,7 +673,7 @@ function ShiftsContent() {
         )}
 
         {/* Footer */}
-        <div className="mt-8 pt-4 border-t border-slate-200 text-center text-xs text-slate-400">
+        <div className="mt-3 pt-2 border-t border-slate-200 text-center text-[10px] text-slate-400 no-print">
           Printed on {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}
         </div>
       </div>
