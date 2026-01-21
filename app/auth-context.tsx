@@ -186,17 +186,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user?.role === "department_manager" ||
     user?.role === "warehouse_manager";
 
-  // Edit shifts: super_admin, admin, warehouse_director
+  // Edit shifts: super_admin, admin, warehouse_director, warehouse_manager
   const canEditShifts =
     user?.role === "super_admin" ||
     user?.role === "admin" ||
-    user?.role === "warehouse_director";
+    user?.role === "warehouse_director" ||
+    user?.role === "warehouse_manager";
 
-  // View shifts: super_admin, admin, warehouse_director, member
+  // View shifts: super_admin, admin, warehouse_director, warehouse_manager, member
   const canViewShifts =
     user?.role === "super_admin" ||
     user?.role === "admin" ||
     user?.role === "warehouse_director" ||
+    user?.role === "warehouse_manager" ||
     user?.role === "member";
 
   // Can view ALL locations (warehouse_director and above)
