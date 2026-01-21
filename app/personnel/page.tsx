@@ -31,6 +31,7 @@ function PersonnelContent() {
   const departments = useQuery(api.personnel.getDepartments) || [];
   const locations = useQuery(api.locations.list) || [];
   const clockStatuses = useQuery(api.timeClock.getAllClockStatuses) || {};
+  const updatePersonnel = useMutation(api.personnel.update);
 
   // Helper to get location name
   const getLocationName = (locationId: string | undefined) => {
@@ -266,7 +267,34 @@ function PersonnelContent() {
                         {person.department}
                       </td>
                       <td className={`px-6 py-4 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
-                        {getLocationName(person.locationId)}
+                        <select
+                          value={person.locationId || ""}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={async (e) => {
+                            e.stopPropagation();
+                            const newLocationId = e.target.value;
+                            try {
+                              await updatePersonnel({
+                                personnelId: person._id,
+                                locationId: newLocationId as Id<"locations">,
+                              });
+                            } catch (error) {
+                              console.error("Failed to update location:", error);
+                            }
+                          }}
+                          className={`px-2 py-1 text-sm rounded border cursor-pointer ${
+                            isDark
+                              ? "bg-slate-700 border-slate-600 text-white hover:border-cyan-500 focus:border-cyan-500"
+                              : "bg-white border-gray-300 text-gray-900 hover:border-blue-500 focus:border-blue-500"
+                          } focus:outline-none`}
+                        >
+                          <option value="">No Location</option>
+                          {locations.map((loc) => (
+                            <option key={loc._id} value={loc._id}>
+                              {loc.name}
+                            </option>
+                          ))}
+                        </select>
                       </td>
                       <td className="px-6 py-4">
                         <span
