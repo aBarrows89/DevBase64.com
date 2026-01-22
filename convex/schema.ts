@@ -1027,6 +1027,10 @@ export default defineSchema({
     description: v.optional(v.string()),
     passwordHash: v.optional(v.string()), // Optional - null = unprotected, set = protected
     parentFolderId: v.optional(v.id("documentFolders")), // For nested folders
+    // HIPAA-compliant visibility levels:
+    // "private" - Only owner can see (default for password-protected)
+    // "community" - All users can see (for policies, handbooks, etc.)
+    visibility: v.optional(v.string()), // "private" | "community" - defaults to "private"
     createdBy: v.id("users"),
     createdByName: v.string(),
     isActive: v.boolean(),
@@ -1035,7 +1039,9 @@ export default defineSchema({
   })
     .index("by_active", ["isActive"])
     .index("by_created", ["createdAt"])
-    .index("by_parent", ["parentFolderId"]),
+    .index("by_parent", ["parentFolderId"])
+    .index("by_visibility", ["visibility"])
+    .index("by_owner", ["createdBy"]),
 
   // Folder access grants (sharing protected folders)
   folderAccessGrants: defineTable({
@@ -1053,6 +1059,24 @@ export default defineSchema({
     .index("by_folder", ["folderId"])
     .index("by_user", ["grantedToUserId"])
     .index("by_folder_user", ["folderId", "grantedToUserId"]),
+
+  // HIPAA-compliant folder access audit log
+  folderAccessLog: defineTable({
+    folderId: v.id("documentFolders"),
+    folderName: v.string(),
+    userId: v.id("users"),
+    userName: v.string(),
+    userEmail: v.optional(v.string()),
+    action: v.string(), // "view" | "download" | "upload" | "share" | "password_attempt"
+    accessMethod: v.string(), // "password" | "grant" | "owner" | "community"
+    success: v.boolean(),
+    ipAddress: v.optional(v.string()),
+    userAgent: v.optional(v.string()),
+    timestamp: v.number(),
+  })
+    .index("by_folder", ["folderId"])
+    .index("by_user", ["userId"])
+    .index("by_timestamp", ["timestamp"]),
 
   // ============ HOLIDAYS & SCHEDULE OVERRIDES ============
   // Global holidays and schedule overrides (prevents NCNS triggers)
@@ -2062,4 +2086,23 @@ export default defineSchema({
     .index("by_application", ["applicationId"])
     .index("by_status", ["status"])
     .index("by_candidate_email", ["candidateEmail"]),
+
+  // ============ TECH WIZARD CHATS ============
+  techWizardChats: defineTable({
+    title: v.string(), // Auto-generated from first message or user-set
+    userId: v.id("users"),
+    userName: v.string(),
+    messages: v.array(
+      v.object({
+        role: v.string(), // "user" | "assistant"
+        content: v.string(),
+        timestamp: v.number(),
+      })
+    ),
+    isArchived: v.optional(v.boolean()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_updated", ["updatedAt"]),
 });

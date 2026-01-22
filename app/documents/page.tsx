@@ -93,6 +93,7 @@ function DocumentsContent() {
     description: "",
     password: "",
     isProtected: false,
+    visibility: "private" as "private" | "community",
   });
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordModalFolderId, setPasswordModalFolderId] = useState<Id<"documentFolders"> | null>(null);
@@ -112,6 +113,9 @@ function DocumentsContent() {
   const [shareFolderId, setShareFolderId] = useState<Id<"documentFolders"> | null>(null);
   const [selectedUserToShare, setSelectedUserToShare] = useState<Id<"users"> | null>(null);
   const [sharingInProgress, setSharingInProgress] = useState(false);
+
+  // How To modal state
+  const [showHowToModal, setShowHowToModal] = useState(false);
 
   // Load unlocked folders from sessionStorage on mount
   useEffect(() => {
@@ -137,9 +141,22 @@ function DocumentsContent() {
     }
   };
 
-  // Get folders for current level (root or inside a folder)
+  // HIPAA-compliant folder queries
+  // My Folders: User's own folders
+  const myFolders = useQuery(
+    api.documentFolders.getMyFolders,
+    user ? { userId: user._id, parentFolderId: currentFolderId ?? null } : "skip"
+  );
+
+  // Community Folders: Public folders for everyone
+  const communityFolders = useQuery(api.documentFolders.getCommunityFolders, {
+    parentFolderId: currentFolderId ?? null,
+  });
+
+  // Legacy: Combined folders for backward compatibility (filtered by user access)
   const folders = useQuery(api.documentFolders.getAll, {
     parentFolderId: currentFolderId ?? null,
+    userId: user?._id,
   });
 
   // Get current folder info
@@ -172,7 +189,11 @@ function DocumentsContent() {
   const [togglingPublic, setTogglingPublic] = useState(false);
 
   // Get current document data for share modal (to stay in sync with mutations)
-  const shareDocument = shareDocumentId ? documents?.find(d => d._id === shareDocumentId) : null;
+  // Check both root documents and folder documents
+  const shareDocument = shareDocumentId
+    ? (documents?.find(d => d._id === shareDocumentId) ||
+       folderDocuments?.find(d => d._id === shareDocumentId))
+    : null;
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -232,19 +253,27 @@ function DocumentsContent() {
         uploadedByName: user.name,
       });
 
-      // Refresh folder documents if we're in a folder
-      if (currentFolderId) {
-        const folder = folders?.find(f => f._id === currentFolderId);
-        if (folder) {
-          await loadFolderDocuments(currentFolderId, folder.isProtected);
-        }
-      }
-
-      // Reset form
+      // Reset form first so modal closes
       setShowUploadModal(false);
       setSelectedFile(null);
       setFormData({ name: "", description: "", category: "forms" });
       if (fileInputRef.current) fileInputRef.current.value = "";
+
+      // Refresh folder documents if we're in a folder
+      // Small delay to ensure mutation is committed
+      if (currentFolderId) {
+        setTimeout(async () => {
+          const folder = folders?.find(f => f._id === currentFolderId) ||
+                        myFolders?.find(f => f._id === currentFolderId) ||
+                        communityFolders?.find(f => f._id === currentFolderId);
+          if (folder) {
+            await loadFolderDocuments(currentFolderId, folder.isProtected);
+          } else {
+            // If we can't find the folder in queries, still try to load
+            await loadFolderDocuments(currentFolderId, currentFolder?.isProtected || false);
+          }
+        }, 100);
+      }
     } catch (err) {
       console.error("Upload error:", err);
       setError(err instanceof Error ? err.message : "Upload failed");
@@ -378,10 +407,11 @@ function DocumentsContent() {
     if (!editingDocument) return;
 
     try {
+      // Name and category are required, description can be cleared
       await updateDocument({
         documentId: editingDocument,
         name: formData.name || undefined,
-        description: formData.description || undefined,
+        description: formData.description, // Allow empty string to clear description
         category: formData.category || undefined,
       });
       setEditingDocument(null);
@@ -438,12 +468,13 @@ function DocumentsContent() {
         name: folderFormData.name,
         description: folderFormData.description || undefined,
         password: folderFormData.isProtected ? folderFormData.password : undefined,
+        visibility: folderFormData.visibility,
         parentFolderId: currentFolderId || undefined,
         createdBy: user._id,
         createdByName: user.name,
       });
       setShowFolderModal(false);
-      setFolderFormData({ name: "", description: "", password: "", isProtected: false });
+      setFolderFormData({ name: "", description: "", password: "", isProtected: false, visibility: "private" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create folder");
     }
@@ -458,19 +489,25 @@ function DocumentsContent() {
         folderId: editingFolderId,
         name: folderFormData.name,
         description: folderFormData.description || undefined,
+        visibility: folderFormData.visibility,
       });
       setShowFolderModal(false);
       setEditingFolderId(null);
-      setFolderFormData({ name: "", description: "", password: "", isProtected: false });
+      setFolderFormData({ name: "", description: "", password: "", isProtected: false, visibility: "private" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update folder");
     }
   };
 
   const handleOpenFolder = async (folder: NonNullable<typeof folders>[0], hasAccessGrant = false) => {
-    // Super admin can bypass password protection
-    // Users with access grants can also bypass password
-    if (folder.isProtected && !unlockedFolders.has(folder._id) && !isSuperAdmin && !hasAccessGrant) {
+    // Check if user has access grant from shared folders list
+    // This ensures password bypass works even when clicking from main Folders list
+    const hasAccessFromSharing = sharedFoldersWithMe?.some(f => f?._id === folder._id) || false;
+    const effectiveHasAccess = hasAccessGrant || hasAccessFromSharing;
+
+    // HIPAA-compliant: Only owner, grant holders, or password entry can access
+    // Super admin does NOT bypass (minimum necessary principle)
+    if (folder.isProtected && !unlockedFolders.has(folder._id) && !effectiveHasAccess && folder.createdBy !== user?._id) {
       // Show password modal
       setPasswordModalFolderId(folder._id);
       setShowPasswordModal(true);
@@ -487,16 +524,18 @@ function DocumentsContent() {
     setCurrentFolderId(folderId);
 
     try {
-      // Super admin bypasses password verification
-      // Users with access grants also bypass via userId check on backend
+      // HIPAA-compliant: Backend checks owner, grant, or password - no admin bypass
       const result = await getProtectedDocuments({
         folderId,
         password: "",
-        isSuperAdmin: isSuperAdmin,
         userId: user?._id,
+        userName: user?.name,
+        userEmail: user?.email,
       });
       if (result.success && result.documents) {
         setFolderDocuments(result.documents as NonNullable<typeof documents>);
+      } else if (!result.success) {
+        setError(result.error || "Access denied");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load folder documents");
@@ -510,34 +549,29 @@ function DocumentsContent() {
     if (!passwordModalFolderId) return;
 
     try {
-      const result = await verifyFolderPassword({
+      // Load documents using the password - HIPAA-compliant access logging included
+      setLoadingFolderDocs(true);
+      setCurrentFolderId(passwordModalFolderId);
+
+      const docsResult = await getProtectedDocuments({
         folderId: passwordModalFolderId,
         password: folderPassword,
+        userId: user?._id,
+        userName: user?.name,
+        userEmail: user?.email,
       });
 
-      if (result.success) {
+      if (docsResult.success && docsResult.documents) {
         unlockFolder(passwordModalFolderId);
         setShowPasswordModal(false);
-
-        // Load documents using the password
-        setLoadingFolderDocs(true);
-        setCurrentFolderId(passwordModalFolderId);
-
-        const docsResult = await getProtectedDocuments({
-          folderId: passwordModalFolderId,
-          password: folderPassword,
-          isSuperAdmin: isSuperAdmin,
-        });
-
-        if (docsResult.success && docsResult.documents) {
-          setFolderDocuments(docsResult.documents as NonNullable<typeof documents>);
-        }
-        setLoadingFolderDocs(false);
+        setFolderDocuments(docsResult.documents as NonNullable<typeof documents>);
       } else {
-        setPasswordError(result.error || "Invalid password");
+        setPasswordError(docsResult.error || "Invalid password");
       }
+      setLoadingFolderDocs(false);
     } catch (err) {
       setPasswordError(err instanceof Error ? err.message : "Verification failed");
+      setLoadingFolderDocs(false);
     }
   };
 
@@ -553,6 +587,7 @@ function DocumentsContent() {
       description: folder.description || "",
       password: "",
       isProtected: folder.isProtected,
+      visibility: (folder as { visibility?: string }).visibility as "private" | "community" || "private",
     });
     setShowFolderModal(true);
   };
@@ -703,6 +738,17 @@ function DocumentsContent() {
               </p>
             </div>
             <div className="flex items-center gap-2">
+              {/* How To button */}
+              <button
+                onClick={() => setShowHowToModal(true)}
+                className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${isDark ? "bg-slate-700/50 text-slate-400 hover:bg-slate-700 hover:text-slate-300" : "bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700"}`}
+                title="How to use Doc Hub"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="hidden sm:inline">Help</span>
+              </button>
               {/* Back button when in folder */}
               {currentFolderId && (
                 <button
@@ -740,7 +786,7 @@ function DocumentsContent() {
                   onClick={() => {
                     setShowFolderModal(true);
                     setEditingFolderId(null);
-                    setFolderFormData({ name: "", description: "", password: "", isProtected: false });
+                    setFolderFormData({ name: "", description: "", password: "", isProtected: false, visibility: "private" });
                   }}
                   className={`px-3 sm:px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${isDark ? "bg-slate-700 text-slate-300 hover:bg-slate-600" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
                 >
@@ -811,14 +857,17 @@ function DocumentsContent() {
             )}
           </div>
 
-          {/* Folders Section - Show at any level (supports nested folders) */}
-          {!showArchived && folders && folders.length > 0 && (
+          {/* My Folders Section - User's own folders */}
+          {!showArchived && myFolders && myFolders.length > 0 && (
             <div className="mb-6">
-              <h2 className={`text-sm font-semibold mb-3 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                Folders
+              <h2 className={`text-sm font-semibold mb-3 flex items-center gap-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                </svg>
+                My Folders
               </h2>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                {folders.map((folder) => {
+                {myFolders.map((folder) => {
                   const isDraggingThisFolder = draggedFolderId === folder._id;
                   return (
                   <div
@@ -943,6 +992,58 @@ function DocumentsContent() {
                         </p>
                         <p className={`text-xs mt-1 ${isDark ? "text-cyan-400/70" : "text-blue-500"}`}>
                           Shared by {folder.grantedByUserName}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Community Folders Section - Public folders visible to all */}
+          {!showArchived && !currentFolderId && communityFolders && communityFolders.length > 0 && (
+            <div className="mb-6">
+              <h2 className={`text-sm font-semibold mb-3 flex items-center gap-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+                Community
+                <span className={`text-xs font-normal ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                  (Public folders for all users)
+                </span>
+              </h2>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {communityFolders.map((folder) => (
+                  <div
+                    key={folder._id}
+                    onClick={() => handleOpenFolder(folder as NonNullable<typeof folders>[0])}
+                    className={`border rounded-xl p-4 cursor-pointer transition-all hover:scale-[1.02] ${
+                      isDark
+                        ? "bg-slate-800/50 border-slate-700 hover:border-emerald-500/50"
+                        : "bg-white border-gray-200 shadow-sm hover:border-green-500/50"
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={`text-2xl p-2 rounded-lg ${isDark ? "bg-emerald-500/20" : "bg-green-100"}`}>
+                        <svg className={`w-6 h-6 ${isDark ? "text-emerald-400" : "text-green-600"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                        </svg>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className={`font-semibold truncate ${isDark ? "text-white" : "text-gray-900"}`}>
+                          {folder.name}
+                        </h3>
+                        <p className={`text-xs mt-0.5 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                          {folder.documentCount} document{folder.documentCount !== 1 ? "s" : ""}
+                        </p>
+                        {folder.description && (
+                          <p className={`text-sm mt-1 line-clamp-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                            {folder.description}
+                          </p>
+                        )}
+                        <p className={`text-xs mt-1 ${isDark ? "text-emerald-400/70" : "text-green-600"}`}>
+                          Created by {folder.createdByName}
                         </p>
                       </div>
                     </div>
@@ -1543,7 +1644,7 @@ function DocumentsContent() {
                   onClick={() => {
                     setShowFolderModal(false);
                     setEditingFolderId(null);
-                    setFolderFormData({ name: "", description: "", password: "", isProtected: false });
+                    setFolderFormData({ name: "", description: "", password: "", isProtected: false, visibility: "private" });
                   }}
                   className={`p-2 rounded-lg transition-colors ${isDark ? "hover:bg-slate-700 text-slate-400" : "hover:bg-gray-100 text-gray-500"}`}
                 >
@@ -1580,6 +1681,51 @@ function DocumentsContent() {
                     placeholder="Brief description of this folder..."
                   />
                 </div>
+
+                {/* Visibility selector - only admins can create community folders */}
+                {isAdmin && (
+                  <div className={`p-4 rounded-lg border ${isDark ? "bg-slate-700/30 border-slate-600" : "bg-gray-50 border-gray-200"}`}>
+                    <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                      Folder Visibility
+                    </label>
+                    <div className="flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setFolderFormData({ ...folderFormData, visibility: "private" })}
+                        className={`flex-1 px-4 py-3 rounded-lg border-2 transition-all flex items-center gap-2 ${
+                          folderFormData.visibility === "private"
+                            ? isDark ? "border-cyan-500 bg-cyan-500/10" : "border-blue-500 bg-blue-50"
+                            : isDark ? "border-slate-600 hover:border-slate-500" : "border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        <svg className={`w-5 h-5 ${folderFormData.visibility === "private" ? (isDark ? "text-cyan-400" : "text-blue-600") : (isDark ? "text-slate-400" : "text-gray-500")}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                        <div className="text-left">
+                          <p className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"}`}>Private</p>
+                          <p className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>Only you can see</p>
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFolderFormData({ ...folderFormData, visibility: "community" })}
+                        className={`flex-1 px-4 py-3 rounded-lg border-2 transition-all flex items-center gap-2 ${
+                          folderFormData.visibility === "community"
+                            ? isDark ? "border-emerald-500 bg-emerald-500/10" : "border-green-500 bg-green-50"
+                            : isDark ? "border-slate-600 hover:border-slate-500" : "border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        <svg className={`w-5 h-5 ${folderFormData.visibility === "community" ? (isDark ? "text-emerald-400" : "text-green-600") : (isDark ? "text-slate-400" : "text-gray-500")}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                        </svg>
+                        <div className="text-left">
+                          <p className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"}`}>Community</p>
+                          <p className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>Visible to all users</p>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Password protection toggle - only for new folders and only admins can create protected folders */}
                 {!editingFolderId && isAdmin && (
@@ -1632,7 +1778,7 @@ function DocumentsContent() {
                     onClick={() => {
                       setShowFolderModal(false);
                       setEditingFolderId(null);
-                      setFolderFormData({ name: "", description: "", password: "", isProtected: false });
+                      setFolderFormData({ name: "", description: "", password: "", isProtected: false, visibility: "private" });
                     }}
                     className={`flex-1 px-4 py-3 font-medium rounded-lg transition-colors ${isDark ? "bg-slate-700 text-white hover:bg-slate-600" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
                   >
@@ -1798,6 +1944,149 @@ function DocumentsContent() {
                 className={`w-full mt-6 px-4 py-3 font-medium rounded-lg transition-colors ${isDark ? "bg-slate-700 text-white hover:bg-slate-600" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
               >
                 Done
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* How To Modal */}
+        {showHowToModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className={`border rounded-xl p-4 sm:p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200"}`}>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className={`text-xl font-semibold flex items-center gap-2 ${isDark ? "text-white" : "text-gray-900"}`}>
+                  <svg className="w-6 h-6 text-cyan-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  How to Use Doc Hub
+                </h2>
+                <button
+                  onClick={() => setShowHowToModal(false)}
+                  className={`p-2 rounded-lg transition-colors ${isDark ? "hover:bg-slate-700 text-slate-400" : "hover:bg-gray-100 text-gray-500"}`}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                {/* Folder Types Section */}
+                <div>
+                  <h3 className={`text-lg font-semibold mb-3 ${isDark ? "text-white" : "text-gray-900"}`}>
+                    Folder Types
+                  </h3>
+                  <div className="space-y-3">
+                    <div className={`p-4 rounded-lg ${isDark ? "bg-slate-700/50" : "bg-gray-50"}`}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <svg className={`w-5 h-5 ${isDark ? "text-cyan-400" : "text-blue-500"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                        </svg>
+                        <span className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>My Folders</span>
+                      </div>
+                      <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                        Folders you create. Only you can see and access these folders unless you share them with others.
+                      </p>
+                    </div>
+                    <div className={`p-4 rounded-lg ${isDark ? "bg-slate-700/50" : "bg-gray-50"}`}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <svg className="w-5 h-5 text-cyan-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                        </svg>
+                        <span className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>Shared With Me</span>
+                      </div>
+                      <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                        Folders that others have shared with you. You can view the contents without needing a password.
+                      </p>
+                    </div>
+                    <div className={`p-4 rounded-lg ${isDark ? "bg-slate-700/50" : "bg-gray-50"}`}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <svg className={`w-5 h-5 ${isDark ? "text-emerald-400" : "text-green-600"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                        </svg>
+                        <span className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>Community</span>
+                      </div>
+                      <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                        Public folders visible to everyone. Great for company policies, handbooks, and shared resources.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Password Protection Section */}
+                <div>
+                  <h3 className={`text-lg font-semibold mb-3 ${isDark ? "text-white" : "text-gray-900"}`}>
+                    Password Protection
+                  </h3>
+                  <div className={`p-4 rounded-lg ${isDark ? "bg-amber-500/10 border border-amber-500/30" : "bg-amber-50 border border-amber-200"}`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <svg className="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                      <span className={`font-medium ${isDark ? "text-amber-300" : "text-amber-700"}`}>Protected Folders</span>
+                    </div>
+                    <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                      Folders marked with a lock icon require a password to access. Use these for sensitive or confidential documents. Once unlocked, you can access the folder until you close your browser session.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Common Actions Section */}
+                <div>
+                  <h3 className={`text-lg font-semibold mb-3 ${isDark ? "text-white" : "text-gray-900"}`}>
+                    Common Actions
+                  </h3>
+                  <div className={`divide-y ${isDark ? "divide-slate-700" : "divide-gray-200"}`}>
+                    <div className="py-3">
+                      <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>Create a Folder</p>
+                      <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                        Click the &quot;New Folder&quot; button in the header. Choose visibility (Private or Community) and optionally add password protection.
+                      </p>
+                    </div>
+                    <div className="py-3">
+                      <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>Upload Documents</p>
+                      <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                        Click &quot;Upload Document&quot; to add files. If you&apos;re inside a folder, the document will be added to that folder.
+                      </p>
+                    </div>
+                    <div className="py-3">
+                      <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>Share a Folder</p>
+                      <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                        Click the &quot;Share&quot; button on a protected folder to grant specific users access without needing the password.
+                      </p>
+                    </div>
+                    <div className="py-3">
+                      <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>Move Documents</p>
+                      <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                        Drag and drop documents onto folders to move them. You can also drag folders into other folders to create nested structures.
+                      </p>
+                    </div>
+                    <div className="py-3">
+                      <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>Search & Filter</p>
+                      <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                        Use the search bar to find documents by name. Use category filters to narrow down results.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tips Section */}
+                <div className={`p-4 rounded-lg ${isDark ? "bg-cyan-500/10 border border-cyan-500/30" : "bg-blue-50 border border-blue-200"}`}>
+                  <h4 className={`font-medium mb-2 ${isDark ? "text-cyan-300" : "text-blue-700"}`}>Tips</h4>
+                  <ul className={`text-sm space-y-1 ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                    <li>• Use descriptive folder names for easy organization</li>
+                    <li>• Password-protect folders containing sensitive information</li>
+                    <li>• Community folders are great for company-wide resources</li>
+                    <li>• Share protected folders with specific users for HIPAA compliance</li>
+                  </ul>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowHowToModal(false)}
+                className={`w-full mt-6 px-4 py-3 font-medium rounded-lg transition-colors ${isDark ? "bg-cyan-500 text-white hover:bg-cyan-600" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+              >
+                Got it!
               </button>
             </div>
           </div>

@@ -102,11 +102,90 @@ async function verifyPasswordHash(
 
 // ============ QUERIES ============
 
-// Get all active folders (metadata only, no documents)
-// Optionally filter by parentFolderId (null = root folders)
+// HIPAA-compliant folder visibility helper
+async function getFolderWithCounts(ctx: any, folder: any, allFolders: any[]) {
+  const docs = await ctx.db
+    .query("documents")
+    .withIndex("by_folder", (q: any) => q.eq("folderId", folder._id))
+    .filter((q: any) => q.eq(q.field("isActive"), true))
+    .collect();
+
+  // Count subfolders
+  const subfolders = allFolders.filter(
+    (f: any) => f.parentFolderId === folder._id && f.isActive
+  );
+
+  return {
+    ...folder,
+    documentCount: docs.length,
+    subfolderCount: subfolders.length,
+    isProtected: !!folder.passwordHash,
+  };
+}
+
+// Get user's own folders (My Folders)
+export const getMyFolders = query({
+  args: {
+    userId: v.id("users"),
+    parentFolderId: v.optional(v.union(v.id("documentFolders"), v.null())),
+  },
+  handler: async (ctx, args) => {
+    const allFolders = await ctx.db
+      .query("documentFolders")
+      .withIndex("by_active", (q) => q.eq("isActive", true))
+      .collect();
+
+    // Filter to user's own folders
+    let filteredFolders = allFolders.filter((f) => f.createdBy === args.userId);
+
+    // Filter by parent folder
+    if (args.parentFolderId === null) {
+      filteredFolders = filteredFolders.filter((f) => !f.parentFolderId);
+    } else if (args.parentFolderId) {
+      filteredFolders = filteredFolders.filter((f) => f.parentFolderId === args.parentFolderId);
+    }
+
+    // Get document counts and subfolder counts
+    return await Promise.all(
+      filteredFolders.map((folder) => getFolderWithCounts(ctx, folder, allFolders))
+    );
+  },
+});
+
+// Get community/public folders (visible to all users)
+export const getCommunityFolders = query({
+  args: {
+    parentFolderId: v.optional(v.union(v.id("documentFolders"), v.null())),
+  },
+  handler: async (ctx, args) => {
+    const allFolders = await ctx.db
+      .query("documentFolders")
+      .withIndex("by_active", (q) => q.eq("isActive", true))
+      .collect();
+
+    // Filter to community folders
+    let filteredFolders = allFolders.filter((f) => f.visibility === "community");
+
+    // Filter by parent folder
+    if (args.parentFolderId === null) {
+      filteredFolders = filteredFolders.filter((f) => !f.parentFolderId);
+    } else if (args.parentFolderId) {
+      filteredFolders = filteredFolders.filter((f) => f.parentFolderId === args.parentFolderId);
+    }
+
+    // Get document counts and subfolder counts
+    return await Promise.all(
+      filteredFolders.map((folder) => getFolderWithCounts(ctx, folder, allFolders))
+    );
+  },
+});
+
+// Legacy: Get all active folders (for backward compatibility during migration)
+// This should only be used by admins for folder management, not viewing contents
 export const getAll = query({
   args: {
     parentFolderId: v.optional(v.union(v.id("documentFolders"), v.null())),
+    userId: v.optional(v.id("users")), // If provided, filter by user access
   },
   handler: async (ctx, args) => {
     const folders = await ctx.db
@@ -116,18 +195,34 @@ export const getAll = query({
       .collect();
 
     // Filter by parent folder
-    const filteredFolders = folders.filter((f) => {
+    let filteredFolders = folders.filter((f) => {
       if (args.parentFolderId === undefined) {
-        // Return all folders
         return true;
       } else if (args.parentFolderId === null) {
-        // Return only root folders (no parent)
         return !f.parentFolderId;
       } else {
-        // Return folders with specific parent
         return f.parentFolderId === args.parentFolderId;
       }
     });
+
+    // If userId provided, filter to folders user has access to
+    if (args.userId) {
+      const userId = args.userId; // Capture for type narrowing
+      // Get all grants for this user
+      const grants = await ctx.db
+        .query("folderAccessGrants")
+        .withIndex("by_user", (q) => q.eq("grantedToUserId", userId))
+        .filter((q) => q.eq(q.field("isRevoked"), false))
+        .collect();
+      const grantedFolderIds = new Set(grants.map((g) => g.folderId));
+
+      // Filter to: own folders, shared folders, or community folders
+      filteredFolders = filteredFolders.filter((f) =>
+        f.createdBy === userId ||
+        grantedFolderIds.has(f._id) ||
+        f.visibility === "community"
+      );
+    }
 
     // Get document counts and subfolder counts for each folder
     const foldersWithCounts = await Promise.all(
@@ -211,6 +306,7 @@ export const create = mutation({
     description: v.optional(v.string()),
     password: v.optional(v.string()),
     parentFolderId: v.optional(v.id("documentFolders")),
+    visibility: v.optional(v.string()), // "private" | "community"
     createdBy: v.id("users"),
     createdByName: v.string(),
   },
@@ -222,11 +318,15 @@ export const create = mutation({
       passwordHash = await hashPassword(args.password);
     }
 
+    // Default to private for password-protected folders
+    const visibility = args.visibility || (passwordHash ? "private" : "private");
+
     return await ctx.db.insert("documentFolders", {
       name: args.name,
       description: args.description,
       passwordHash,
       parentFolderId: args.parentFolderId,
+      visibility,
       createdBy: args.createdBy,
       createdByName: args.createdByName,
       isActive: true,
@@ -236,12 +336,13 @@ export const create = mutation({
   },
 });
 
-// Update folder metadata (name, description)
+// Update folder metadata (name, description, visibility)
 export const update = mutation({
   args: {
     folderId: v.id("documentFolders"),
     name: v.optional(v.string()),
     description: v.optional(v.string()),
+    visibility: v.optional(v.string()), // "private" | "community"
   },
   handler: async (ctx, args) => {
     const { folderId, ...updates } = args;
@@ -445,47 +546,183 @@ export const verifyPassword = action({
   },
 });
 
-// Get documents from protected folder (requires password verification, super_admin bypasses, or has access grant)
+// HIPAA-compliant: Get documents from protected folder
+// Access is granted if: owner, has password, has access grant, or community folder
+// Super admin does NOT bypass password (HIPAA minimum necessary principle)
 export const getProtectedDocuments = action({
   args: {
     folderId: v.id("documentFolders"),
     password: v.string(),
-    isSuperAdmin: v.optional(v.boolean()), // Super admin can bypass password
-    userId: v.optional(v.id("users")), // To check access grants
+    userId: v.optional(v.id("users")),
+    userName: v.optional(v.string()),
+    userEmail: v.optional(v.string()),
   },
-  handler: async (ctx, args): Promise<{ success: boolean; error?: string; documents?: unknown[] }> => {
-    const folder = await ctx.runQuery(api.documentFolders.getFolderWithPassword, {
-      folderId: args.folderId,
-    });
-
-    if (!folder) {
-      return { success: false, error: "Folder not found" };
-    }
-
-    // Check if user has been granted access (bypasses password)
-    let hasGrantedAccess = false;
-    if (args.userId && folder.passwordHash) {
-      const accessCheck = await ctx.runQuery(api.documentFolders.checkUserAccess, {
+  handler: async (ctx, args): Promise<{ success: boolean; error?: string; documents?: unknown[]; accessMethod?: string }> => {
+    try {
+      const folder = await ctx.runQuery(api.documentFolders.getFolderWithPassword, {
         folderId: args.folderId,
-        userId: args.userId,
       });
-      hasGrantedAccess = accessCheck.hasAccess;
-    }
 
-    // Super admin or granted access bypasses password verification
-    if (folder.passwordHash && args.password && !args.isSuperAdmin && !hasGrantedAccess) {
-      const valid = await verifyPasswordHash(args.password, folder.passwordHash);
-      if (!valid) {
-        return { success: false, error: "Invalid password" };
+      if (!folder) {
+        return { success: false, error: "Folder not found" };
       }
+
+      // Normalize visibility - treat undefined/null as "private"
+      const folderVisibility = folder.visibility || "private";
+
+      // FAST PATH: Community folders are accessible to everyone - no auth needed
+      if (folderVisibility === "community") {
+        const documents = await ctx.runQuery(api.documentFolders.getDocumentsInternal, {
+          folderId: args.folderId,
+        });
+        return { success: true, documents, accessMethod: "community" };
+      }
+
+      let accessMethod = "";
+      let hasAccess = false;
+
+      // 1. Check if user is the owner (creator)
+      if (args.userId && folder.createdBy === args.userId) {
+        hasAccess = true;
+        accessMethod = "owner";
+      }
+
+      // 3. Check if user has been granted access (only for password-protected folders)
+      if (!hasAccess && args.userId && folder.passwordHash) {
+        try {
+          const accessCheck = await ctx.runQuery(api.documentFolders.checkUserAccess, {
+            folderId: args.folderId,
+            userId: args.userId,
+          });
+          if (accessCheck.hasAccess) {
+            hasAccess = true;
+            accessMethod = "grant";
+          }
+        } catch (e) {
+          // Continue if access check fails - try other methods
+          console.error("Access check error:", e);
+        }
+      }
+
+      // 4. Check password if still no access
+      if (!hasAccess && folder.passwordHash && args.password) {
+        try {
+          const valid = await verifyPasswordHash(args.password, folder.passwordHash);
+          if (valid) {
+            hasAccess = true;
+            accessMethod = "password";
+          } else {
+            // Log failed password attempt
+            if (args.userId && args.userName) {
+              const userId = args.userId;
+              const userName = args.userName;
+              await ctx.runMutation(api.documentFolders.logFolderAccess, {
+                folderId: args.folderId,
+                folderName: folder.name,
+                userId,
+                userName,
+                userEmail: args.userEmail,
+                action: "password_attempt",
+                accessMethod: "password",
+                success: false,
+              });
+            }
+            return { success: false, error: "Invalid password" };
+          }
+        } catch (e) {
+          console.error("Password verification error:", e);
+          return { success: false, error: "Password verification failed" };
+        }
+      }
+
+      // 5. If folder has no password and is private, only owner can access
+      if (!hasAccess && !folder.passwordHash && folderVisibility !== "community") {
+        // Private unprotected folder - only owner
+        if (args.userId && folder.createdBy === args.userId) {
+          hasAccess = true;
+          accessMethod = "owner";
+        }
+      }
+
+      if (!hasAccess) {
+        return { success: false, error: "Access denied. You need permission or the password to view this folder." };
+      }
+
+      // Log successful access (only if we have user info)
+      if (args.userId && args.userName) {
+        try {
+          const userId = args.userId;
+          const userName = args.userName;
+          await ctx.runMutation(api.documentFolders.logFolderAccess, {
+            folderId: args.folderId,
+            folderName: folder.name,
+            userId,
+            userName,
+            userEmail: args.userEmail,
+            action: "view",
+            accessMethod: accessMethod || "unknown",
+            success: true,
+          });
+        } catch (e) {
+          // Don't fail the request if logging fails
+          console.error("Failed to log access:", e);
+        }
+      }
+
+      // Fetch documents via internal query
+      const documents = await ctx.runQuery(api.documentFolders.getDocumentsInternal, {
+        folderId: args.folderId,
+      });
+
+      return { success: true, documents, accessMethod };
+    } catch (e) {
+      console.error("getProtectedDocuments error:", e);
+      return { success: false, error: e instanceof Error ? e.message : "An error occurred" };
     }
+  },
+});
 
-    // Fetch documents via internal query
-    const documents = await ctx.runQuery(api.documentFolders.getDocumentsInternal, {
+// Log folder access (for HIPAA compliance)
+export const logFolderAccess = mutation({
+  args: {
+    folderId: v.id("documentFolders"),
+    folderName: v.string(),
+    userId: v.id("users"),
+    userName: v.string(),
+    userEmail: v.optional(v.string()),
+    action: v.string(),
+    accessMethod: v.string(),
+    success: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.insert("folderAccessLog", {
       folderId: args.folderId,
+      folderName: args.folderName,
+      userId: args.userId,
+      userName: args.userName,
+      userEmail: args.userEmail,
+      action: args.action,
+      accessMethod: args.accessMethod,
+      success: args.success,
+      timestamp: Date.now(),
     });
+  },
+});
 
-    return { success: true, documents };
+// Get access logs for a folder (for admins)
+export const getFolderAccessLogs = query({
+  args: {
+    folderId: v.id("documentFolders"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const logs = await ctx.db
+      .query("folderAccessLog")
+      .withIndex("by_folder", (q) => q.eq("folderId", args.folderId))
+      .order("desc")
+      .take(args.limit || 100);
+
+    return logs;
   },
 });
 

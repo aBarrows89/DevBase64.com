@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import Protected from "../protected";
 import Sidebar, { MobileHeader } from "@/components/Sidebar";
 import { useTheme } from "../theme-context";
+import { useAuth } from "../auth-context";
 
 const STATUS_OPTIONS = [
   { value: "open", label: "Accepting Applications", color: "bg-green-500/20 text-green-400 border-green-500/30" },
@@ -70,6 +72,8 @@ const getEffectiveBadgeType = (job: Job): string => {
 export default function JobsPage() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
+  const { user } = useAuth();
+  const router = useRouter();
   const jobs = useQuery(api.jobs.getAll);
   const createJob = useMutation(api.jobs.create);
   const updateJob = useMutation(api.jobs.update);
@@ -80,6 +84,27 @@ export default function JobsPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<Job | null>(null);
   const [filterDepartment, setFilterDepartment] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
+
+  // Restrict warehouse_manager role from accessing this page
+  const isWarehouseManager = user?.role === "warehouse_manager";
+
+  useEffect(() => {
+    if (isWarehouseManager) {
+      router.push("/");
+    }
+  }, [isWarehouseManager, router]);
+
+  // Show nothing while redirecting warehouse manager
+  if (isWarehouseManager) {
+    return (
+      <div className={`flex h-screen items-center justify-center ${isDark ? "bg-slate-900" : "bg-[#f2f2f7]"}`}>
+        <div className={`text-center ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+          <p>You do not have access to this page.</p>
+          <p className="text-sm mt-2">Redirecting...</p>
+        </div>
+      </div>
+    );
+  }
 
   const [formData, setFormData] = useState<JobFormData>({
     title: "",

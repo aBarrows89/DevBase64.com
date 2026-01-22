@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Protected from "../protected";
 import Sidebar, { MobileHeader } from "@/components/Sidebar";
@@ -26,7 +26,29 @@ function PersonnelContent() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
   const router = useRouter();
-  const { canViewPersonnel, canManagePersonnel } = useAuth();
+  const { user, canViewPersonnel, canManagePersonnel } = useAuth();
+
+  // Restrict warehouse_manager role from accessing this page
+  const isWarehouseManager = user?.role === "warehouse_manager";
+
+  useEffect(() => {
+    if (isWarehouseManager) {
+      router.push("/");
+    }
+  }, [isWarehouseManager, router]);
+
+  // Show nothing while redirecting warehouse manager
+  if (isWarehouseManager) {
+    return (
+      <div className={`flex h-screen items-center justify-center ${isDark ? "bg-slate-900" : "bg-[#f2f2f7]"}`}>
+        <div className={`text-center ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+          <p>You do not have access to this page.</p>
+          <p className="text-sm mt-2">Redirecting...</p>
+        </div>
+      </div>
+    );
+  }
+
   const personnel = useQuery(api.personnel.list, {}) || [];
   const departments = useQuery(api.personnel.getDepartments) || [];
   const locations = useQuery(api.locations.list) || [];

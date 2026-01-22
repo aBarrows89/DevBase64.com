@@ -58,6 +58,7 @@ import type * as shifts from "../shifts.js";
 import type * as surveys from "../surveys.js";
 import type * as systemBanners from "../systemBanners.js";
 import type * as tasks from "../tasks.js";
+import type * as techWizardChats from "../techWizardChats.js";
 import type * as timeClock from "../timeClock.js";
 import type * as timeOffRequests from "../timeOffRequests.js";
 import type * as timesheetApprovals from "../timesheetApprovals.js";
@@ -120,6 +121,7 @@ declare const fullApi: ApiFromModules<{
   surveys: typeof surveys;
   systemBanners: typeof systemBanners;
   tasks: typeof tasks;
+  techWizardChats: typeof techWizardChats;
   timeClock: typeof timeClock;
   timeOffRequests: typeof timeOffRequests;
   timesheetApprovals: typeof timesheetApprovals;
