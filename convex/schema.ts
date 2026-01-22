@@ -1088,6 +1088,37 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_user_section", ["userId", "section"]),
 
+  // ============ BROADCAST MESSAGES ============
+  // System-wide announcements from super users
+  broadcastMessages: defineTable({
+    title: v.string(),
+    content: v.string(),
+    type: v.string(), // "info" | "warning" | "success" | "update"
+    priority: v.string(), // "normal" | "high"
+    isActive: v.boolean(),
+    startsAt: v.optional(v.number()), // When to start showing (null = immediately)
+    expiresAt: v.optional(v.number()), // When to auto-hide (null = manual only)
+    targetRoles: v.optional(v.array(v.string())), // Which roles see this (null = all)
+    dismissedBy: v.array(v.id("users")), // Users who have dismissed this message
+    createdBy: v.id("users"),
+    createdByName: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_active", ["isActive"])
+    .index("by_created", ["createdAt"]),
+
+  // ============ USER DASHBOARD SETTINGS ============
+  // Per-user dashboard customization (which cards to show)
+  userDashboardSettings: defineTable({
+    userId: v.id("users"),
+    // Available cards: "projects" | "applications" | "websiteMessages" | "hiringAnalytics" | "activityFeed" | "tenureCheckIns"
+    enabledCards: v.array(v.string()), // Which cards are enabled
+    cardOrder: v.optional(v.array(v.string())), // Optional custom ordering
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"]),
+
   // ============ HOLIDAYS & SCHEDULE OVERRIDES ============
   // Global holidays and schedule overrides (prevents NCNS triggers)
   holidays: defineTable({
