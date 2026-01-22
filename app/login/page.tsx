@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useAuth } from "../auth-context";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useTheme } from "../theme-context";
 
 export default function LoginPage() {
@@ -13,8 +13,17 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [inactivityMessage, setInactivityMessage] = useState(false);
   const { login } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Check if redirected due to inactivity
+  useEffect(() => {
+    if (searchParams.get("reason") === "inactivity") {
+      setInactivityMessage(true);
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,6 +69,11 @@ export default function LoginPage() {
           <h2 className={`text-xl font-semibold mb-6 ${isDark ? "text-white" : "text-gray-900"}`}>Sign in</h2>
 
           <form onSubmit={handleSubmit} className="space-y-5">
+            {inactivityMessage && (
+              <div className={`px-4 py-3 rounded-lg text-sm ${isDark ? "bg-amber-500/10 border border-amber-500/30 text-amber-400" : "bg-amber-50 border border-amber-200 text-amber-700"}`}>
+                You were logged out due to inactivity. Please sign in again.
+              </div>
+            )}
             {error && (
               <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-lg text-sm">
                 {error}

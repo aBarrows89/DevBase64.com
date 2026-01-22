@@ -1,9 +1,12 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useRef } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
+
+// Inactivity timeout in milliseconds (5 minutes)
+const INACTIVITY_TIMEOUT = 5 * 60 * 1000;
 
 export type UserRole = "super_admin" | "admin" | "warehouse_director" | "warehouse_manager" | "department_manager" | "office_manager" | "member" | "employee";
 
@@ -64,6 +67,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Track if we've ever successfully loaded user data for this session
   // This prevents clearing the session during transient null states (navigation, resubscription)
   const hasLoadedUserData = useRef(false);
+  // Inactivity timer ref
+  const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const loginMutation = useMutation(api.auth.login);
   const userData = useQuery(
@@ -71,16 +76,82 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     userId ? { userId: userId as Id<"users"> } : "skip"
   );
 
-  // Load saved session on mount
+  // Logout function (defined early for use in inactivity handler)
+  const performLogout = useCallback(() => {
+    setUserId(null);
+    sessionStorage.removeItem("ie_central_user_id");
+    hasLoadedUserData.current = false;
+    setInitialLoadComplete(true);
+    // Clear inactivity timer
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current);
+      inactivityTimerRef.current = null;
+    }
+  }, []);
+
+  // Reset inactivity timer on user activity
+  const resetInactivityTimer = useCallback(() => {
+    // Clear existing timer
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current);
+    }
+    // Only set timer if user is logged in
+    if (userId) {
+      inactivityTimerRef.current = setTimeout(() => {
+        console.log("User logged out due to inactivity");
+        performLogout();
+        // Redirect to login page
+        if (typeof window !== "undefined") {
+          window.location.href = "/login?reason=inactivity";
+        }
+      }, INACTIVITY_TIMEOUT);
+    }
+  }, [userId, performLogout]);
+
+  // Set up activity listeners for inactivity timeout
   useEffect(() => {
-    const savedUserId = localStorage.getItem("ie_central_user_id");
+    if (!userId) return;
+
+    const activityEvents = ["mousedown", "mousemove", "keydown", "scroll", "touchstart", "click"];
+
+    const handleActivity = () => {
+      resetInactivityTimer();
+    };
+
+    // Add event listeners
+    activityEvents.forEach((event) => {
+      document.addEventListener(event, handleActivity, { passive: true });
+    });
+
+    // Start the initial timer
+    resetInactivityTimer();
+
+    // Cleanup
+    return () => {
+      activityEvents.forEach((event) => {
+        document.removeEventListener(event, handleActivity);
+      });
+      if (inactivityTimerRef.current) {
+        clearTimeout(inactivityTimerRef.current);
+      }
+    };
+  }, [userId, resetInactivityTimer]);
+
+  // Load saved session on mount - using sessionStorage (clears on browser close)
+  useEffect(() => {
+    // Clear any old localStorage data (migration to sessionStorage)
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("ie_central_user_id");
+    }
+
+    const savedUserId = sessionStorage.getItem("ie_central_user_id");
     if (savedUserId) {
       // Basic validation - Convex user IDs should be a specific format
       // Clear invalid IDs that might be from other tables/projects
       if (savedUserId.length > 0) {
         setUserId(savedUserId);
       } else {
-        localStorage.removeItem("ie_central_user_id");
+        sessionStorage.removeItem("ie_central_user_id");
         setInitialLoadComplete(true);
       }
     } else {
@@ -101,10 +172,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Query returned null - only clear if we've never successfully loaded
       // This prevents logout during navigation/resubscription when queries temporarily return null
       if (!hasLoadedUserData.current) {
-        // User ID in localStorage doesn't match any user in database
+        // User ID in sessionStorage doesn't match any user in database
         // This can happen if the ID is from a different table/project
         console.warn("Invalid user session detected, clearing...");
-        localStorage.removeItem("ie_central_user_id");
+        sessionStorage.removeItem("ie_central_user_id");
         setUserId(null);
       }
       setInitialLoadComplete(true);
@@ -119,7 +190,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const result = await loginMutation({ email, password });
       if (result.success && result.userId) {
         setUserId(result.userId);
-        localStorage.setItem("ie_central_user_id", result.userId);
+        // Use sessionStorage - clears when browser/tab closes (force login on every visit)
+        sessionStorage.setItem("ie_central_user_id", result.userId);
+        // Start inactivity timer
+        resetInactivityTimer();
         return {
           success: true,
           forcePasswordChange: result.forcePasswordChange,
@@ -132,10 +206,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = () => {
-    setUserId(null);
-    localStorage.removeItem("ie_central_user_id");
-    hasLoadedUserData.current = false; // Reset for next login
-    setInitialLoadComplete(true); // Keep as complete since we know there's no session
+    performLogout();
   };
 
   const user: User | null = userData
