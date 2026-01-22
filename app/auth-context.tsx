@@ -55,6 +55,8 @@ interface AuthContextType {
   canAccessEmployeePortal: boolean; // Employee portal access
   // Office management role (limited access - no people, equipment, employee portal admin)
   isOfficeManager: boolean;
+  // Super admin check for broadcast messages
+  isSuperAdmin: boolean;
   // Helper to get accessible location IDs for warehouse_manager
   getAccessibleLocationIds: () => Id<"locations">[] | "all";
 }
@@ -289,6 +291,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Office management role - limited access (no people, equipment, employee portal admin)
   const isOfficeManager = user?.role === "office_manager";
 
+  // Super admin check (for broadcast messages and other super admin features)
+  const isSuperAdmin = user?.role === "super_admin";
+
   // Helper to get accessible location IDs for warehouse_manager
   const getAccessibleLocationIds = (): Id<"locations">[] | "all" => {
     if (canViewAllShifts) {
@@ -363,6 +368,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isEmployee,
         canAccessEmployeePortal,
         isOfficeManager,
+        isSuperAdmin,
         getAccessibleLocationIds,
       }}
     >
