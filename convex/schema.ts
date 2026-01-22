@@ -1078,6 +1078,16 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_timestamp", ["timestamp"]),
 
+  // User's custom folder ordering preferences (per section)
+  userFolderOrder: defineTable({
+    userId: v.id("users"),
+    section: v.string(), // "myFolders" | "shared" | "community"
+    folderIds: v.array(v.id("documentFolders")), // Ordered array of folder IDs
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_section", ["userId", "section"]),
+
   // ============ HOLIDAYS & SCHEDULE OVERRIDES ============
   // Global holidays and schedule overrides (prevents NCNS triggers)
   holidays: defineTable({

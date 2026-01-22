@@ -883,3 +883,78 @@ export const getUsersForSharing = query({
     }));
   },
 });
+
+// ============ FOLDER ORDERING (PER USER) ============
+
+// Get user's folder order for a section
+export const getFolderOrder = query({
+  args: {
+    userId: v.id("users"),
+    section: v.string(), // "myFolders" | "shared" | "community"
+  },
+  handler: async (ctx, args) => {
+    const order = await ctx.db
+      .query("userFolderOrder")
+      .withIndex("by_user_section", (q) =>
+        q.eq("userId", args.userId).eq("section", args.section)
+      )
+      .first();
+
+    return order?.folderIds || [];
+  },
+});
+
+// Get all folder orders for a user (all sections at once)
+export const getAllFolderOrders = query({
+  args: {
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const orders = await ctx.db
+      .query("userFolderOrder")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect();
+
+    // Return as a map of section -> folderIds
+    const orderMap: Record<string, string[]> = {};
+    for (const order of orders) {
+      orderMap[order.section] = order.folderIds as string[];
+    }
+    return orderMap;
+  },
+});
+
+// Save user's folder order for a section
+export const saveFolderOrder = mutation({
+  args: {
+    userId: v.id("users"),
+    section: v.string(), // "myFolders" | "shared" | "community"
+    folderIds: v.array(v.id("documentFolders")),
+  },
+  handler: async (ctx, args) => {
+    // Check if order already exists for this user+section
+    const existing = await ctx.db
+      .query("userFolderOrder")
+      .withIndex("by_user_section", (q) =>
+        q.eq("userId", args.userId).eq("section", args.section)
+      )
+      .first();
+
+    if (existing) {
+      // Update existing order
+      await ctx.db.patch(existing._id, {
+        folderIds: args.folderIds,
+        updatedAt: Date.now(),
+      });
+      return existing._id;
+    }
+
+    // Create new order
+    return await ctx.db.insert("userFolderOrder", {
+      userId: args.userId,
+      section: args.section,
+      folderIds: args.folderIds,
+      updatedAt: Date.now(),
+    });
+  },
+});

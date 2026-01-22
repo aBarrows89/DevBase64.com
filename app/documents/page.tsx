@@ -65,6 +65,13 @@ function DocumentsContent() {
     user ? { userId: user._id } : "skip"
   );
 
+  // Folder ordering APIs
+  const folderOrders = useQuery(
+    api.documentFolders.getAllFolderOrders,
+    user ? { userId: user._id } : "skip"
+  );
+  const saveFolderOrder = useMutation(api.documentFolders.saveFolderOrder);
+
   // Check if user is admin or super_admin
   const isAdmin = user?.role === "admin" || user?.role === "super_admin";
   const isSuperAdmin = user?.role === "super_admin";
@@ -107,6 +114,11 @@ function DocumentsContent() {
   const [draggedDocId, setDraggedDocId] = useState<Id<"documents"> | null>(null);
   const [draggedFolderId, setDraggedFolderId] = useState<Id<"documentFolders"> | null>(null);
   const [dropTargetFolderId, setDropTargetFolderId] = useState<Id<"documentFolders"> | null>(null);
+
+  // Folder reordering state
+  const [reorderingSection, setReorderingSection] = useState<string | null>(null);
+  const [reorderDragIndex, setReorderDragIndex] = useState<number | null>(null);
+  const [reorderDropIndex, setReorderDropIndex] = useState<number | null>(null);
 
   // Folder sharing state
   const [showShareFolderModal, setShowShareFolderModal] = useState(false);
@@ -671,6 +683,82 @@ function DocumentsContent() {
     setDropTargetFolderId(null);
   };
 
+  // Folder reordering handlers
+  const handleReorderDragStart = (e: React.DragEvent, index: number, section: string) => {
+    e.dataTransfer.setData("text/plain", `reorder:${index}:${section}`);
+    e.dataTransfer.effectAllowed = "move";
+    setReorderDragIndex(index);
+    setReorderingSection(section);
+    e.stopPropagation();
+  };
+
+  const handleReorderDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (reorderDragIndex !== null && reorderDragIndex !== index) {
+      setReorderDropIndex(index);
+    }
+  };
+
+  const handleReorderDragEnd = () => {
+    setReorderDragIndex(null);
+    setReorderDropIndex(null);
+    setReorderingSection(null);
+  };
+
+  const handleReorderDrop = async (e: React.DragEvent, dropIndex: number, section: string, folders: { _id: Id<"documentFolders"> }[]) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!user || reorderDragIndex === null || reorderDragIndex === dropIndex) {
+      handleReorderDragEnd();
+      return;
+    }
+
+    // Create new order by moving the dragged item
+    const newOrder = [...folders.map(f => f._id)];
+    const [movedItem] = newOrder.splice(reorderDragIndex, 1);
+    newOrder.splice(dropIndex, 0, movedItem);
+
+    // Save the new order
+    try {
+      await saveFolderOrder({
+        userId: user._id,
+        section,
+        folderIds: newOrder,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save folder order");
+    }
+
+    handleReorderDragEnd();
+  };
+
+  // Sort folders by user's saved order
+  const sortFoldersByUserOrder = <T extends { _id: Id<"documentFolders"> }>(
+    folders: T[] | undefined,
+    section: string
+  ): T[] => {
+    if (!folders || folders.length === 0) return [];
+
+    const savedOrder = folderOrders?.[section] as string[] | undefined;
+    if (!savedOrder || savedOrder.length === 0) return folders;
+
+    // Sort folders based on saved order, putting unordered ones at the end
+    return [...folders].sort((a, b) => {
+      const indexA = savedOrder.indexOf(a._id as string);
+      const indexB = savedOrder.indexOf(b._id as string);
+
+      // If neither is in the saved order, keep original order
+      if (indexA === -1 && indexB === -1) return 0;
+      // If only A is not in order, put it at the end
+      if (indexA === -1) return 1;
+      // If only B is not in order, put it at the end
+      if (indexB === -1) return -1;
+      // Both are in order, sort by their positions
+      return indexA - indexB;
+    });
+  };
+
   // Use archived, folder, or root documents based on view
   const sourceDocuments = showArchived
     ? archivedDocuments
@@ -858,37 +946,71 @@ function DocumentsContent() {
           </div>
 
           {/* My Folders Section - User's own folders */}
-          {!showArchived && myFolders && myFolders.length > 0 && (
+          {!showArchived && myFolders && myFolders.length > 0 && (() => {
+            const sortedMyFolders = sortFoldersByUserOrder(myFolders, "myFolders");
+            return (
             <div className="mb-6">
               <h2 className={`text-sm font-semibold mb-3 flex items-center gap-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                 </svg>
                 My Folders
+                <span className={`text-xs font-normal ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                  (drag to reorder)
+                </span>
               </h2>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                {myFolders.map((folder) => {
+                {sortedMyFolders.map((folder, index) => {
                   const isDraggingThisFolder = draggedFolderId === folder._id;
+                  const isReordering = reorderingSection === "myFolders" && reorderDragIndex === index;
+                  const isReorderTarget = reorderingSection === "myFolders" && reorderDropIndex === index;
                   return (
                   <div
                     key={folder._id}
                     draggable
-                    onDragStart={(e) => handleFolderDragStart(e, folder._id)}
-                    onDragEnd={handleDragEnd}
+                    onDragStart={(e) => {
+                      if (e.shiftKey) {
+                        handleFolderDragStart(e, folder._id);
+                      } else {
+                        handleReorderDragStart(e, index, "myFolders");
+                      }
+                    }}
+                    onDragEnd={() => {
+                      handleDragEnd();
+                      handleReorderDragEnd();
+                    }}
                     onClick={() => handleOpenFolder(folder)}
-                    onDragOver={(e) => handleFolderDragOver(e, folder._id)}
+                    onDragOver={(e) => {
+                      if (reorderingSection === "myFolders") {
+                        handleReorderDragOver(e, index);
+                      } else {
+                        handleFolderDragOver(e, folder._id);
+                      }
+                    }}
                     onDragLeave={handleFolderDragLeave}
-                    onDrop={(e) => handleFolderDrop(e, folder._id)}
+                    onDrop={(e) => {
+                      if (reorderingSection === "myFolders") {
+                        handleReorderDrop(e, index, "myFolders", sortedMyFolders);
+                      } else {
+                        handleFolderDrop(e, folder._id);
+                      }
+                    }}
                     className={`border rounded-xl p-4 cursor-pointer transition-all hover:scale-[1.02] ${
-                      isDraggingThisFolder
-                        ? "opacity-50 scale-95"
-                        : dropTargetFolderId === folder._id
+                      isReordering
+                        ? "opacity-50 scale-95 ring-2 ring-cyan-500"
+                        : isReorderTarget
                           ? isDark
-                            ? "bg-cyan-500/20 border-cyan-500 scale-[1.02]"
-                            : "bg-blue-50 border-blue-500 scale-[1.02]"
-                          : isDark
-                            ? "bg-slate-800/50 border-slate-700 hover:border-cyan-500/50"
-                            : "bg-white border-gray-200 shadow-sm hover:border-blue-500/50"
+                            ? "ring-2 ring-cyan-400 bg-cyan-500/10"
+                            : "ring-2 ring-blue-400 bg-blue-50"
+                          : isDraggingThisFolder
+                            ? "opacity-50 scale-95"
+                            : dropTargetFolderId === folder._id
+                              ? isDark
+                                ? "bg-cyan-500/20 border-cyan-500 scale-[1.02]"
+                                : "bg-blue-50 border-blue-500 scale-[1.02]"
+                              : isDark
+                                ? "bg-slate-800/50 border-slate-700 hover:border-cyan-500/50"
+                                : "bg-white border-gray-200 shadow-sm hover:border-blue-500/50"
                     }`}
                   >
                     <div className="flex items-start gap-3">
@@ -952,26 +1074,46 @@ function DocumentsContent() {
                 )})}
               </div>
             </div>
-          )}
+          )})()}
 
           {/* Shared With Me Section - show at root level only */}
-          {!showArchived && !currentFolderId && sharedFoldersWithMe && sharedFoldersWithMe.length > 0 && (
+          {!showArchived && !currentFolderId && sharedFoldersWithMe && sharedFoldersWithMe.length > 0 && (() => {
+            const filteredShared = sharedFoldersWithMe.filter((f): f is NonNullable<typeof f> => f !== null);
+            const sortedShared = sortFoldersByUserOrder(filteredShared, "shared");
+            return (
             <div className="mb-6">
               <h2 className={`text-sm font-semibold mb-3 flex items-center gap-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
                 </svg>
                 Shared With Me
+                <span className={`text-xs font-normal ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                  (drag to reorder)
+                </span>
               </h2>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                {sharedFoldersWithMe.filter((f): f is NonNullable<typeof f> => f !== null).map((folder) => (
+                {sortedShared.map((folder, index) => {
+                  const isReordering = reorderingSection === "shared" && reorderDragIndex === index;
+                  const isReorderTarget = reorderingSection === "shared" && reorderDropIndex === index;
+                  return (
                   <div
                     key={folder._id}
+                    draggable
+                    onDragStart={(e) => handleReorderDragStart(e, index, "shared")}
+                    onDragEnd={handleReorderDragEnd}
+                    onDragOver={(e) => reorderingSection === "shared" && handleReorderDragOver(e, index)}
+                    onDrop={(e) => reorderingSection === "shared" && handleReorderDrop(e, index, "shared", sortedShared)}
                     onClick={() => handleOpenFolder({ ...folder, subfolderCount: 0 } as NonNullable<typeof folders>[0], true)}
                     className={`border rounded-xl p-4 cursor-pointer transition-all hover:scale-[1.02] ${
-                      isDark
-                        ? "bg-slate-800/50 border-slate-700 hover:border-cyan-500/50"
-                        : "bg-white border-gray-200 shadow-sm hover:border-blue-500/50"
+                      isReordering
+                        ? "opacity-50 scale-95 ring-2 ring-cyan-500"
+                        : isReorderTarget
+                          ? isDark
+                            ? "ring-2 ring-cyan-400 bg-cyan-500/10"
+                            : "ring-2 ring-blue-400 bg-blue-50"
+                          : isDark
+                            ? "bg-slate-800/50 border-slate-700 hover:border-cyan-500/50"
+                            : "bg-white border-gray-200 shadow-sm hover:border-blue-500/50"
                     }`}
                   >
                     <div className="flex items-start gap-3">
@@ -996,13 +1138,15 @@ function DocumentsContent() {
                       </div>
                     </div>
                   </div>
-                ))}
+                )})}
               </div>
             </div>
-          )}
+          )})()}
 
           {/* Community Folders Section - Public folders visible to all */}
-          {!showArchived && !currentFolderId && communityFolders && communityFolders.length > 0 && (
+          {!showArchived && !currentFolderId && communityFolders && communityFolders.length > 0 && (() => {
+            const sortedCommunity = sortFoldersByUserOrder(communityFolders, "community");
+            return (
             <div className="mb-6">
               <h2 className={`text-sm font-semibold mb-3 flex items-center gap-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1010,18 +1154,32 @@ function DocumentsContent() {
                 </svg>
                 Community
                 <span className={`text-xs font-normal ${isDark ? "text-slate-500" : "text-gray-400"}`}>
-                  (Public folders for all users)
+                  (drag to reorder)
                 </span>
               </h2>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                {communityFolders.map((folder) => (
+                {sortedCommunity.map((folder, index) => {
+                  const isReordering = reorderingSection === "community" && reorderDragIndex === index;
+                  const isReorderTarget = reorderingSection === "community" && reorderDropIndex === index;
+                  return (
                   <div
                     key={folder._id}
+                    draggable
+                    onDragStart={(e) => handleReorderDragStart(e, index, "community")}
+                    onDragEnd={handleReorderDragEnd}
+                    onDragOver={(e) => reorderingSection === "community" && handleReorderDragOver(e, index)}
+                    onDrop={(e) => reorderingSection === "community" && handleReorderDrop(e, index, "community", sortedCommunity)}
                     onClick={() => handleOpenFolder(folder as NonNullable<typeof folders>[0])}
                     className={`border rounded-xl p-4 cursor-pointer transition-all hover:scale-[1.02] ${
-                      isDark
-                        ? "bg-slate-800/50 border-slate-700 hover:border-emerald-500/50"
-                        : "bg-white border-gray-200 shadow-sm hover:border-green-500/50"
+                      isReordering
+                        ? "opacity-50 scale-95 ring-2 ring-emerald-500"
+                        : isReorderTarget
+                          ? isDark
+                            ? "ring-2 ring-emerald-400 bg-emerald-500/10"
+                            : "ring-2 ring-green-400 bg-green-50"
+                          : isDark
+                            ? "bg-slate-800/50 border-slate-700 hover:border-emerald-500/50"
+                            : "bg-white border-gray-200 shadow-sm hover:border-green-500/50"
                     }`}
                   >
                     <div className="flex items-start gap-3">
@@ -1048,10 +1206,10 @@ function DocumentsContent() {
                       </div>
                     </div>
                   </div>
-                ))}
+                )})}
               </div>
             </div>
-          )}
+          )})()}
 
           {/* Loading state for folder documents */}
           {loadingFolderDocs && (
