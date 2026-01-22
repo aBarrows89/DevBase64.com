@@ -338,8 +338,42 @@ function DocumentsContent() {
   };
 
   const handlePrintPreview = () => {
-    if (previewIframeRef.current) {
-      previewIframeRef.current.contentWindow?.print();
+    if (!previewUrl || !previewDocument) return;
+
+    // For images, create a printable window
+    if (previewDocument.fileType.includes("image")) {
+      const printWindow = window.open("", "_blank");
+      if (printWindow) {
+        printWindow.document.write(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>Print - ${previewDocument.name}</title>
+            <style>
+              body { margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+              img { max-width: 100%; max-height: 100vh; object-fit: contain; }
+              @media print { body { margin: 0; } img { max-width: 100%; } }
+            </style>
+          </head>
+          <body>
+            <img src="${previewUrl}" onload="window.print(); window.close();" />
+          </body>
+          </html>
+        `);
+        printWindow.document.close();
+      }
+    } else if (isOfficeDocument(previewDocument.fileType)) {
+      // For Office documents, download and let user print from their application
+      // Can't print directly from Microsoft viewer (cross-origin)
+      window.open(previewUrl, "_blank");
+    } else {
+      // For PDFs and other documents, open in new tab and print
+      const printWindow = window.open(previewUrl, "_blank");
+      if (printWindow) {
+        printWindow.addEventListener("load", () => {
+          printWindow.print();
+        });
+      }
     }
   };
 
