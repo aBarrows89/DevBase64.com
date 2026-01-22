@@ -2189,6 +2189,30 @@ function DocumentsContent() {
                   </div>
                 </div>
 
+                {/* Organizing Folders Section */}
+                <div>
+                  <h3 className={`text-lg font-semibold mb-3 ${isDark ? "text-white" : "text-gray-900"}`}>
+                    Organizing Folders
+                  </h3>
+                  <div className={`p-4 rounded-lg ${isDark ? "bg-purple-500/10 border border-purple-500/30" : "bg-purple-50 border border-purple-200"}`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <svg className={`w-5 h-5 ${isDark ? "text-purple-400" : "text-purple-600"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                      </svg>
+                      <span className={`font-medium ${isDark ? "text-purple-300" : "text-purple-700"}`}>Drag to Reorder</span>
+                    </div>
+                    <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                      Drag and drop folders within each section to arrange them in your preferred order. Your custom order is saved automatically and persists across sessions. Each user has their own personalized folder arrangement.
+                    </p>
+                    <div className={`mt-3 p-3 rounded ${isDark ? "bg-slate-700/50" : "bg-white"}`}>
+                      <p className={`text-xs font-medium ${isDark ? "text-slate-300" : "text-gray-700"}`}>Pro Tip: Nested Folders</p>
+                      <p className={`text-xs mt-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                        In My Folders, hold <kbd className={`px-1.5 py-0.5 rounded ${isDark ? "bg-slate-600" : "bg-gray-200"}`}>Shift</kbd> while dragging to move a folder inside another folder instead of reordering.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Common Actions Section */}
                 <div>
                   <h3 className={`text-lg font-semibold mb-3 ${isDark ? "text-white" : "text-gray-900"}`}>
@@ -2214,9 +2238,9 @@ function DocumentsContent() {
                       </p>
                     </div>
                     <div className="py-3">
-                      <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>Move Documents</p>
+                      <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>Move Documents to Folders</p>
                       <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-600"}`}>
-                        Drag and drop documents onto folders to move them. You can also drag folders into other folders to create nested structures.
+                        Drag and drop documents onto a folder to move them into that folder.
                       </p>
                     </div>
                     <div className="py-3">
@@ -2232,6 +2256,7 @@ function DocumentsContent() {
                 <div className={`p-4 rounded-lg ${isDark ? "bg-cyan-500/10 border border-cyan-500/30" : "bg-blue-50 border border-blue-200"}`}>
                   <h4 className={`font-medium mb-2 ${isDark ? "text-cyan-300" : "text-blue-700"}`}>Tips</h4>
                   <ul className={`text-sm space-y-1 ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                    <li>• Drag folders to reorder them - your order is saved per user</li>
                     <li>• Use descriptive folder names for easy organization</li>
                     <li>• Password-protect folders containing sensitive information</li>
                     <li>• Community folders are great for company-wide resources</li>
