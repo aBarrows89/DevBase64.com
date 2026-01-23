@@ -55,6 +55,7 @@ function CalendarContent() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEventModal, setShowEventModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
+  const [showHelp, setShowHelp] = useState(false);
 
   // Form state for creating/editing events
   const [formData, setFormData] = useState({
@@ -352,6 +353,16 @@ function CalendarContent() {
               )}
             </div>
             <div className="flex items-center gap-2">
+              {/* Help Button */}
+              <button
+                onClick={() => setShowHelp(true)}
+                className={`p-2 rounded-lg transition-colors ${isDark ? "text-slate-400 hover:text-white hover:bg-slate-700" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"}`}
+                title="Calendar Help"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </button>
               <button
                 onClick={() => setShowShareModal(true)}
                 className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
@@ -1273,6 +1284,124 @@ function CalendarContent() {
                   }`}
                 >
                   Share
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Help Modal */}
+        {showHelp && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className={`w-full max-w-lg rounded-xl p-6 max-h-[90vh] overflow-y-auto ${isDark ? "bg-slate-800" : "bg-white"}`}>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  Calendar Help
+                </h2>
+                <button
+                  onClick={() => setShowHelp(false)}
+                  className={`p-2 rounded-lg transition-colors ${isDark ? "text-slate-400 hover:text-white hover:bg-slate-700" : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"}`}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                {/* Creating Events */}
+                <div>
+                  <h3 className={`font-medium mb-2 flex items-center gap-2 ${isDark ? "text-white" : "text-gray-900"}`}>
+                    <svg className="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Creating Events
+                  </h3>
+                  <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    Click &quot;+ New Event&quot; to create a meeting or event. Fill in the title, time, location, and optionally add a meeting link.
+                    You can invite other users who will receive a notification and can accept or decline.
+                  </p>
+                </div>
+
+                {/* Event Invites */}
+                <div>
+                  <h3 className={`font-medium mb-2 flex items-center gap-2 ${isDark ? "text-white" : "text-gray-900"}`}>
+                    <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    Event Invitations
+                  </h3>
+                  <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    When someone invites you to an event, you&apos;ll see a notification badge.
+                    Pending invites appear at the top of your calendar. Click to Accept, Decline, or respond with Maybe.
+                  </p>
+                </div>
+
+                {/* Calendar Sharing */}
+                <div>
+                  <h3 className={`font-medium mb-2 flex items-center gap-2 ${isDark ? "text-white" : "text-gray-900"}`}>
+                    <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                    </svg>
+                    Sharing Your Calendar
+                  </h3>
+                  <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    Click &quot;Share&quot; to let other users view your calendar.
+                    They&apos;ll see your events in read-only mode. You can revoke access at any time from the Share menu.
+                  </p>
+                </div>
+
+                {/* Viewing Shared Calendars */}
+                <div>
+                  <h3 className={`font-medium mb-2 flex items-center gap-2 ${isDark ? "text-white" : "text-gray-900"}`}>
+                    <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                    Viewing Shared Calendars
+                  </h3>
+                  <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    If someone shares their calendar with you, use the dropdown next to the calendar title to switch between your calendar and theirs.
+                    Shared events appear in purple.
+                  </p>
+                </div>
+
+                {/* Interview Events */}
+                <div>
+                  <h3 className={`font-medium mb-2 flex items-center gap-2 ${isDark ? "text-white" : "text-gray-900"}`}>
+                    <svg className="w-5 h-5 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    Interview Events
+                  </h3>
+                  <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    Events scheduled from the Applications page automatically appear on your calendar.
+                    Click on an interview event to view the applicant&apos;s profile directly.
+                  </p>
+                </div>
+
+                {/* Color Coding */}
+                <div>
+                  <h3 className={`font-medium mb-2 flex items-center gap-2 ${isDark ? "text-white" : "text-gray-900"}`}>
+                    <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                    </svg>
+                    Event Colors
+                  </h3>
+                  <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    <span className="text-green-400">Green</span> = Your events &bull;
+                    <span className="text-purple-400"> Purple</span> = Shared calendar events &bull;
+                    <span className="text-cyan-400"> Cyan</span> = Events you&apos;re invited to
+                  </p>
+                </div>
+              </div>
+
+              <div className={`mt-6 pt-4 border-t ${isDark ? "border-slate-700" : "border-gray-200"}`}>
+                <button
+                  onClick={() => setShowHelp(false)}
+                  className={`w-full px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-cyan-500 text-white hover:bg-cyan-600" : "bg-blue-500 text-white hover:bg-blue-600"}`}
+                >
+                  Got it
                 </button>
               </div>
             </div>
