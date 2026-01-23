@@ -271,9 +271,12 @@ export default defineSchema({
 
   // ============ MESSAGING ============
   conversations: defineTable({
-    type: v.string(), // "direct" | "project"
+    type: v.string(), // "direct" | "project" | "group"
     projectId: v.optional(v.id("projects")),
     participants: v.array(v.id("users")),
+    // Group chat fields
+    name: v.optional(v.string()), // Group name (required for groups, optional for direct)
+    createdBy: v.optional(v.id("users")), // Who created the group
     lastMessageAt: v.number(),
     createdAt: v.number(),
   })

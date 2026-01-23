@@ -93,9 +93,11 @@ export const getMessages = query({
 // Create a new conversation
 export const createConversation = mutation({
   args: {
-    type: v.string(),
+    type: v.string(), // "direct" | "project" | "group"
     participants: v.array(v.id("users")),
     projectId: v.optional(v.id("projects")),
+    name: v.optional(v.string()), // Required for group chats
+    createdBy: v.optional(v.id("users")), // Who created the group
   },
   handler: async (ctx, args) => {
     // Check if a direct conversation already exists between these users
@@ -117,15 +119,123 @@ export const createConversation = mutation({
       }
     }
 
+    // Validate group chat requirements
+    if (args.type === "group") {
+      if (!args.name || args.name.trim() === "") {
+        throw new Error("Group name is required");
+      }
+      if (args.participants.length < 2) {
+        throw new Error("Group chat requires at least 2 participants");
+      }
+    }
+
     const conversationId = await ctx.db.insert("conversations", {
       type: args.type,
       participants: args.participants,
       projectId: args.projectId,
+      name: args.type === "group" ? args.name : undefined,
+      createdBy: args.type === "group" ? args.createdBy : undefined,
       lastMessageAt: Date.now(),
       createdAt: Date.now(),
     });
 
     return conversationId;
+  },
+});
+
+// Update group chat info (name)
+export const updateGroupInfo = mutation({
+  args: {
+    conversationId: v.id("conversations"),
+    name: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const conversation = await ctx.db.get(args.conversationId);
+    if (!conversation) {
+      throw new Error("Conversation not found");
+    }
+    if (conversation.type !== "group") {
+      throw new Error("Can only update group chat info");
+    }
+    if (!args.name || args.name.trim() === "") {
+      throw new Error("Group name is required");
+    }
+    await ctx.db.patch(args.conversationId, {
+      name: args.name.trim(),
+    });
+  },
+});
+
+// Add members to a group chat
+export const addGroupMembers = mutation({
+  args: {
+    conversationId: v.id("conversations"),
+    newMembers: v.array(v.id("users")),
+  },
+  handler: async (ctx, args) => {
+    const conversation = await ctx.db.get(args.conversationId);
+    if (!conversation) {
+      throw new Error("Conversation not found");
+    }
+    if (conversation.type !== "group") {
+      throw new Error("Can only add members to group chats");
+    }
+    // Merge existing and new participants, removing duplicates
+    const updatedParticipants = [
+      ...new Set([...conversation.participants, ...args.newMembers]),
+    ];
+    await ctx.db.patch(args.conversationId, {
+      participants: updatedParticipants,
+    });
+  },
+});
+
+// Remove a member from a group chat
+export const removeGroupMember = mutation({
+  args: {
+    conversationId: v.id("conversations"),
+    memberId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const conversation = await ctx.db.get(args.conversationId);
+    if (!conversation) {
+      throw new Error("Conversation not found");
+    }
+    if (conversation.type !== "group") {
+      throw new Error("Can only remove members from group chats");
+    }
+    const updatedParticipants = conversation.participants.filter(
+      (id) => id !== args.memberId
+    );
+    if (updatedParticipants.length < 2) {
+      throw new Error("Group must have at least 2 members");
+    }
+    await ctx.db.patch(args.conversationId, {
+      participants: updatedParticipants,
+    });
+  },
+});
+
+// Leave a group chat
+export const leaveGroup = mutation({
+  args: {
+    conversationId: v.id("conversations"),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const conversation = await ctx.db.get(args.conversationId);
+    if (!conversation) {
+      throw new Error("Conversation not found");
+    }
+    if (conversation.type !== "group") {
+      throw new Error("Can only leave group chats");
+    }
+    const updatedParticipants = conversation.participants.filter(
+      (id) => id !== args.userId
+    );
+    await ctx.db.patch(args.conversationId, {
+      participants: updatedParticipants,
+    });
   },
 });
 

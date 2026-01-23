@@ -25,6 +25,9 @@ interface EnrichedConversation {
   type: string;
   projectId?: Id<"projects">;
   participants: (User | null)[];
+  // Group chat fields
+  name?: string;
+  createdBy?: Id<"users">;
   lastMessageAt: number;
   createdAt: number;
   lastMessage?: {
@@ -139,6 +142,10 @@ function MessagesContent() {
   const [newMessage, setNewMessage] = useState("");
   const [showNewConversation, setShowNewConversation] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  // Group chat state
+  const [isCreatingGroup, setIsCreatingGroup] = useState(false);
+  const [selectedGroupMembers, setSelectedGroupMembers] = useState<User[]>([]);
+  const [groupName, setGroupName] = useState("");
   const [showMobileChat, setShowMobileChat] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -584,9 +591,58 @@ function MessagesContent() {
     setShowNewConversation(false);
   };
 
+  // Toggle user selection for group chat
+  const toggleGroupMember = (targetUser: User) => {
+    setSelectedGroupMembers((prev) => {
+      const isSelected = prev.some((u) => u._id === targetUser._id);
+      if (isSelected) {
+        return prev.filter((u) => u._id !== targetUser._id);
+      } else {
+        return [...prev, targetUser];
+      }
+    });
+  };
+
+  // Create a group chat
+  const handleCreateGroupChat = async () => {
+    if (!user || selectedGroupMembers.length < 1 || !groupName.trim()) return;
+
+    const conversationId = await createConversation({
+      type: "group",
+      participants: [user._id, ...selectedGroupMembers.map((u) => u._id)],
+      name: groupName.trim(),
+      createdBy: user._id,
+    });
+
+    // Find the conversation in the list
+    const newConv = conversations?.find((c) => c._id === conversationId);
+    if (newConv) {
+      setSelectedConversation(newConv);
+    }
+
+    // Reset group creation state
+    setShowNewConversation(false);
+    setIsCreatingGroup(false);
+    setSelectedGroupMembers([]);
+    setGroupName("");
+  };
+
+  // Reset modal state when closing
+  const closeNewConversationModal = () => {
+    setShowNewConversation(false);
+    setIsCreatingGroup(false);
+    setSelectedGroupMembers([]);
+    setGroupName("");
+    setSearchQuery("");
+  };
+
   const getConversationName = (conv: EnrichedConversation): string => {
     if (conv.type === "project" && conv.project) {
       return conv.project.name;
+    }
+    // For group chats, show the group name
+    if (conv.type === "group" && conv.name) {
+      return conv.name;
     }
     // For direct messages, show the other person's name
     const otherParticipant = conv.participants.find((p) => p && p._id !== user?._id);
@@ -597,8 +653,15 @@ function MessagesContent() {
     if (conv.type === "project") {
       return "#";
     }
+    if (conv.type === "group") {
+      return conv.name?.charAt(0).toUpperCase() || "G";
+    }
     const otherParticipant = conv.participants.find((p) => p && p._id !== user?._id);
     return otherParticipant?.name?.charAt(0).toUpperCase() || "?";
+  };
+
+  const isGroupChat = (conv: EnrichedConversation): boolean => {
+    return conv.type === "group";
   };
 
   const formatMessageTime = (timestamp: number): string => {
@@ -668,13 +731,26 @@ function MessagesContent() {
                   selectedConversation?._id === conv._id ? "bg-slate-800/50" : ""
                 }`}
               >
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white font-medium flex-shrink-0">
-                  {getConversationAvatar(conv)}
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-medium flex-shrink-0 ${
+                  conv.type === "group"
+                    ? "bg-gradient-to-br from-purple-500 to-pink-600"
+                    : "bg-gradient-to-br from-cyan-500 to-blue-600"
+                }`}>
+                  {conv.type === "group" ? (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                  ) : (
+                    getConversationAvatar(conv)
+                  )}
                 </div>
                 <div className="flex-1 min-w-0 text-left">
                   <div className="flex items-center justify-between">
-                    <p className="text-white font-medium truncate">
+                    <p className="text-white font-medium truncate flex items-center gap-1.5">
                       {getConversationName(conv)}
+                      {conv.type === "group" && (
+                        <span className="text-xs text-slate-500">({conv.participants.length})</span>
+                      )}
                     </p>
                     {conv.lastMessage && (
                       <span className="text-xs text-slate-500">
@@ -1206,10 +1282,10 @@ function MessagesContent() {
           <div className="bg-slate-800 border border-slate-700 rounded-t-xl sm:rounded-xl p-4 sm:p-6 w-full max-w-md max-h-[80vh] sm:max-h-[70vh] flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg sm:text-xl font-semibold text-white">
-                New Conversation
+                {isCreatingGroup ? "New Group Chat" : "New Conversation"}
               </h2>
               <button
-                onClick={() => setShowNewConversation(false)}
+                onClick={closeNewConversationModal}
                 className="p-2 text-slate-400 hover:text-white transition-colors"
               >
                 <svg
@@ -1228,6 +1304,72 @@ function MessagesContent() {
               </button>
             </div>
 
+            {/* Toggle between Direct Message and Group Chat */}
+            <div className="flex gap-2 mb-4">
+              <button
+                onClick={() => {
+                  setIsCreatingGroup(false);
+                  setSelectedGroupMembers([]);
+                  setGroupName("");
+                }}
+                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                  !isCreatingGroup
+                    ? "bg-cyan-500 text-white"
+                    : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                }`}
+              >
+                Direct Message
+              </button>
+              <button
+                onClick={() => setIsCreatingGroup(true)}
+                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                  isCreatingGroup
+                    ? "bg-cyan-500 text-white"
+                    : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                }`}
+              >
+                Group Chat
+              </button>
+            </div>
+
+            {/* Group name input (only for group chat) */}
+            {isCreatingGroup && (
+              <div className="mb-4">
+                <input
+                  type="text"
+                  placeholder="Group name..."
+                  value={groupName}
+                  onChange={(e) => setGroupName(e.target.value)}
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white text-sm sm:text-base placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+            )}
+
+            {/* Selected members (only for group chat) */}
+            {isCreatingGroup && selectedGroupMembers.length > 0 && (
+              <div className="mb-4">
+                <p className="text-xs text-slate-400 mb-2">Selected members ({selectedGroupMembers.length}):</p>
+                <div className="flex flex-wrap gap-2">
+                  {selectedGroupMembers.map((member) => (
+                    <span
+                      key={member._id}
+                      className="inline-flex items-center gap-1 px-2 py-1 bg-cyan-500/20 text-cyan-400 rounded-full text-sm"
+                    >
+                      {member.name}
+                      <button
+                        onClick={() => toggleGroupMember(member)}
+                        className="hover:text-white"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="mb-4">
               <input
                 type="text"
@@ -1239,26 +1381,57 @@ function MessagesContent() {
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-2 -mx-4 px-4 sm:mx-0 sm:px-0">
-              {filteredUsers?.map((u) => (
-                <button
-                  key={u._id}
-                  onClick={() => handleStartConversation(u)}
-                  className="w-full p-3 flex items-center gap-3 hover:bg-slate-700/50 rounded-lg transition-colors"
-                >
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white font-medium flex-shrink-0">
-                    {u.name.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="text-left min-w-0">
-                    <p className="text-white font-medium truncate">{u.name}</p>
-                    <p className="text-sm text-slate-400 truncate">{u.email}</p>
-                  </div>
-                </button>
-              ))}
+              {filteredUsers?.map((u) => {
+                const isSelected = selectedGroupMembers.some((m) => m._id === u._id);
+                return (
+                  <button
+                    key={u._id}
+                    onClick={() => {
+                      if (isCreatingGroup) {
+                        toggleGroupMember(u);
+                      } else {
+                        handleStartConversation(u);
+                      }
+                    }}
+                    className={`w-full p-3 flex items-center gap-3 rounded-lg transition-colors ${
+                      isSelected
+                        ? "bg-cyan-500/20 border border-cyan-500/50"
+                        : "hover:bg-slate-700/50"
+                    }`}
+                  >
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white font-medium flex-shrink-0">
+                      {u.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="text-left min-w-0 flex-1">
+                      <p className="text-white font-medium truncate">{u.name}</p>
+                      <p className="text-sm text-slate-400 truncate">{u.email}</p>
+                    </div>
+                    {isCreatingGroup && isSelected && (
+                      <svg className="w-5 h-5 text-cyan-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                  </button>
+                );
+              })}
 
               {filteredUsers?.length === 0 && (
                 <p className="text-center text-slate-400 py-4">No users found</p>
               )}
             </div>
+
+            {/* Create Group button (only for group chat) */}
+            {isCreatingGroup && (
+              <div className="mt-4 pt-4 border-t border-slate-700">
+                <button
+                  onClick={handleCreateGroupChat}
+                  disabled={selectedGroupMembers.length < 1 || !groupName.trim()}
+                  className="w-full py-3 bg-cyan-500 text-white font-medium rounded-lg hover:bg-cyan-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Create Group ({selectedGroupMembers.length + 1} members)
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
