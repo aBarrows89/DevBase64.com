@@ -654,7 +654,7 @@ function DocumentsContent() {
     setDraggedDocId(docId);
   };
 
-  // Drag handlers for folders (nesting mode - triggered with Shift+drag)
+  // Drag handlers for folders (nesting mode - triggered with Option/Alt+drag)
   const handleFolderDragStart = (e: React.DragEvent, folderId: Id<"documentFolders">) => {
     e.dataTransfer.setData("text/plain", `folder:${folderId}`);
     e.dataTransfer.effectAllowed = "move";
@@ -702,7 +702,7 @@ function DocumentsContent() {
         setError(err instanceof Error ? err.message : "Failed to move document");
       }
     } else if (data.startsWith("folder:")) {
-      // Moving a folder
+      // Moving a folder (nesting)
       const folderId = data.replace("folder:", "") as Id<"documentFolders">;
       if (folderId !== targetFolderId) {
         try {
@@ -1010,7 +1010,8 @@ function DocumentsContent() {
                     key={folder._id}
                     draggable
                     onDragStart={(e) => {
-                      if (e.shiftKey) {
+                      // Use altKey (Option on Mac) for nesting - more reliable than shiftKey for drag events
+                      if (e.altKey) {
                         handleFolderDragStart(e, folder._id);
                       } else {
                         handleReorderDragStart(e, index, "myFolders");
@@ -1022,7 +1023,11 @@ function DocumentsContent() {
                     }}
                     onClick={() => handleOpenFolder(folder)}
                     onDragOver={(e) => {
-                      if (reorderingSection === "myFolders") {
+                      e.preventDefault(); // Always allow drop
+                      // If we're dragging a folder for nesting (draggedFolderId is set), show drop target
+                      if (draggedFolderId && draggedFolderId !== folder._id) {
+                        setDropTargetFolderId(folder._id);
+                      } else if (reorderingSection === "myFolders") {
                         handleReorderDragOver(e, index);
                       } else {
                         handleFolderDragOver(e, folder._id);
@@ -1030,9 +1035,12 @@ function DocumentsContent() {
                     }}
                     onDragLeave={handleFolderDragLeave}
                     onDrop={(e) => {
-                      if (reorderingSection === "myFolders") {
+                      const data = e.dataTransfer.getData("text/plain");
+                      // Check the actual drag data to determine operation type
+                      if (data.startsWith("reorder:")) {
                         handleReorderDrop(e, index, "myFolders", sortedMyFolders);
                       } else {
+                        // folder: or doc: data - handle as folder drop (nesting or document move)
                         handleFolderDrop(e, folder._id);
                       }
                     }}
@@ -2248,7 +2256,7 @@ function DocumentsContent() {
                     <div className={`mt-3 p-3 rounded ${isDark ? "bg-slate-700/50" : "bg-white"}`}>
                       <p className={`text-xs font-medium ${isDark ? "text-slate-300" : "text-gray-700"}`}>Pro Tip: Nested Folders</p>
                       <p className={`text-xs mt-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                        In My Folders, hold <kbd className={`px-1.5 py-0.5 rounded ${isDark ? "bg-slate-600" : "bg-gray-200"}`}>Shift</kbd> while dragging to move a folder inside another folder instead of reordering.
+                        In My Folders, hold <kbd className={`px-1.5 py-0.5 rounded ${isDark ? "bg-slate-600" : "bg-gray-200"}`}>Option</kbd> (Alt on Windows) while dragging to move a folder inside another folder instead of reordering.
                       </p>
                     </div>
                   </div>
