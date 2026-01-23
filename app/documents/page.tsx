@@ -654,11 +654,15 @@ function DocumentsContent() {
     setDraggedDocId(docId);
   };
 
-  // Drag handlers for folders
+  // Drag handlers for folders (nesting mode - triggered with Shift+drag)
   const handleFolderDragStart = (e: React.DragEvent, folderId: Id<"documentFolders">) => {
     e.dataTransfer.setData("text/plain", `folder:${folderId}`);
     e.dataTransfer.effectAllowed = "move";
     setDraggedFolderId(folderId);
+    // Clear reorder state to ensure we're in nesting mode, not reorder mode
+    setReorderingSection(null);
+    setReorderDragIndex(null);
+    setReorderDropIndex(null);
     e.stopPropagation();
   };
 
@@ -717,12 +721,15 @@ function DocumentsContent() {
     setDropTargetFolderId(null);
   };
 
-  // Folder reordering handlers
+  // Folder reordering handlers (normal drag without Shift)
   const handleReorderDragStart = (e: React.DragEvent, index: number, section: string) => {
     e.dataTransfer.setData("text/plain", `reorder:${index}:${section}`);
     e.dataTransfer.effectAllowed = "move";
     setReorderDragIndex(index);
     setReorderingSection(section);
+    // Clear nesting state to ensure we're in reorder mode, not nesting mode
+    setDraggedFolderId(null);
+    setDropTargetFolderId(null);
     e.stopPropagation();
   };
 
