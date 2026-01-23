@@ -1908,10 +1908,10 @@ function PersonnelDetailContent() {
                     <div
                       key={writeUp._id}
                       className={`rounded-xl p-6 ${
-                        writeUp.isArchived
+                        writeUp.isDeprecated
                           ? isDark
-                            ? "bg-slate-800/30 border border-slate-700/50 opacity-70"
-                            : "bg-gray-50 border border-gray-200 opacity-70"
+                            ? "bg-slate-800/30 border border-slate-700/50"
+                            : "bg-gray-50 border border-gray-200"
                           : isDark
                             ? "bg-slate-800/50 border border-slate-700"
                             : "bg-white border border-gray-200 shadow-sm"
@@ -1926,17 +1926,13 @@ function PersonnelDetailContent() {
                             <span className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                               {new Date(writeUp.date).toLocaleDateString()}
                             </span>
-                            {writeUp.isArchived && (
+                            {writeUp.isDeprecated && (
                               <span className={`px-2 py-1 text-xs font-medium rounded border ${
-                                writeUp.isExpired
-                                  ? isDark
-                                    ? "bg-slate-600/50 text-slate-400 border-slate-500/30"
-                                    : "bg-gray-200 text-gray-500 border-gray-300"
-                                  : isDark
-                                    ? "bg-purple-500/20 text-purple-400 border-purple-500/30"
-                                    : "bg-purple-100 text-purple-600 border-purple-200"
+                                isDark
+                                  ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                                  : "bg-amber-100 text-amber-700 border-amber-200"
                               }`}>
-                                {writeUp.isExpired ? "Expired (90+ days)" : "Archived"}
+                                Deprecated ({writeUp.daysSinceIssued}+ days)
                               </span>
                             )}
                           </div>

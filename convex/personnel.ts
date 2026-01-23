@@ -91,13 +91,19 @@ export const getWithStats = query({
       (a) => a.status === "absent" || a.status === "no_call_no_show"
     ).length;
 
+    // Calculate active (non-deprecated) write-ups - those within the last 60 days
+    const sixtyDaysAgo = new Date();
+    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+    const activeWriteUps = writeUps.filter((w) => {
+      const writeUpDate = new Date(w.date);
+      return writeUpDate >= sixtyDaysAgo;
+    }).length;
+
     return {
       ...personnel,
       stats: {
         writeUpsCount: writeUps.length,
-        activeWriteUps: writeUps.filter(
-          (w) => w.followUpRequired && !w.followUpNotes
-        ).length,
+        activeWriteUps: activeWriteUps,
         meritsCount: merits.length,
         attendance: {
           presentDays,

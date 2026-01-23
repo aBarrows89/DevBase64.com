@@ -2,12 +2,20 @@ import { v } from "convex/values";
 import { mutation, query, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 
-// Helper to check if a write-up is expired (90 days from date)
-function isWriteUpExpired(date: string): boolean {
+// Helper to check if a write-up is deprecated (60 days from date)
+// Deprecated write-ups are still shown but marked visually
+function isWriteUpDeprecated(date: string): boolean {
   const writeUpDate = new Date(date);
   const now = new Date();
   const diffDays = Math.floor((now.getTime() - writeUpDate.getTime()) / (1000 * 60 * 60 * 24));
-  return diffDays >= 90;
+  return diffDays >= 60;
+}
+
+// Helper to get days since write-up
+function getDaysSinceWriteUp(date: string): number {
+  const writeUpDate = new Date(date);
+  const now = new Date();
+  return Math.floor((now.getTime() - writeUpDate.getTime()) / (1000 * 60 * 60 * 24));
 }
 
 // ============ QUERIES ============
@@ -21,18 +29,21 @@ export const listByPersonnel = query({
       .withIndex("by_personnel", (q) => q.eq("personnelId", args.personnelId))
       .collect();
 
-    // Get issuer names and calculate archive status
+    // Get issuer names and calculate deprecated status
+    // All write-ups are always shown, but marked as deprecated after 60 days
     const writeUpsWithIssuer = await Promise.all(
       writeUps.map(async (writeUp) => {
         const issuer = await ctx.db.get(writeUp.issuedBy);
-        const expired = isWriteUpExpired(writeUp.date);
+        const deprecated = isWriteUpDeprecated(writeUp.date);
+        const daysSince = getDaysSinceWriteUp(writeUp.date);
         return {
           ...writeUp,
           issuerName: issuer?.name || "Unknown",
-          // isArchived is true if manually archived OR if 90 days have passed
-          isArchived: writeUp.isArchived || expired,
-          // Track if it's auto-expired vs manually archived
-          isExpired: expired,
+          // Deprecated after 60 days - still shown but marked
+          isDeprecated: deprecated,
+          daysSinceIssued: daysSince,
+          // Keep isArchived for manual archiving if needed
+          isArchived: writeUp.isArchived || false,
         };
       })
     );
@@ -44,10 +55,10 @@ export const listByPersonnel = query({
 });
 
 // Get all write-ups (for admin view)
+// All write-ups are always shown - deprecated status is just visual
 export const listAll = query({
   args: {
     severity: v.optional(v.string()),
-    includeArchived: v.optional(v.boolean()), // Default false - only show active write-ups
   },
   handler: async (ctx, args) => {
     let writeUps;
@@ -61,30 +72,27 @@ export const listAll = query({
       writeUps = await ctx.db.query("writeUps").collect();
     }
 
-    // Enrich with personnel and issuer names and archive status
+    // Enrich with personnel and issuer names and deprecated status
     const enriched = await Promise.all(
       writeUps.map(async (writeUp) => {
         const personnel = await ctx.db.get(writeUp.personnelId);
         const issuer = await ctx.db.get(writeUp.issuedBy);
-        const expired = isWriteUpExpired(writeUp.date);
+        const deprecated = isWriteUpDeprecated(writeUp.date);
+        const daysSince = getDaysSinceWriteUp(writeUp.date);
         return {
           ...writeUp,
           personnelName: personnel
             ? `${personnel.firstName} ${personnel.lastName}`
             : "Unknown",
           issuerName: issuer?.name || "Unknown",
-          isArchived: writeUp.isArchived || expired,
-          isExpired: expired,
+          isDeprecated: deprecated,
+          daysSinceIssued: daysSince,
+          isArchived: writeUp.isArchived || false,
         };
       })
     );
 
-    // Filter out archived unless requested
-    const filtered = args.includeArchived
-      ? enriched
-      : enriched.filter(w => !w.isArchived);
-
-    return filtered.sort(
+    return enriched.sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
     );
   },
