@@ -16,6 +16,8 @@ export default defineSchema({
     personnelId: v.optional(v.id("personnel")), // For employee role - links to their personnel record
     // Push notification token for mobile app
     expoPushToken: v.optional(v.string()),
+    // Daily activity log requirement
+    requiresDailyLog: v.optional(v.boolean()), // Admin-configurable per user
     createdAt: v.optional(v.number()),
     lastLoginAt: v.optional(v.number()),
     // Legacy fields from old system
@@ -89,12 +91,14 @@ export default defineSchema({
     estimatedMinutes: v.optional(v.number()),
     actualMinutes: v.optional(v.number()),
     assignedTo: v.optional(v.id("users")),
+    createdBy: v.optional(v.id("users")),
     dueDate: v.optional(v.string()),
     createdAt: v.number(),
     completedAt: v.optional(v.number()),
   })
     .index("by_project", ["projectId"])
-    .index("by_status", ["status"]),
+    .index("by_status", ["status"])
+    .index("by_assigned", ["assignedTo"]),
 
   // Project Progress Notes
   projectNotes: defineTable({
@@ -328,6 +332,40 @@ export default defineSchema({
     timestamp: v.number(),
   })
     .index("by_timestamp", ["timestamp"])
+    .index("by_user", ["userId"]),
+
+  // ============ DAILY ACTIVITY LOGS ============
+  dailyLogs: defineTable({
+    userId: v.id("users"),
+    userName: v.string(),
+    date: v.string(), // "YYYY-MM-DD" format
+
+    // Manual entry fields
+    summary: v.string(), // What you worked on today
+    accomplishments: v.array(v.string()), // List of accomplishments
+    blockers: v.optional(v.string()), // Any blockers/challenges
+    goalsForTomorrow: v.optional(v.string()), // Tomorrow's focus
+    hoursWorked: v.optional(v.number()), // Hours worked
+
+    // Auto-captured activity summary (snapshot from audit logs)
+    autoActivities: v.optional(
+      v.object({
+        projectsCreated: v.number(),
+        projectsMoved: v.number(),
+        tasksCompleted: v.number(),
+        totalActions: v.number(),
+      })
+    ),
+
+    // Linked project IDs (projects worked on)
+    projectIds: v.optional(v.array(v.id("projects"))),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    isSubmitted: v.boolean(), // Draft vs submitted
+  })
+    .index("by_user_date", ["userId", "date"])
+    .index("by_date", ["date"])
     .index("by_user", ["userId"]),
 
   // ============ WEBSITE INQUIRIES (from ietires.com) ============

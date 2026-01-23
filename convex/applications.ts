@@ -1,4 +1,4 @@
-import { query, mutation } from "./_generated/server";
+import { query, mutation, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 
@@ -1614,5 +1614,64 @@ export const backfillInterviewEventApplicationIds = mutation({
       skipped,
       message: `Updated ${updatedExisting} existing events, created ${createdNew} new events, skipped ${skipped}`,
     };
+  },
+});
+
+// ============ AUTO-EXPIRE OLD APPLICATIONS ============
+
+// Auto-archive applications older than 45 days that are still in early stages
+// Statuses considered "stagnant" and eligible for auto-expire:
+// - new: Never reviewed
+// - reviewed: Reviewed but no contact made
+// - contacted: Contacted but no interview scheduled
+// - dns: Did not show and no follow-up
+export const autoExpireOldApplications = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const fortyFiveDaysAgo = now - 45 * 24 * 60 * 60 * 1000;
+
+    // Statuses that are considered stagnant/inactive
+    const stagnantStatuses = ["new", "reviewed", "contacted", "dns"];
+
+    // Get all applications
+    const applications = await ctx.db.query("applications").collect();
+
+    let expired = 0;
+
+    for (const app of applications) {
+      // Skip if already archived
+      if (app.isArchived) continue;
+
+      // Skip if status is not stagnant (hired, rejected, scheduled, interviewed are active)
+      if (!stagnantStatuses.includes(app.status)) continue;
+
+      // Skip if created within last 45 days
+      if (app.createdAt > fortyFiveDaysAgo) continue;
+
+      // Auto-archive this application
+      await ctx.db.patch(app._id, {
+        isArchived: true,
+        archivedAt: now,
+        status: "expired", // Mark as expired rather than just archiving
+        updatedAt: now,
+      });
+
+      // Log the activity
+      await ctx.db.insert("applicationActivity", {
+        applicationId: app._id,
+        type: "status_change",
+        description: "Application auto-expired after 45 days of inactivity",
+        previousValue: app.status,
+        newValue: "expired",
+        performedByName: "System (Auto-Expire)",
+        createdAt: now,
+      });
+
+      expired++;
+    }
+
+    console.log(`Auto-expire job completed: ${expired} applications expired`);
+    return { expired };
   },
 });

@@ -353,11 +353,12 @@ export const updateUser = mutation({
     email: v.optional(v.string()),
     role: v.optional(v.string()),
     isActive: v.optional(v.boolean()),
+    requiresDailyLog: v.optional(v.boolean()),
     managedLocationIds: v.optional(v.array(v.id("locations"))),
     managedDepartments: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
-    const { userId, managedLocationIds, managedDepartments, ...updates } = args;
+    const { userId, requiresDailyLog, managedLocationIds, managedDepartments, ...updates } = args;
 
     // If email is being updated, check for duplicates
     if (updates.email) {
@@ -378,6 +379,7 @@ export const updateUser = mutation({
     if (updates.email !== undefined) cleanUpdates.email = updates.email;
     if (updates.role !== undefined) cleanUpdates.role = updates.role;
     if (updates.isActive !== undefined) cleanUpdates.isActive = updates.isActive;
+    if (requiresDailyLog !== undefined) cleanUpdates.requiresDailyLog = requiresDailyLog;
     if (managedLocationIds !== undefined) cleanUpdates.managedLocationIds = managedLocationIds;
     if (managedDepartments !== undefined) cleanUpdates.managedDepartments = managedDepartments;
 

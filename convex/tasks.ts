@@ -10,6 +10,7 @@ export const create = mutation({
     estimatedMinutes: v.optional(v.number()),
     assignedTo: v.optional(v.id("users")),
     dueDate: v.optional(v.string()),
+    createdBy: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
     // Get the current highest order for this project
@@ -20,6 +21,7 @@ export const create = mutation({
 
     const maxOrder = existingTasks.reduce((max, task) => Math.max(max, task.order), -1);
 
+    const now = Date.now();
     const taskId = await ctx.db.insert("tasks", {
       projectId: args.projectId,
       title: args.title,
@@ -29,8 +31,29 @@ export const create = mutation({
       estimatedMinutes: args.estimatedMinutes,
       assignedTo: args.assignedTo,
       dueDate: args.dueDate,
-      createdAt: Date.now(),
+      createdBy: args.createdBy,
+      createdAt: now,
     });
+
+    // Send notification if task is assigned to someone (not the creator)
+    if (args.assignedTo && args.createdBy && args.assignedTo !== args.createdBy) {
+      const project = await ctx.db.get(args.projectId);
+      const creator = await ctx.db.get(args.createdBy);
+
+      if (project && creator) {
+        await ctx.db.insert("notifications", {
+          userId: args.assignedTo,
+          type: "task_assigned",
+          title: `${creator.name} assigned you a task`,
+          message: `Task: "${args.title}" in project "${project.name}"`,
+          link: `/projects?id=${args.projectId}`,
+          relatedId: taskId,
+          isRead: false,
+          isDismissed: false,
+          createdAt: now,
+        });
+      }
+    }
 
     return taskId;
   },
@@ -85,9 +108,10 @@ export const update = mutation({
     actualMinutes: v.optional(v.number()),
     assignedTo: v.optional(v.id("users")),
     dueDate: v.optional(v.string()),
+    updatedBy: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    const { taskId, ...updates } = args;
+    const { taskId, updatedBy, ...updates } = args;
 
     const task = await ctx.db.get(taskId);
     if (!task) throw new Error("Task not found");
@@ -100,7 +124,36 @@ export const update = mutation({
       }
     }
 
+    // Check if assignment is changing to a new person
+    const isNewAssignment =
+      args.assignedTo &&
+      args.assignedTo !== task.assignedTo &&
+      updatedBy &&
+      args.assignedTo !== updatedBy;
+
     await ctx.db.patch(taskId, filteredUpdates);
+
+    // Send notification if task is reassigned to someone new
+    if (isNewAssignment) {
+      const project = await ctx.db.get(task.projectId);
+      const updater = await ctx.db.get(updatedBy!);
+
+      if (project && updater) {
+        const now = Date.now();
+        await ctx.db.insert("notifications", {
+          userId: args.assignedTo!,
+          type: "task_assigned",
+          title: `${updater.name} assigned you a task`,
+          message: `Task: "${args.title || task.title}" in project "${project.name}"`,
+          link: `/projects?id=${task.projectId}`,
+          relatedId: taskId,
+          isRead: false,
+          isDismissed: false,
+          createdAt: now,
+        });
+      }
+    }
+
     return taskId;
   },
 });
@@ -192,5 +245,41 @@ export const getByProject = query({
       .collect();
 
     return tasks.sort((a, b) => a.order - b.order);
+  },
+});
+
+// Get all tasks assigned to a user (across all projects)
+export const getAssignedToUser = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const tasks = await ctx.db
+      .query("tasks")
+      .withIndex("by_assigned", (q) => q.eq("assignedTo", args.userId))
+      .collect();
+
+    // Enrich with project info
+    const enrichedTasks = await Promise.all(
+      tasks.map(async (task) => {
+        const project = await ctx.db.get(task.projectId);
+        return {
+          ...task,
+          projectName: project?.name || "Unknown Project",
+          projectStatus: project?.status,
+        };
+      })
+    );
+
+    // Filter out tasks from archived projects and sort by due date
+    return enrichedTasks
+      .filter((t) => t.projectStatus !== "archived")
+      .sort((a, b) => {
+        // Sort by: incomplete first, then by due date
+        if (a.status === "done" && b.status !== "done") return 1;
+        if (a.status !== "done" && b.status === "done") return -1;
+        if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate);
+        if (a.dueDate && !b.dueDate) return -1;
+        if (!a.dueDate && b.dueDate) return 1;
+        return b.createdAt - a.createdAt;
+      });
   },
 });

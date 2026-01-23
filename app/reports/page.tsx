@@ -36,7 +36,7 @@ function exportToCSV(data: Record<string, unknown>[], filename: string) {
   link.click();
 }
 
-type ReportType = "personnel" | "applications" | "hiring" | "attendance" | "equipment";
+type ReportType = "personnel" | "applications" | "hiring" | "attendance" | "equipment" | "weekly";
 
 function ReportsContent() {
   const { theme } = useTheme();
@@ -49,12 +49,29 @@ function ReportsContent() {
   const [endDate, setEndDate] = useState("");
   const [equipmentTypeFilter, setEquipmentTypeFilter] = useState("all");
 
+  // Weekly overview date range (defaults to current week)
+  const getWeekDates = () => {
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - dayOfWeek);
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+    return {
+      start: startOfWeek.toISOString().split("T")[0],
+      end: endOfWeek.toISOString().split("T")[0],
+    };
+  };
+  const weekDates = getWeekDates();
+  const [weeklyStartDate, setWeeklyStartDate] = useState(weekDates.start);
+  const [weeklyEndDate, setWeeklyEndDate] = useState(weekDates.end);
+
   // Read URL params on mount
   useEffect(() => {
     const type = searchParams.get("type");
     const equipmentType = searchParams.get("equipmentType");
 
-    if (type && ["personnel", "applications", "hiring", "attendance", "equipment"].includes(type)) {
+    if (type && ["personnel", "applications", "hiring", "attendance", "equipment", "weekly"].includes(type)) {
       setActiveReport(type as ReportType);
     }
     if (equipmentType) {
@@ -77,6 +94,12 @@ function ReportsContent() {
   const attendanceReport = useQuery(
     api.reports.getAttendanceReport,
     startDate && endDate ? { startDate, endDate } : "skip"
+  );
+  const weeklyOverview = useQuery(
+    api.dailyLogs.getWeeklyOverview,
+    weeklyStartDate && weeklyEndDate
+      ? { startDate: weeklyStartDate, endDate: weeklyEndDate }
+      : "skip"
   );
 
   const reportTypes: { id: ReportType; label: string; icon: string; description: string }[] = [
@@ -110,6 +133,12 @@ function ReportsContent() {
       icon: "M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z",
       description: "Export scanner and picker inventory with assignments",
     },
+    {
+      id: "weekly",
+      label: "Weekly Overview",
+      icon: "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z",
+      description: "Weekly summary of daily activity logs for stakeholders",
+    },
   ];
 
   const handleExport = () => {
@@ -130,6 +159,27 @@ function ReportsContent() {
         break;
       case "equipment":
         if (equipmentReport) exportToCSV(equipmentReport.equipment, "equipment_export");
+        break;
+      case "weekly":
+        if (weeklyOverview) {
+          // Create flattened export data from weekly overview
+          const exportData = weeklyOverview.userSummaries.flatMap((user) =>
+            user.logs.map((log) => ({
+              userName: user.userName,
+              date: log.date,
+              summary: log.summary,
+              accomplishments: log.accomplishments.join("; "),
+              blockers: log.blockers || "",
+              goalsForTomorrow: log.goalsForTomorrow || "",
+              hoursWorked: log.hoursWorked || 0,
+              projectsCreated: log.autoActivities?.projectsCreated || 0,
+              projectsMoved: log.autoActivities?.projectsMoved || 0,
+              tasksCompleted: log.autoActivities?.tasksCompleted || 0,
+              totalActions: log.autoActivities?.totalActions || 0,
+            }))
+          );
+          exportToCSV(exportData, `weekly_overview_${weeklyStartDate}_${weeklyEndDate}`);
+        }
         break;
     }
   };
@@ -201,7 +251,7 @@ function ReportsContent() {
           </div>
 
           {/* Filters */}
-          {(activeReport === "applications" || activeReport === "hiring" || activeReport === "attendance") && (
+          {(activeReport === "applications" || activeReport === "hiring" || activeReport === "attendance" || activeReport === "weekly") && (
             <div className={`border rounded-xl p-4 sm:p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200"}`}>
               <h3 className={`font-medium mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
                 Filters
@@ -221,35 +271,66 @@ function ReportsContent() {
                       <option value="new">New</option>
                       <option value="reviewed">Reviewed</option>
                       <option value="contacted">Contacted</option>
-                      <option value="interview_scheduled">Interview Scheduled</option>
+                      <option value="scheduled">Interview Scheduled</option>
                       <option value="interviewed">Interviewed</option>
                       <option value="hired">Hired</option>
                       <option value="rejected">Rejected</option>
+                      <option value="dns">Did Not Show</option>
+                      <option value="expired">Expired</option>
                     </select>
                   </div>
                 )}
-                <div>
-                  <label className={`block text-sm mb-1 ${isDark ? "text-slate-400" : "text-gray-600"}`}>
-                    Start Date
-                  </label>
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className={`w-full px-3 py-2 rounded-lg border ${isDark ? "bg-slate-900 border-slate-600 text-white" : "bg-white border-gray-300"}`}
-                  />
-                </div>
-                <div>
-                  <label className={`block text-sm mb-1 ${isDark ? "text-slate-400" : "text-gray-600"}`}>
-                    End Date
-                  </label>
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className={`w-full px-3 py-2 rounded-lg border ${isDark ? "bg-slate-900 border-slate-600 text-white" : "bg-white border-gray-300"}`}
-                  />
-                </div>
+                {activeReport !== "weekly" ? (
+                  <>
+                    <div>
+                      <label className={`block text-sm mb-1 ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                        Start Date
+                      </label>
+                      <input
+                        type="date"
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                        className={`w-full px-3 py-2 rounded-lg border ${isDark ? "bg-slate-900 border-slate-600 text-white" : "bg-white border-gray-300"}`}
+                      />
+                    </div>
+                    <div>
+                      <label className={`block text-sm mb-1 ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                        End Date
+                      </label>
+                      <input
+                        type="date"
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        className={`w-full px-3 py-2 rounded-lg border ${isDark ? "bg-slate-900 border-slate-600 text-white" : "bg-white border-gray-300"}`}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <label className={`block text-sm mb-1 ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                        Week Start
+                      </label>
+                      <input
+                        type="date"
+                        value={weeklyStartDate}
+                        onChange={(e) => setWeeklyStartDate(e.target.value)}
+                        className={`w-full px-3 py-2 rounded-lg border ${isDark ? "bg-slate-900 border-slate-600 text-white" : "bg-white border-gray-300"}`}
+                      />
+                    </div>
+                    <div>
+                      <label className={`block text-sm mb-1 ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                        Week End
+                      </label>
+                      <input
+                        type="date"
+                        value={weeklyEndDate}
+                        onChange={(e) => setWeeklyEndDate(e.target.value)}
+                        className={`w-full px-3 py-2 rounded-lg border ${isDark ? "bg-slate-900 border-slate-600 text-white" : "bg-white border-gray-300"}`}
+                      />
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -663,6 +744,146 @@ function ReportsContent() {
                         </p>
                       )}
                     </div>
+                  </>
+                ) : (
+                  <div className="flex justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500"></div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Weekly Overview Report */}
+            {activeReport === "weekly" && (
+              <div className="space-y-6">
+                {weeklyOverview ? (
+                  <>
+                    {/* Date Range Header */}
+                    <div className={`text-sm ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                      Week of {new Date(weeklyOverview.startDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })} - {new Date(weeklyOverview.endDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                    </div>
+
+                    {/* Summary Cards */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className={`p-4 rounded-lg ${isDark ? "bg-slate-900/50" : "bg-gray-50"}`}>
+                        <p className={`text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
+                          {weeklyOverview.totals.totalLogs}
+                        </p>
+                        <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-600"}`}>Logs Submitted</p>
+                      </div>
+                      <div className={`p-4 rounded-lg ${isDark ? "bg-slate-900/50" : "bg-gray-50"}`}>
+                        <p className={`text-2xl font-bold ${isDark ? "text-cyan-400" : "text-blue-600"}`}>
+                          {weeklyOverview.totals.totalHours.toFixed(1)}
+                        </p>
+                        <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-600"}`}>Hours Worked</p>
+                      </div>
+                      <div className={`p-4 rounded-lg ${isDark ? "bg-slate-900/50" : "bg-gray-50"}`}>
+                        <p className="text-2xl font-bold text-green-400">
+                          {weeklyOverview.totals.totalAccomplishments}
+                        </p>
+                        <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-600"}`}>Accomplishments</p>
+                      </div>
+                      <div className={`p-4 rounded-lg ${isDark ? "bg-slate-900/50" : "bg-gray-50"}`}>
+                        <p className={`text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
+                          {weeklyOverview.totals.uniqueUsers}
+                        </p>
+                        <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-600"}`}>Team Members</p>
+                      </div>
+                    </div>
+
+                    {/* Per-User Breakdown */}
+                    {weeklyOverview.userSummaries.length > 0 ? (
+                      <div>
+                        <h4 className={`font-medium mb-3 ${isDark ? "text-white" : "text-gray-900"}`}>
+                          Per-User Breakdown
+                        </h4>
+                        <div className="space-y-4">
+                          {weeklyOverview.userSummaries.map((user) => (
+                            <div
+                              key={user.userId}
+                              className={`border rounded-lg p-4 ${isDark ? "bg-slate-900/30 border-slate-700" : "bg-gray-50 border-gray-200"}`}
+                            >
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-3">
+                                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-medium ${isDark ? "bg-cyan-600" : "bg-blue-600"}`}>
+                                    {user.userName.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                                  </div>
+                                  <div>
+                                    <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                                      {user.userName}
+                                    </p>
+                                    <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                                      {user.daysLogged} day{user.daysLogged !== 1 ? "s" : ""} logged &middot; {user.totalHours.toFixed(1)} hours
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-4 text-sm">
+                                  <span className={`${isDark ? "text-green-400" : "text-green-600"}`}>
+                                    {user.totalAccomplishments} accomplishments
+                                  </span>
+                                  {user.blockers.length > 0 && (
+                                    <span className={`${isDark ? "text-amber-400" : "text-amber-600"}`}>
+                                      {user.blockers.length} blocker{user.blockers.length !== 1 ? "s" : ""}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Expandable Details */}
+                              <details className="mt-2">
+                                <summary className={`cursor-pointer text-sm ${isDark ? "text-slate-400 hover:text-slate-300" : "text-gray-500 hover:text-gray-700"}`}>
+                                  View daily details
+                                </summary>
+                                <div className="mt-3 space-y-3">
+                                  {user.logs
+                                    .sort((a, b) => a.date.localeCompare(b.date))
+                                    .map((log) => (
+                                      <div
+                                        key={log._id}
+                                        className={`border-l-2 pl-3 ${isDark ? "border-slate-600" : "border-gray-300"}`}
+                                      >
+                                        <p className={`text-sm font-medium ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                                          {new Date(log.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                                          {log.hoursWorked && (
+                                            <span className={`ml-2 font-normal ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                                              ({log.hoursWorked}h)
+                                            </span>
+                                          )}
+                                        </p>
+                                        <p className={`text-sm mt-1 ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                                          {log.summary}
+                                        </p>
+                                        {log.accomplishments.length > 0 && (
+                                          <ul className={`mt-2 text-sm list-disc list-inside ${isDark ? "text-green-400/80" : "text-green-700"}`}>
+                                            {log.accomplishments.map((acc, i) => (
+                                              <li key={i}>{acc}</li>
+                                            ))}
+                                          </ul>
+                                        )}
+                                        {log.blockers && (
+                                          <p className={`mt-2 text-sm ${isDark ? "text-amber-400/80" : "text-amber-700"}`}>
+                                            <span className="font-medium">Blocker:</span> {log.blockers}
+                                          </p>
+                                        )}
+                                      </div>
+                                    ))}
+                                </div>
+                              </details>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className={`text-center py-8 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                        <svg className="w-12 h-12 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <p>No submitted daily logs for this week</p>
+                        <p className={`text-sm mt-1 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                          Team members can submit daily logs from the Daily Log page
+                        </p>
+                      </div>
+                    )}
                   </>
                 ) : (
                   <div className="flex justify-center py-8">

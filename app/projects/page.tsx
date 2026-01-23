@@ -44,6 +44,9 @@ function ProjectsContent() {
   const projects = useQuery(api.projects.getAll, user?._id ? { userId: user._id } : {}) || [];
   const stats = useQuery(api.projects.getStats);
   const users = useQuery(api.auth.getAllUsers) || [];
+
+  // Get tasks assigned to me from other users' projects
+  const assignedToMe = useQuery(api.tasks.getAssignedToUser, user?._id ? { userId: user._id } : "skip") || [];
   const updateStatus = useMutation(api.projects.updateStatus);
   const archiveProject = useMutation(api.projects.archive);
   const createProject = useMutation(api.projects.create);
@@ -70,6 +73,7 @@ function ProjectsContent() {
   const [newTaskAssignee, setNewTaskAssignee] = useState<string>("");
   const [taskFilter, setTaskFilter] = useState<"all" | "mine">("all"); // For task filtering
   const [selectedProjectId, setSelectedProjectId] = useState<Id<"projects"> | null>(null);
+  const [showAssignedTasks, setShowAssignedTasks] = useState(true); // Show assigned tasks section
   const [isEditing, setIsEditing] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [newProject, setNewProject] = useState({
@@ -220,8 +224,8 @@ function ProjectsContent() {
 
   const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedProjectId || !newTaskTitle.trim()) {
-      console.log("Missing projectId or empty task title");
+    if (!selectedProjectId || !newTaskTitle.trim() || !user) {
+      console.log("Missing projectId, user, or empty task title");
       return;
     }
     try {
@@ -229,6 +233,7 @@ function ProjectsContent() {
         projectId: selectedProjectId,
         title: newTaskTitle.trim(),
         assignedTo: newTaskAssignee ? (newTaskAssignee as Id<"users">) : undefined,
+        createdBy: user._id,
       });
       setNewTaskTitle("");
       setNewTaskAssignee("");
@@ -479,6 +484,89 @@ function ProjectsContent() {
                 <p className="text-slate-400 text-xs font-medium">Archived</p>
                 <p className="text-slate-300 text-xl font-bold">{stats.archivedTotal}</p>
               </div>
+            </div>
+          )}
+
+          {/* Assigned to Me Section */}
+          {assignedToMe.length > 0 && (
+            <div className="mt-4 bg-amber-500/10 border border-amber-500/30 rounded-lg overflow-hidden">
+              <button
+                onClick={() => setShowAssignedTasks(!showAssignedTasks)}
+                className="w-full flex items-center justify-between px-4 py-3 hover:bg-amber-500/5 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                  <span className="text-amber-400 font-medium">
+                    Tasks Assigned to You ({assignedToMe.filter(t => t.status !== "done").length} pending)
+                  </span>
+                </div>
+                <svg
+                  className={`w-5 h-5 text-amber-400 transform transition-transform ${showAssignedTasks ? "rotate-180" : ""}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {showAssignedTasks && (
+                <div className="px-4 pb-3 space-y-2 max-h-64 overflow-y-auto">
+                  {assignedToMe
+                    .filter(t => t.status !== "done")
+                    .map((task) => (
+                    <div
+                      key={task._id}
+                      className={`flex items-center gap-3 p-3 rounded-lg bg-slate-800/50 border ${
+                        task.status === "in_progress"
+                          ? "border-cyan-500/30"
+                          : "border-slate-700"
+                      }`}
+                    >
+                      <button
+                        onClick={async () => {
+                          const nextStatus = task.status === "todo" ? "in_progress" : "done";
+                          await updateTaskStatus({ taskId: task._id, status: nextStatus });
+                        }}
+                        className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
+                          task.status === "in_progress"
+                            ? "border-cyan-400 bg-cyan-400/20"
+                            : "border-slate-500 hover:border-amber-400"
+                        }`}
+                        title={`Mark as ${task.status === "todo" ? "in progress" : "done"}`}
+                      >
+                        {task.status === "in_progress" && (
+                          <div className="w-2 h-2 bg-cyan-400 rounded-full" />
+                        )}
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white text-sm truncate">{task.title}</p>
+                        <p className="text-slate-500 text-xs">
+                          from <span className="text-slate-400">{task.projectName}</span>
+                          {task.dueDate && (
+                            <span className="ml-2 text-amber-400">Due: {task.dueDate}</span>
+                          )}
+                        </p>
+                      </div>
+                      <select
+                        value={task.status}
+                        onChange={(e) => updateTaskStatus({ taskId: task._id, status: e.target.value })}
+                        className={`text-xs px-2 py-0.5 rounded cursor-pointer border-0 focus:outline-none ${
+                          task.status === "in_progress" ? "bg-cyan-500/20 text-cyan-400" : "bg-slate-700 text-slate-400"
+                        }`}
+                      >
+                        <option value="todo" className="bg-slate-800 text-slate-300">todo</option>
+                        <option value="in_progress" className="bg-slate-800 text-cyan-400">in progress</option>
+                        <option value="done" className="bg-slate-800 text-green-400">done</option>
+                      </select>
+                    </div>
+                  ))}
+                  {assignedToMe.filter(t => t.status !== "done").length === 0 && (
+                    <p className="text-center py-2 text-slate-500 text-sm">All assigned tasks completed!</p>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </header>

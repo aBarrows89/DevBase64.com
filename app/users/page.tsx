@@ -15,6 +15,7 @@ interface User {
   role: string;
   isActive: boolean;
   forcePasswordChange: boolean;
+  requiresDailyLog?: boolean;
   createdAt: number;
   lastLoginAt?: number;
   managedLocationIds?: Id<"locations">[];
@@ -57,6 +58,7 @@ function UsersContent() {
     email: "",
     role: "",
     isActive: true,
+    requiresDailyLog: false,
     managedLocationIds: [] as Id<"locations">[],
     managedDepartments: [] as string[],
   });
@@ -101,6 +103,7 @@ function UsersContent() {
       email: editForm.email,
       role: editForm.role,
       isActive: editForm.isActive,
+      requiresDailyLog: editForm.requiresDailyLog,
       managedLocationIds: editForm.role === "warehouse_manager" ? editForm.managedLocationIds : undefined,
       managedDepartments: editForm.role === "department_manager" ? editForm.managedDepartments : undefined,
     });
@@ -165,6 +168,7 @@ function UsersContent() {
       email: user.email,
       role: user.role,
       isActive: user.isActive,
+      requiresDailyLog: user.requiresDailyLog || false,
       managedLocationIds: user.managedLocationIds || [],
       managedDepartments: user.managedDepartments || [],
     });
@@ -641,6 +645,21 @@ function UsersContent() {
                   />
                   <span className="text-sm text-slate-400">Active</span>
                 </label>
+              </div>
+
+              <div>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editForm.requiresDailyLog}
+                    onChange={(e) => setEditForm({ ...editForm, requiresDailyLog: e.target.checked })}
+                    className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-amber-500 focus:ring-amber-500"
+                  />
+                  <span className="text-sm text-slate-400">Requires Daily Log</span>
+                </label>
+                <p className="text-xs text-slate-500 mt-1 ml-7">
+                  User will be prompted to fill out daily activity logs
+                </p>
               </div>
 
               {/* Location Assignment for Warehouse Managers */}

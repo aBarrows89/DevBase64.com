@@ -30,6 +30,8 @@ const statusColors: Record<string, string> = {
   interviewed: "bg-blue-500/20 text-blue-400 border-blue-500/30",
   hired: "bg-green-500/20 text-green-400 border-green-500/30",
   rejected: "bg-red-500/20 text-red-400 border-red-500/30",
+  dns: "bg-slate-500/20 text-slate-400 border-slate-500/30",
+  expired: "bg-gray-500/20 text-gray-400 border-gray-500/30",
 };
 
 // Kanban column header colors
@@ -41,6 +43,8 @@ const kanbanHeaderColors: Record<string, string> = {
   interviewed: "bg-blue-500/30 border-blue-500/50",
   hired: "bg-green-500/30 border-green-500/50",
   rejected: "bg-red-500/30 border-red-500/50",
+  dns: "bg-slate-500/30 border-slate-500/50",
+  expired: "bg-gray-500/30 border-gray-500/50",
 };
 
 function ApplicationsContent() {

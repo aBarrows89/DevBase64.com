@@ -10,4 +10,12 @@ crons.daily(
   internal.projects.autoArchiveOldDoneProjects
 );
 
+// Run auto-expire old applications every day at 3 AM UTC
+// Archives applications older than 45 days that are still in stagnant statuses
+crons.daily(
+  "auto-expire-old-applications",
+  { hourUTC: 3, minuteUTC: 0 },
+  internal.applications.autoExpireOldApplications
+);
+
 export default crons;

@@ -174,6 +174,8 @@ export const getPendingInvites = query({
       )
       .collect();
 
+    const now = Date.now();
+
     // Get event details for each invite
     const enriched = await Promise.all(
       invites.map(async (inv) => {
@@ -185,8 +187,10 @@ export const getPendingInvites = query({
       })
     );
 
-    // Filter out cancelled events
-    return enriched.filter((inv) => inv.event && !inv.event.isCancelled);
+    // Filter out cancelled events and past events
+    return enriched.filter(
+      (inv) => inv.event && !inv.event.isCancelled && inv.event.startTime > now
+    );
   },
 });
 
@@ -201,8 +205,23 @@ export const getUnreadInviteCount = query({
       )
       .collect();
 
-    // Filter for pending status only
-    return invites.filter((i) => i.status === "pending").length;
+    const now = Date.now();
+
+    // Filter for pending status only and exclude cancelled/past events
+    const validInvites = await Promise.all(
+      invites
+        .filter((i) => i.status === "pending")
+        .map(async (invite) => {
+          const event = await ctx.db.get(invite.eventId);
+          // Only count if event exists, not cancelled, and not in the past
+          if (event && !event.isCancelled && event.startTime > now) {
+            return invite;
+          }
+          return null;
+        })
+    );
+
+    return validInvites.filter(Boolean).length;
   },
 });
 

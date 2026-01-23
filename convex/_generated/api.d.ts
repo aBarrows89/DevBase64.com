@@ -23,6 +23,7 @@ import type * as bulkUpload from "../bulkUpload.js";
 import type * as callOffs from "../callOffs.js";
 import type * as contactMessages from "../contactMessages.js";
 import type * as crons from "../crons.js";
+import type * as dailyLogs from "../dailyLogs.js";
 import type * as dashboardSettings from "../dashboardSettings.js";
 import type * as dealerInquiries from "../dealerInquiries.js";
 import type * as deletedRecords from "../deletedRecords.js";
@@ -88,6 +89,7 @@ declare const fullApi: ApiFromModules<{
   callOffs: typeof callOffs;
   contactMessages: typeof contactMessages;
   crons: typeof crons;
+  dailyLogs: typeof dailyLogs;
   dashboardSettings: typeof dashboardSettings;
   dealerInquiries: typeof dealerInquiries;
   deletedRecords: typeof deletedRecords;
