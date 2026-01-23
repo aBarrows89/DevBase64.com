@@ -189,25 +189,14 @@ export default function Sidebar() {
 
   // Filter nav groups based on permissions
   const filteredNavGroups = NAV_GROUPS.filter((group) => {
-    // Warehouse manager shouldn't see Employee Portal or Hiring & HR groups
-    if (isWarehouseManager && (group.id === "employee-portal" || group.id === "hiring")) return false;
+    // Warehouse manager shouldn't see Employee Portal group (but can see hiring)
+    if (isWarehouseManager && group.id === "employee-portal") return false;
     if (!group.requiresPermission) return true;
     if (group.requiresPermission === "viewPersonnel") return canViewPersonnel;
     if (group.requiresPermission === "viewShifts") return canViewShifts;
     if (group.requiresPermission === "manageTimeOff") return canManageTimeOff;
     if (group.requiresPermission === "departmentPortal") return canAccessDepartmentPortal;
     return true;
-  }).map((group) => {
-    // For warehouse manager, filter out Job Listings and Applications from People group
-    if (isWarehouseManager && group.id === "people") {
-      return {
-        ...group,
-        items: group.items.filter((item) =>
-          item.href !== "/jobs" && item.href !== "/applications"
-        ),
-      };
-    }
-    return group;
   });
 
   // Check if user is super_admin
