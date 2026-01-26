@@ -12,6 +12,7 @@ import { api } from "@/convex/_generated/api";
 import { SearchButton } from "@/components/GlobalSearch";
 import ActivityFeed from "@/components/ActivityFeed";
 import { Id } from "@/convex/_generated/dataModel";
+import { getQuoteOfTheDay } from "@/lib/tireQuotes";
 
 // Combined type for website messages
 interface WebsiteMessage {
@@ -38,6 +39,7 @@ interface BroadcastMessage {
 
 // Dashboard cards info
 const DASHBOARD_CARDS = [
+  { id: "dayAtGlance", label: "Day at a Glance", description: "Today's calendar events and schedule" },
   { id: "projects", label: "Active Projects", description: "Your active and recent projects" },
   { id: "applications", label: "Recent Applications", description: "New job applications" },
   { id: "websiteMessages", label: "Website Messages", description: "Contact forms and dealer inquiries" },
@@ -88,6 +90,20 @@ function DashboardContent() {
   const contactMessages = useQuery(api.contactMessages.getRecent, shouldSkipPeopleQueries ? "skip" : undefined);
   const dealerInquiries = useQuery(api.dealerInquiries.getRecent, shouldSkipPeopleQueries ? "skip" : undefined);
   const pendingTenureCheckIns = useQuery(api.personnel.getPendingTenureCheckIns, shouldSkipPeopleQueries ? "skip" : undefined);
+
+  // Today's events for Day at a Glance
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date();
+  todayEnd.setHours(23, 59, 59, 999);
+  const todayEvents = useQuery(
+    api.events.listMyEvents,
+    shouldSkipQueries || !user?._id ? "skip" : {
+      userId: user._id,
+      startDate: todayStart.getTime(),
+      endDate: todayEnd.getTime(),
+    }
+  );
 
   // Broadcast messages
   const broadcastMessages = useQuery(
@@ -272,6 +288,60 @@ function DashboardContent() {
         </header>
 
         <div className="p-4 sm:p-8 space-y-6 sm:space-y-8">
+          {/* Quote of the Day */}
+          {(() => {
+            const todayQuote = getQuoteOfTheDay();
+            return (
+              <div className={`rounded-xl p-4 border ${
+                todayQuote.type === "holiday"
+                  ? isDark ? "bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-amber-500/30" : "bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200"
+                  : todayQuote.type === "funny"
+                    ? isDark ? "bg-gradient-to-r from-purple-500/10 to-pink-500/10 border-purple-500/30" : "bg-gradient-to-r from-purple-50 to-pink-50 border-purple-200"
+                    : isDark ? "bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border-cyan-500/30" : "bg-gradient-to-r from-cyan-50 to-blue-50 border-cyan-200"
+              }`}>
+                <div className="flex items-start gap-3">
+                  <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
+                    todayQuote.type === "holiday"
+                      ? "bg-amber-500/20"
+                      : todayQuote.type === "funny"
+                        ? "bg-purple-500/20"
+                        : "bg-cyan-500/20"
+                  }`}>
+                    {todayQuote.type === "holiday" ? (
+                      <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                      </svg>
+                    ) : todayQuote.type === "funny" ? (
+                      <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <p className={`text-xs font-semibold uppercase tracking-wide mb-1 ${
+                      todayQuote.type === "holiday"
+                        ? isDark ? "text-amber-400" : "text-amber-600"
+                        : todayQuote.type === "funny"
+                          ? isDark ? "text-purple-400" : "text-purple-600"
+                          : isDark ? "text-cyan-400" : "text-cyan-600"
+                    }`}>
+                      Tire Quote of the Day
+                    </p>
+                    <p className={`text-lg font-medium italic ${
+                      isDark ? "text-white" : "text-gray-800"
+                    }`}>
+                      &ldquo;{todayQuote.quote}&rdquo;
+                    </p>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Broadcast Messages */}
           {broadcastMessages && broadcastMessages.length > 0 && (
             <div className="space-y-3">
@@ -367,6 +437,137 @@ function DashboardContent() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Day at a Glance - Calendar Events */}
+          {isCardEnabled("dayAtGlance") && (
+            <div className={`border rounded-xl p-4 sm:p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? "bg-emerald-500/20" : "bg-emerald-100"}`}>
+                    <svg className={`w-5 h-5 ${isDark ? "text-emerald-400" : "text-emerald-600"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                      Day at a Glance
+                    </h2>
+                    <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                      {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+                    </p>
+                  </div>
+                </div>
+                <a
+                  href="/calendar"
+                  className={`text-sm transition-colors ${isDark ? "text-emerald-400 hover:text-emerald-300" : "text-emerald-600 hover:text-emerald-700"}`}
+                >
+                  View Calendar
+                </a>
+              </div>
+
+              {!todayEvents ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-500"></div>
+                </div>
+              ) : todayEvents.length === 0 ? (
+                <div className={`text-center py-8 rounded-lg ${isDark ? "bg-slate-900/50" : "bg-gray-50"}`}>
+                  <svg className={`w-12 h-12 mx-auto mb-3 ${isDark ? "text-slate-600" : "text-gray-300"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    No events scheduled for today
+                  </p>
+                  <a href="/calendar" className={`text-sm mt-2 inline-block ${isDark ? "text-emerald-400 hover:text-emerald-300" : "text-emerald-600 hover:text-emerald-700"}`}>
+                    + Schedule an event
+                  </a>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {todayEvents.slice(0, 5).map((event) => {
+                    const startTime = new Date(event.startTime);
+                    const endTime = new Date(event.endTime);
+                    const isAllDay = event.isAllDay;
+                    const isPast = endTime.getTime() < Date.now();
+                    const isOngoing = startTime.getTime() <= Date.now() && endTime.getTime() >= Date.now();
+
+                    return (
+                      <div
+                        key={event._id}
+                        className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${
+                          isPast
+                            ? isDark ? "bg-slate-900/30 border-slate-700/30 opacity-60" : "bg-gray-50/50 border-gray-100 opacity-60"
+                            : isOngoing
+                              ? isDark ? "bg-emerald-500/10 border-emerald-500/30" : "bg-emerald-50 border-emerald-200"
+                              : isDark ? "bg-slate-900/50 border-slate-700/50" : "bg-gray-50 border-gray-100"
+                        }`}
+                      >
+                        <div className={`flex-shrink-0 w-16 text-center py-1 rounded ${
+                          isOngoing
+                            ? isDark ? "bg-emerald-500/20" : "bg-emerald-100"
+                            : isDark ? "bg-slate-800" : "bg-white"
+                        }`}>
+                          {isAllDay ? (
+                            <span className={`text-xs font-medium ${isDark ? "text-slate-300" : "text-gray-600"}`}>All Day</span>
+                          ) : (
+                            <>
+                              <p className={`text-sm font-semibold ${isOngoing ? (isDark ? "text-emerald-400" : "text-emerald-600") : (isDark ? "text-white" : "text-gray-900")}`}>
+                                {startTime.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                              </p>
+                              <p className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                                {endTime.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                              </p>
+                            </>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h4 className={`text-sm font-medium truncate ${isDark ? "text-white" : "text-gray-900"}`}>
+                              {event.title}
+                            </h4>
+                            {isOngoing && (
+                              <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${isDark ? "bg-emerald-500/20 text-emerald-400" : "bg-emerald-100 text-emerald-600"}`}>
+                                Now
+                              </span>
+                            )}
+                          </div>
+                          {event.location && (
+                            <p className={`text-xs mt-1 flex items-center gap-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                              </svg>
+                              {event.location}
+                            </p>
+                          )}
+                          {event.meetingLink && (
+                            <a
+                              href={event.meetingLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={`text-xs mt-1 flex items-center gap-1 ${isDark ? "text-cyan-400 hover:text-cyan-300" : "text-blue-600 hover:text-blue-700"}`}
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                              </svg>
+                              Join Meeting
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {todayEvents.length > 5 && (
+                    <a
+                      href="/calendar"
+                      className={`block text-center text-sm py-2 ${isDark ? "text-emerald-400 hover:text-emerald-300" : "text-emerald-600 hover:text-emerald-700"}`}
+                    >
+                      +{todayEvents.length - 5} more events
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
