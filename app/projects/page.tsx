@@ -247,7 +247,7 @@ function ProjectsContent() {
   const handleToggleTaskStatus = async (taskId: Id<"tasks">, currentStatus: string) => {
     const nextStatus = currentStatus === "todo" ? "in_progress" : currentStatus === "in_progress" ? "done" : "todo";
     try {
-      await updateTaskStatus({ taskId, status: nextStatus });
+      await updateTaskStatus({ taskId, status: nextStatus, userId: user?._id });
     } catch (error) {
       console.error("Failed to update task status:", error);
       alert(`Failed to update task status: ${error instanceof Error ? error.message : "Unknown error"}`);
@@ -256,7 +256,7 @@ function ProjectsContent() {
 
   const handleSetTaskStatus = async (taskId: Id<"tasks">, newStatus: string) => {
     try {
-      await updateTaskStatus({ taskId, status: newStatus });
+      await updateTaskStatus({ taskId, status: newStatus, userId: user?._id });
     } catch (error) {
       console.error("Failed to update task status:", error);
       alert(`Failed to update task status: ${error instanceof Error ? error.message : "Unknown error"}`);
@@ -527,7 +527,7 @@ function ProjectsContent() {
                       <button
                         onClick={async () => {
                           const nextStatus = task.status === "todo" ? "in_progress" : "done";
-                          await updateTaskStatus({ taskId: task._id, status: nextStatus });
+                          await updateTaskStatus({ taskId: task._id, status: nextStatus, userId: user?._id });
                         }}
                         className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
                           task.status === "in_progress"
@@ -551,7 +551,7 @@ function ProjectsContent() {
                       </div>
                       <select
                         value={task.status}
-                        onChange={(e) => updateTaskStatus({ taskId: task._id, status: e.target.value })}
+                        onChange={(e) => updateTaskStatus({ taskId: task._id, status: e.target.value, userId: user?._id })}
                         className={`text-xs px-2 py-0.5 rounded cursor-pointer border-0 focus:outline-none ${
                           task.status === "in_progress" ? "bg-cyan-500/20 text-cyan-400" : "bg-slate-700 text-slate-400"
                         }`}

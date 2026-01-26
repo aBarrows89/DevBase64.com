@@ -163,21 +163,50 @@ export const updateStatus = mutation({
   args: {
     taskId: v.id("tasks"),
     status: v.string(), // "todo" | "in_progress" | "done"
+    userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
     const task = await ctx.db.get(args.taskId);
     if (!task) throw new Error("Task not found");
 
+    const oldStatus = task.status;
+    const now = Date.now();
     const updates: Record<string, any> = { status: args.status };
 
     // Set completedAt when marking as done
     if (args.status === "done" && task.status !== "done") {
-      updates.completedAt = Date.now();
+      updates.completedAt = now;
     } else if (args.status !== "done" && task.status === "done") {
       updates.completedAt = undefined;
     }
 
     await ctx.db.patch(args.taskId, updates);
+
+    // Log task status changes to audit log
+    const project = await ctx.db.get(task.projectId);
+    let logUserId = args.userId || task.createdBy || task.assignedTo;
+    let userEmail = "unknown";
+
+    if (logUserId) {
+      const user = await ctx.db.get(logUserId);
+      if (user) {
+        userEmail = user.email || "unknown";
+      }
+    }
+
+    if (logUserId) {
+      await ctx.db.insert("auditLogs", {
+        action: args.status === "done" ? "Completed task" : "Updated task status",
+        actionType: "update",
+        resourceType: "task",
+        resourceId: args.taskId,
+        userId: logUserId,
+        userEmail: userEmail,
+        details: `${args.status === "done" ? "Completed" : `Changed to ${args.status}`}: "${task.title}"${project ? ` in "${project.name}"` : ""}`,
+        timestamp: now,
+      });
+    }
+
     return args.taskId;
   },
 });

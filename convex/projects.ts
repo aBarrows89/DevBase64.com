@@ -204,21 +204,36 @@ export const updateStatus = mutation({
 
     await ctx.db.patch(args.projectId, updates);
 
-    // Log the status change
+    // Log the status change - always log even if no userId
+    let userEmail = "unknown";
+    let logUserId = args.userId;
+
     if (args.userId) {
       const user = await ctx.db.get(args.userId);
       if (user) {
-        await ctx.db.insert("auditLogs", {
-          action: "Updated project status",
-          actionType: "update",
-          resourceType: "project",
-          resourceId: args.projectId,
-          userId: args.userId,
-          userEmail: user.email || "unknown",
-          details: `Changed "${project.name}" from ${oldStatus} to ${args.status}`,
-          timestamp: now,
-        });
+        userEmail = user.email || "unknown";
       }
+    } else if (project.createdBy) {
+      // Fallback to project creator if no userId provided
+      const creator = await ctx.db.get(project.createdBy);
+      if (creator) {
+        logUserId = project.createdBy;
+        userEmail = creator.email || "unknown";
+      }
+    }
+
+    // Always create audit log for status changes
+    if (logUserId) {
+      await ctx.db.insert("auditLogs", {
+        action: "Updated project status",
+        actionType: "update",
+        resourceType: "project",
+        resourceId: args.projectId,
+        userId: logUserId,
+        userEmail: userEmail,
+        details: `Changed "${project.name}" from ${oldStatus} to ${args.status}`,
+        timestamp: now,
+      });
     }
   },
 });
