@@ -187,6 +187,7 @@ function EmployeeDailyLogView() {
   const [hoursWorked, setHoursWorked] = useState<string>("");
   const [isSaving, setIsSaving] = useState(false);
   const [showPastLogs, setShowPastLogs] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   // Queries
   const existingLog = useQuery(
@@ -301,9 +302,34 @@ function EmployeeDailyLogView() {
               >
                 Past Logs
               </button>
+              {/* Help Button */}
+              <button
+                onClick={() => setShowHelp(true)}
+                className="p-2 rounded-lg transition-colors text-slate-400 hover:text-white hover:bg-slate-700"
+                title="How to use Daily Log"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </button>
             </div>
           </div>
         </header>
+
+        {/* Reminder Banner - show if today's log not submitted */}
+        {selectedDate === today && !existingLog?.isSubmitted && (
+          <div className="bg-amber-500/10 border-b border-amber-500/30 px-4 sm:px-8 py-3">
+            <div className="flex items-center gap-3">
+              <svg className="w-5 h-5 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <p className="text-amber-400 text-sm">
+                <span className="font-medium">Daily log reminder:</span> Please fill out your daily activity log and submit it before the end of the day.
+                Click the <span className="font-medium">?</span> icon for help.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6">
@@ -554,6 +580,121 @@ function EmployeeDailyLogView() {
             </div>
           </div>
         </div>
+
+        {/* Help Modal */}
+        {showHelp && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="w-full max-w-lg rounded-xl p-6 max-h-[90vh] overflow-y-auto bg-slate-800">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-lg font-semibold text-white">
+                  How to Use Daily Logs
+                </h2>
+                <button
+                  onClick={() => setShowHelp(false)}
+                  className="p-2 rounded-lg transition-colors text-slate-400 hover:text-white hover:bg-slate-700"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                {/* Why Daily Logs */}
+                <div>
+                  <h3 className="font-medium mb-2 flex items-center gap-2 text-white">
+                    <svg className="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Why Fill Out Daily Logs?
+                  </h3>
+                  <p className="text-sm text-slate-400">
+                    Daily logs help management track team progress and provide visibility to stakeholders.
+                    They also help you keep a record of your accomplishments for performance reviews.
+                  </p>
+                </div>
+
+                {/* What to Include */}
+                <div>
+                  <h3 className="font-medium mb-2 flex items-center gap-2 text-white">
+                    <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    What to Include
+                  </h3>
+                  <ul className="text-sm text-slate-400 space-y-2 ml-7">
+                    <li><span className="text-white font-medium">Summary:</span> Brief overview of what you worked on today</li>
+                    <li><span className="text-white font-medium">Accomplishments:</span> Specific tasks you completed (be specific!)</li>
+                    <li><span className="text-white font-medium">Blockers:</span> Any issues preventing progress (optional)</li>
+                    <li><span className="text-white font-medium">Goals:</span> What you plan to work on tomorrow (optional)</li>
+                    <li><span className="text-white font-medium">Hours:</span> How many hours you worked</li>
+                  </ul>
+                </div>
+
+                {/* Auto-Tracked Activities */}
+                <div>
+                  <h3 className="font-medium mb-2 flex items-center gap-2 text-white">
+                    <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    Auto-Tracked Activities
+                  </h3>
+                  <p className="text-sm text-slate-400 mb-2">
+                    The system automatically tracks some of your activities:
+                  </p>
+                  <ul className="text-sm text-slate-400 space-y-1 ml-7 list-disc">
+                    <li><span className="text-purple-400">Projects Created</span> - When you create a new project</li>
+                    <li><span className="text-purple-400">Projects Moved</span> - Moving projects between status columns</li>
+                    <li><span className="text-purple-400">Tasks Completed</span> - Marking tasks as done on your project board</li>
+                    <li><span className="text-purple-400">Total Actions</span> - All tracked activities combined</li>
+                  </ul>
+                  <p className="text-sm text-slate-500 mt-2 italic">
+                    These are captured automatically when you submit - no need to list them manually!
+                  </p>
+                </div>
+
+                {/* Save vs Submit */}
+                <div>
+                  <h3 className="font-medium mb-2 flex items-center gap-2 text-white">
+                    <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                    </svg>
+                    Save Draft vs Submit
+                  </h3>
+                  <ul className="text-sm text-slate-400 space-y-2 ml-7">
+                    <li><span className="text-white font-medium">Save Draft:</span> Saves your progress but keeps it editable. Use this throughout the day.</li>
+                    <li><span className="text-white font-medium">Submit:</span> Finalizes your log and sends it to management. You cannot edit after submitting.</li>
+                  </ul>
+                </div>
+
+                {/* Tips */}
+                <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-4">
+                  <h3 className="font-medium mb-2 flex items-center gap-2 text-cyan-400">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    </svg>
+                    Pro Tips
+                  </h3>
+                  <ul className="text-sm text-cyan-300/80 space-y-1 list-disc ml-5">
+                    <li>Fill out your log throughout the day, not just at the end</li>
+                    <li>Be specific with accomplishments - &quot;Fixed login bug&quot; is better than &quot;worked on bugs&quot;</li>
+                    <li>Submit before you leave for the day</li>
+                    <li>Check the sidebar for your auto-tracked activities</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="mt-6 pt-4 border-t border-slate-700">
+                <button
+                  onClick={() => setShowHelp(false)}
+                  className="w-full px-4 py-2 rounded-lg font-medium transition-colors bg-cyan-500 text-white hover:bg-cyan-600"
+                >
+                  Got it!
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );
