@@ -80,6 +80,120 @@ export const getAllRecentLogs = query({
   },
 });
 
+// Get all logs including drafts (for admin real-time view)
+export const getAllLogsIncludingDrafts = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const allLogs = await ctx.db
+      .query("dailyLogs")
+      .withIndex("by_date")
+      .order("desc")
+      .collect();
+
+    // Return all logs (both submitted and drafts), limited
+    return allLogs.slice(0, args.limit || 50);
+  },
+});
+
+// Get today's live activity for users who require daily logs (for admin dashboard)
+export const getTodayLiveActivity = query({
+  args: {},
+  handler: async (ctx) => {
+    const today = new Date().toISOString().split("T")[0];
+    const startOfDay = new Date(today + "T00:00:00Z").getTime();
+    const endOfDay = new Date(today + "T23:59:59Z").getTime();
+
+    // Get all users who require daily logs
+    const usersWithDailyLog = await ctx.db
+      .query("users")
+      .collect();
+
+    const dailyLogUsers = usersWithDailyLog.filter(u => u.requiresDailyLog === true);
+
+    // For each user, get their audit log activity for today
+    const results = await Promise.all(
+      dailyLogUsers.map(async (user) => {
+        // Get audit logs for this user today
+        const userAuditLogs = await ctx.db
+          .query("auditLogs")
+          .withIndex("by_user", (q) => q.eq("userId", user._id))
+          .filter((q) =>
+            q.and(
+              q.gte(q.field("timestamp"), startOfDay),
+              q.lte(q.field("timestamp"), endOfDay)
+            )
+          )
+          .collect();
+
+        // Count different types of activities
+        const projectsCreated = userAuditLogs.filter(
+          (log) => log.resourceType === "project" && log.actionType === "create"
+        ).length;
+        const projectsMoved = userAuditLogs.filter(
+          (log) =>
+            log.resourceType === "project" &&
+            log.actionType === "update" &&
+            (log.action?.includes("status") || log.details?.includes("status"))
+        ).length;
+        const tasksCompleted = userAuditLogs.filter(
+          (log) =>
+            log.resourceType === "task" &&
+            (log.details?.toLowerCase().includes("done") ||
+              log.details?.toLowerCase().includes("completed"))
+        ).length;
+
+        // Get today's daily log draft/submission
+        const todayLog = await ctx.db
+          .query("dailyLogs")
+          .withIndex("by_user_date", (q) =>
+            q.eq("userId", user._id).eq("date", today)
+          )
+          .first();
+
+        // Get recent activity details (last 10 actions)
+        const recentActions = userAuditLogs
+          .sort((a, b) => b.timestamp - a.timestamp)
+          .slice(0, 10)
+          .map((log) => ({
+            action: log.action,
+            details: log.details,
+            timestamp: log.timestamp,
+            resourceType: log.resourceType,
+          }));
+
+        return {
+          userId: user._id,
+          userName: user.name,
+          email: user.email,
+          activity: {
+            projectsCreated,
+            projectsMoved,
+            tasksCompleted,
+            totalActions: userAuditLogs.length,
+          },
+          recentActions,
+          todayLog: todayLog
+            ? {
+                _id: todayLog._id,
+                summary: todayLog.summary,
+                accomplishments: todayLog.accomplishments,
+                blockers: todayLog.blockers,
+                goalsForTomorrow: todayLog.goalsForTomorrow,
+                hoursWorked: todayLog.hoursWorked,
+                isSubmitted: todayLog.isSubmitted,
+                updatedAt: todayLog.updatedAt,
+              }
+            : null,
+        };
+      })
+    );
+
+    return results;
+  },
+});
+
 // Get weekly overview for all users (for stakeholder report)
 export const getWeeklyOverview = query({
   args: {

@@ -8,20 +8,28 @@ import { api } from "@/convex/_generated/api";
 import { useAuth } from "../auth-context";
 import { Id } from "@/convex/_generated/dataModel";
 
-// Admin View Component - Shows all team logs
+// Admin View Component - Shows all team logs with live activity
 function AdminDailyLogView() {
-  const allLogs = useQuery(api.dailyLogs.getAllRecentLogs, { limit: 50 });
+  const [showDrafts, setShowDrafts] = useState(true);
+  const [expandedUser, setExpandedUser] = useState<string | null>(null);
+
+  const allLogs = useQuery(api.dailyLogs.getAllLogsIncludingDrafts, { limit: 50 });
+  const todayLiveActivity = useQuery(api.dailyLogs.getTodayLiveActivity, {});
+
+  // Filter logs based on showDrafts toggle
+  const filteredLogs = allLogs?.filter(log => showDrafts || log.isSubmitted) || [];
 
   // Group logs by date
-  const logsByDate = allLogs?.reduce((acc, log) => {
+  const logsByDate = filteredLogs.reduce((acc, log) => {
     if (!acc[log.date]) {
       acc[log.date] = [];
     }
     acc[log.date].push(log);
     return acc;
-  }, {} as Record<string, typeof allLogs>) || {};
+  }, {} as Record<string, typeof filteredLogs>);
 
   const sortedDates = Object.keys(logsByDate).sort((a, b) => b.localeCompare(a));
+  const today = new Date().toISOString().split("T")[0];
 
   return (
     <div className="flex h-screen bg-slate-900">
@@ -36,137 +44,319 @@ function AdminDailyLogView() {
             <div>
               <h1 className="text-xl sm:text-2xl font-bold text-white">Team Daily Logs</h1>
               <p className="text-slate-400 text-xs sm:text-sm mt-1">
-                View submitted daily activity logs from your team
+                View team activity and daily logs in real-time
               </p>
             </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showDrafts}
+                onChange={(e) => setShowDrafts(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-0"
+              />
+              <span className="text-sm text-slate-300">Show Drafts</span>
+            </label>
           </div>
         </header>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-          <div className="max-w-4xl mx-auto space-y-6">
-            {!allLogs ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500"></div>
-              </div>
-            ) : sortedDates.length === 0 ? (
-              <div className="bg-slate-800 border border-slate-700 rounded-xl p-8 text-center">
-                <svg className="w-12 h-12 mx-auto text-slate-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <p className="text-slate-400">No submitted daily logs yet</p>
-                <p className="text-slate-500 text-sm mt-2">
-                  Team members with &quot;Requires Daily Log&quot; enabled can submit logs from their Daily Log page
-                </p>
-              </div>
-            ) : (
-              sortedDates.map((date) => (
-                <div key={date} className="space-y-4">
-                  <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                    <svg className="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    {new Date(date + "T12:00:00").toLocaleDateString("en-US", {
-                      weekday: "long",
-                      month: "long",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
-                  </h2>
+          <div className="max-w-5xl mx-auto space-y-6">
 
-                  {logsByDate[date]?.map((log) => (
-                    <div
-                      key={log._id}
-                      className="bg-slate-800 border border-slate-700 rounded-xl p-4 sm:p-6"
-                    >
-                      {/* User Header */}
-                      <div className="flex items-center justify-between mb-4">
+            {/* Today's Live Activity Section */}
+            {todayLiveActivity && todayLiveActivity.length > 0 && (
+              <div className="bg-gradient-to-r from-purple-500/10 to-cyan-500/10 border border-purple-500/30 rounded-xl p-4 sm:p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                  <h2 className="text-lg font-semibold text-white">Today&apos;s Live Activity</h2>
+                  <span className="text-slate-400 text-sm">({new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })})</span>
+                </div>
+
+                <div className="space-y-4">
+                  {todayLiveActivity.map((userActivity) => (
+                    <div key={userActivity.userId} className="bg-slate-800/50 rounded-lg p-4">
+                      <div
+                        className="flex items-center justify-between cursor-pointer"
+                        onClick={() => setExpandedUser(expandedUser === userActivity.userId ? null : userActivity.userId)}
+                      >
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-400 font-medium">
-                            {log.userName
+                          <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400 font-medium">
+                            {userActivity.userName
                               .split(" ")
-                              .map((n) => n[0])
+                              .map((n: string) => n[0])
                               .join("")
                               .slice(0, 2)}
                           </div>
                           <div>
-                            <p className="text-white font-medium">{log.userName}</p>
-                            {log.hoursWorked && (
-                              <p className="text-slate-400 text-sm">{log.hoursWorked} hours worked</p>
-                            )}
+                            <p className="text-white font-medium">{userActivity.userName}</p>
+                            <div className="flex items-center gap-3 text-sm">
+                              <span className="text-cyan-400">{userActivity.activity.totalActions} actions today</span>
+                              {userActivity.todayLog ? (
+                                userActivity.todayLog.isSubmitted ? (
+                                  <span className="text-green-400 flex items-center gap-1">
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    Log Submitted
+                                  </span>
+                                ) : (
+                                  <span className="text-amber-400 flex items-center gap-1">
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                    </svg>
+                                    Draft in Progress
+                                  </span>
+                                )
+                              ) : (
+                                <span className="text-slate-500">No log started</span>
+                              )}
+                            </div>
                           </div>
                         </div>
-                        <span className="text-green-400 text-xs flex items-center gap-1 bg-green-500/10 px-2 py-1 rounded-full">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        <div className="flex items-center gap-4">
+                          <div className="hidden sm:flex gap-4 text-sm">
+                            {userActivity.activity.projectsCreated > 0 && (
+                              <span className="text-slate-300">{userActivity.activity.projectsCreated} projects</span>
+                            )}
+                            {userActivity.activity.tasksCompleted > 0 && (
+                              <span className="text-slate-300">{userActivity.activity.tasksCompleted} tasks</span>
+                            )}
+                          </div>
+                          <svg
+                            className={`w-5 h-5 text-slate-400 transition-transform ${expandedUser === userActivity.userId ? 'rotate-180' : ''}`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                           </svg>
-                          Submitted
-                        </span>
+                        </div>
                       </div>
 
-                      {/* Summary */}
-                      <div className="mb-4">
-                        <h4 className="text-slate-400 text-xs uppercase tracking-wide mb-1">Summary</h4>
-                        <p className="text-white">{log.summary}</p>
-                      </div>
-
-                      {/* Accomplishments */}
-                      {log.accomplishments.length > 0 && (
-                        <div className="mb-4">
-                          <h4 className="text-slate-400 text-xs uppercase tracking-wide mb-2">Accomplishments</h4>
-                          <ul className="space-y-1">
-                            {log.accomplishments.map((acc, i) => (
-                              <li key={i} className="flex items-start gap-2 text-green-400">
-                                <span className="mt-1">•</span>
-                                <span>{acc}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      {/* Blockers */}
-                      {log.blockers && (
-                        <div className="mb-4">
-                          <h4 className="text-slate-400 text-xs uppercase tracking-wide mb-1">Blockers</h4>
-                          <p className="text-amber-400">{log.blockers}</p>
-                        </div>
-                      )}
-
-                      {/* Goals for Tomorrow */}
-                      {log.goalsForTomorrow && (
-                        <div>
-                          <h4 className="text-slate-400 text-xs uppercase tracking-wide mb-1">Goals for Tomorrow</h4>
-                          <p className="text-slate-300">{log.goalsForTomorrow}</p>
-                        </div>
-                      )}
-
-                      {/* Auto Activities */}
-                      {log.autoActivities && log.autoActivities.totalActions > 0 && (
-                        <div className="mt-4 pt-4 border-t border-slate-700">
-                          <h4 className="text-slate-400 text-xs uppercase tracking-wide mb-2">Auto-Tracked Activity</h4>
-                          <div className="flex gap-4 text-sm">
-                            {log.autoActivities.projectsCreated > 0 && (
-                              <span className="text-slate-300">
-                                {log.autoActivities.projectsCreated} project{log.autoActivities.projectsCreated !== 1 ? "s" : ""} created
-                              </span>
-                            )}
-                            {log.autoActivities.tasksCompleted > 0 && (
-                              <span className="text-slate-300">
-                                {log.autoActivities.tasksCompleted} task{log.autoActivities.tasksCompleted !== 1 ? "s" : ""} completed
-                              </span>
-                            )}
-                            <span className="text-cyan-400">
-                              {log.autoActivities.totalActions} total actions
-                            </span>
+                      {/* Expanded Details */}
+                      {expandedUser === userActivity.userId && (
+                        <div className="mt-4 pt-4 border-t border-slate-700 space-y-4">
+                          {/* Activity Stats */}
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            <div className="bg-slate-900/50 rounded-lg p-3 text-center">
+                              <p className="text-2xl font-bold text-purple-400">{userActivity.activity.projectsCreated}</p>
+                              <p className="text-xs text-slate-400">Projects Created</p>
+                            </div>
+                            <div className="bg-slate-900/50 rounded-lg p-3 text-center">
+                              <p className="text-2xl font-bold text-blue-400">{userActivity.activity.projectsMoved}</p>
+                              <p className="text-xs text-slate-400">Projects Moved</p>
+                            </div>
+                            <div className="bg-slate-900/50 rounded-lg p-3 text-center">
+                              <p className="text-2xl font-bold text-green-400">{userActivity.activity.tasksCompleted}</p>
+                              <p className="text-xs text-slate-400">Tasks Done</p>
+                            </div>
+                            <div className="bg-slate-900/50 rounded-lg p-3 text-center">
+                              <p className="text-2xl font-bold text-cyan-400">{userActivity.activity.totalActions}</p>
+                              <p className="text-xs text-slate-400">Total Actions</p>
+                            </div>
                           </div>
+
+                          {/* Current Draft Log */}
+                          {userActivity.todayLog && !userActivity.todayLog.isSubmitted && (
+                            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
+                              <h4 className="text-amber-400 text-sm font-medium mb-2 flex items-center gap-2">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                                Current Draft
+                                <span className="text-slate-400 font-normal">
+                                  (Last updated: {new Date(userActivity.todayLog.updatedAt).toLocaleTimeString()})
+                                </span>
+                              </h4>
+                              {userActivity.todayLog.summary && (
+                                <div className="mb-2">
+                                  <span className="text-slate-400 text-xs">Summary: </span>
+                                  <span className="text-white text-sm">{userActivity.todayLog.summary}</span>
+                                </div>
+                              )}
+                              {userActivity.todayLog.accomplishments && userActivity.todayLog.accomplishments.length > 0 && (
+                                <div className="mb-2">
+                                  <span className="text-slate-400 text-xs">Accomplishments: </span>
+                                  <span className="text-green-400 text-sm">{userActivity.todayLog.accomplishments.length} items</span>
+                                </div>
+                              )}
+                              {userActivity.todayLog.hoursWorked && (
+                                <div>
+                                  <span className="text-slate-400 text-xs">Hours: </span>
+                                  <span className="text-white text-sm">{userActivity.todayLog.hoursWorked}h</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Recent Actions Feed */}
+                          {userActivity.recentActions.length > 0 && (
+                            <div>
+                              <h4 className="text-slate-300 text-sm font-medium mb-2">Recent Activity</h4>
+                              <div className="space-y-2 max-h-48 overflow-y-auto">
+                                {userActivity.recentActions.map((action, idx) => (
+                                  <div key={idx} className="flex items-start gap-2 text-sm">
+                                    <span className="text-slate-500 text-xs whitespace-nowrap">
+                                      {new Date(action.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                    <span className="text-slate-400">{action.action || action.details}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
                   ))}
                 </div>
-              ))
+              </div>
             )}
+
+            {/* Historical Logs Section */}
+            <div>
+              <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Log History
+              </h2>
+
+              {!allLogs ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500"></div>
+                </div>
+              ) : sortedDates.length === 0 ? (
+                <div className="bg-slate-800 border border-slate-700 rounded-xl p-8 text-center">
+                  <svg className="w-12 h-12 mx-auto text-slate-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <p className="text-slate-400">No daily logs yet</p>
+                  <p className="text-slate-500 text-sm mt-2">
+                    Team members with &quot;Requires Daily Log&quot; enabled can submit logs from their Daily Log page
+                  </p>
+                </div>
+              ) : (
+                sortedDates.map((date) => (
+                  <div key={date} className="space-y-4 mb-6">
+                    <h3 className="text-md font-medium text-slate-300 flex items-center gap-2">
+                      <svg className="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      {new Date(date + "T12:00:00").toLocaleDateString("en-US", {
+                        weekday: "long",
+                        month: "long",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                      {date === today && <span className="text-cyan-400 text-xs bg-cyan-500/20 px-2 py-0.5 rounded-full ml-2">Today</span>}
+                    </h3>
+
+                    {logsByDate[date]?.map((log) => (
+                      <div
+                        key={log._id}
+                        className={`bg-slate-800 border rounded-xl p-4 sm:p-6 ${
+                          log.isSubmitted ? 'border-slate-700' : 'border-amber-500/30'
+                        }`}
+                      >
+                        {/* User Header */}
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-400 font-medium">
+                              {log.userName
+                                .split(" ")
+                                .map((n) => n[0])
+                                .join("")
+                                .slice(0, 2)}
+                            </div>
+                            <div>
+                              <p className="text-white font-medium">{log.userName}</p>
+                              {log.hoursWorked && (
+                                <p className="text-slate-400 text-sm">{log.hoursWorked} hours worked</p>
+                              )}
+                            </div>
+                          </div>
+                          {log.isSubmitted ? (
+                            <span className="text-green-400 text-xs flex items-center gap-1 bg-green-500/10 px-2 py-1 rounded-full">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              Submitted
+                            </span>
+                          ) : (
+                            <span className="text-amber-400 text-xs flex items-center gap-1 bg-amber-500/10 px-2 py-1 rounded-full">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                              Draft
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Summary */}
+                        <div className="mb-4">
+                          <h4 className="text-slate-400 text-xs uppercase tracking-wide mb-1">Summary</h4>
+                          <p className="text-white">{log.summary || <span className="text-slate-500 italic">No summary yet</span>}</p>
+                        </div>
+
+                        {/* Accomplishments */}
+                        {log.accomplishments && log.accomplishments.length > 0 && (
+                          <div className="mb-4">
+                            <h4 className="text-slate-400 text-xs uppercase tracking-wide mb-2">Accomplishments</h4>
+                            <ul className="space-y-1">
+                              {log.accomplishments.map((acc, i) => (
+                                <li key={i} className="flex items-start gap-2 text-green-400">
+                                  <span className="mt-1">•</span>
+                                  <span>{acc}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Blockers */}
+                        {log.blockers && (
+                          <div className="mb-4">
+                            <h4 className="text-slate-400 text-xs uppercase tracking-wide mb-1">Blockers</h4>
+                            <p className="text-amber-400">{log.blockers}</p>
+                          </div>
+                        )}
+
+                        {/* Goals for Tomorrow */}
+                        {log.goalsForTomorrow && (
+                          <div>
+                            <h4 className="text-slate-400 text-xs uppercase tracking-wide mb-1">Goals for Tomorrow</h4>
+                            <p className="text-slate-300">{log.goalsForTomorrow}</p>
+                          </div>
+                        )}
+
+                        {/* Auto Activities */}
+                        {log.autoActivities && log.autoActivities.totalActions > 0 && (
+                          <div className="mt-4 pt-4 border-t border-slate-700">
+                            <h4 className="text-slate-400 text-xs uppercase tracking-wide mb-2">Auto-Tracked Activity</h4>
+                            <div className="flex gap-4 text-sm">
+                              {log.autoActivities.projectsCreated > 0 && (
+                                <span className="text-slate-300">
+                                  {log.autoActivities.projectsCreated} project{log.autoActivities.projectsCreated !== 1 ? "s" : ""} created
+                                </span>
+                              )}
+                              {log.autoActivities.tasksCompleted > 0 && (
+                                <span className="text-slate-300">
+                                  {log.autoActivities.tasksCompleted} task{log.autoActivities.tasksCompleted !== 1 ? "s" : ""} completed
+                                </span>
+                              )}
+                              <span className="text-cyan-400">
+                                {log.autoActivities.totalActions} total actions
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       </main>
