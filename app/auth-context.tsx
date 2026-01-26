@@ -20,6 +20,7 @@ export interface User {
   managedDepartments?: string[];
   managedLocationIds?: Id<"locations">[];
   personnelId?: Id<"personnel">; // For employee role - links to their personnel record
+  requiresDailyLog?: boolean; // If true, user must fill out daily activity logs
 }
 
 interface AuthContextType {
