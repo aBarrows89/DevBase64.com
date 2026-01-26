@@ -33,13 +33,11 @@ function ReportContent() {
     window.print();
   };
 
-  // Calculate totals
-  const totals = weeklyOverview ? {
-    totalLogs: weeklyOverview.reduce((sum, u) => sum + u.daysLogged, 0),
-    totalHours: weeklyOverview.reduce((sum, u) => sum + u.totalHours, 0),
-    totalAccomplishments: weeklyOverview.reduce((sum, u) => sum + u.totalAccomplishments, 0),
-    totalBlockers: weeklyOverview.reduce((sum, u) => sum + u.blockers.length, 0),
-  } : null;
+  // Get user summaries from the response
+  const userSummaries = weeklyOverview?.userSummaries || [];
+
+  // Use totals from the response or calculate from user summaries
+  const totals = weeklyOverview ? weeklyOverview.totals : null;
 
   const formatDateRange = () => {
     const start = new Date(startDate + "T12:00:00");
@@ -140,8 +138,8 @@ function ReportContent() {
                   <p className="text-sm text-gray-600 mt-1">Accomplishments</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-4xl font-bold text-amber-600">{totals.totalBlockers}</p>
-                  <p className="text-sm text-gray-600 mt-1">Blockers Reported</p>
+                  <p className="text-4xl font-bold text-cyan-600">{totals.uniqueUsers}</p>
+                  <p className="text-sm text-gray-600 mt-1">Team Members</p>
                 </div>
               </div>
             </div>
@@ -156,18 +154,18 @@ function ReportContent() {
           )}
 
           {/* No Data State */}
-          {weeklyOverview && weeklyOverview.length === 0 && (
+          {weeklyOverview && userSummaries.length === 0 && (
             <div className="p-12 text-center">
               <p className="text-gray-500">No daily logs submitted for this date range.</p>
             </div>
           )}
 
           {/* Per-User Breakdown */}
-          {weeklyOverview && weeklyOverview.length > 0 && (
+          {weeklyOverview && userSummaries.length > 0 && (
             <div className="p-8">
               <h2 className="text-lg font-semibold text-gray-800 mb-6">Individual Reports</h2>
 
-              {weeklyOverview.map((userReport, idx) => (
+              {userSummaries.map((userReport, idx) => (
                 <div
                   key={userReport.userId}
                   className={`${idx > 0 ? "mt-8 pt-8 border-t border-gray-200" : ""}`}
