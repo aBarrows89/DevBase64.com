@@ -689,3 +689,29 @@ export const saveLog = mutation({
     return logId;
   },
 });
+
+// Add or update reviewer comment on a daily log
+// This comment is NOT visible to the submitter, only shown on printed reports
+export const addReviewerComment = mutation({
+  args: {
+    logId: v.id("dailyLogs"),
+    reviewerId: v.id("users"),
+    comment: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const log = await ctx.db.get(args.logId);
+    if (!log) throw new Error("Log not found");
+
+    const reviewer = await ctx.db.get(args.reviewerId);
+    if (!reviewer) throw new Error("Reviewer not found");
+
+    await ctx.db.patch(args.logId, {
+      reviewerComment: args.comment || undefined,
+      reviewerCommentBy: args.comment ? args.reviewerId : undefined,
+      reviewerCommentByName: args.comment ? reviewer.name : undefined,
+      reviewerCommentAt: args.comment ? Date.now() : undefined,
+    });
+
+    return { success: true };
+  },
+});

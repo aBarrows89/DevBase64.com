@@ -199,7 +199,7 @@ function ReportContent() {
                     {userReport.logs
                       .sort((a, b) => b.date.localeCompare(a.date))
                       .map((log) => (
-                        <div key={log._id} className="bg-gray-50 rounded-lg p-4 print:bg-gray-100">
+                        <div key={log._id} className="bg-gray-50 rounded-lg p-4 print:bg-gray-100 daily-log-entry">
                           <div className="flex items-center justify-between mb-2">
                             <p className="font-medium text-gray-800">
                               {new Date(log.date + "T12:00:00").toLocaleDateString("en-US", {
@@ -267,6 +267,23 @@ function ReportContent() {
                               </div>
                             </div>
                           )}
+
+                          {/* Reviewer Notes */}
+                          {log.reviewerComment && (
+                            <div className="mt-3 pt-3 border-t border-gray-200">
+                              <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wide mb-1">
+                                Reviewer Notes
+                              </p>
+                              <p className="text-sm text-indigo-800 bg-indigo-50 rounded p-2 print:bg-indigo-100">
+                                {log.reviewerComment}
+                              </p>
+                              {log.reviewerCommentByName && (
+                                <p className="text-xs text-gray-500 mt-1 text-right">
+                                  — {log.reviewerCommentByName}
+                                </p>
+                              )}
+                            </div>
+                          )}
                         </div>
                       ))}
                   </div>
@@ -325,6 +342,10 @@ function ReportContent() {
             background-color: #f3f4f6 !important;
           }
 
+          .print\\:bg-indigo-100 {
+            background-color: #e0e7ff !important;
+          }
+
           .print\\:rounded-none {
             border-radius: 0 !important;
           }
@@ -339,6 +360,24 @@ function ReportContent() {
 
           .print\\:max-w-none {
             max-width: none !important;
+          }
+
+          /* Page break styles - each day fits on one page */
+          .daily-log-entry {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+
+          /* Prevent orphaned headers */
+          h2, h3, h4 {
+            page-break-after: avoid !important;
+            break-after: avoid !important;
+          }
+
+          /* Keep user sections together when possible */
+          .user-section {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
           }
         }
       `}</style>

@@ -360,6 +360,12 @@ export default defineSchema({
     // Linked project IDs (projects worked on)
     projectIds: v.optional(v.array(v.id("projects"))),
 
+    // Reviewer comment (not visible to submitter, shown on reports)
+    reviewerComment: v.optional(v.string()),
+    reviewerCommentBy: v.optional(v.id("users")),
+    reviewerCommentByName: v.optional(v.string()),
+    reviewerCommentAt: v.optional(v.number()),
+
     createdAt: v.number(),
     updatedAt: v.number(),
     isSubmitted: v.boolean(), // Draft vs submitted

@@ -10,11 +10,42 @@ import { Id } from "@/convex/_generated/dataModel";
 
 // Admin View Component - Shows all team logs with live activity
 function AdminDailyLogView() {
+  const { user } = useAuth();
   const [showDrafts, setShowDrafts] = useState(true);
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
+  const [editingCommentLogId, setEditingCommentLogId] = useState<string | null>(null);
+  const [commentText, setCommentText] = useState("");
+  const [savingComment, setSavingComment] = useState(false);
 
   const allLogs = useQuery(api.dailyLogs.getAllLogsIncludingDrafts, { limit: 50 });
   const todayLiveActivity = useQuery(api.dailyLogs.getTodayLiveActivity, {});
+  const addReviewerComment = useMutation(api.dailyLogs.addReviewerComment);
+
+  // Handle saving reviewer comment
+  const handleSaveComment = async (logId: Id<"dailyLogs">) => {
+    if (!user) return;
+    setSavingComment(true);
+    try {
+      await addReviewerComment({
+        logId,
+        reviewerId: user._id,
+        comment: commentText,
+      });
+      setEditingCommentLogId(null);
+      setCommentText("");
+    } catch (error) {
+      console.error("Failed to save comment:", error);
+      alert("Failed to save comment");
+    } finally {
+      setSavingComment(false);
+    }
+  };
+
+  // Start editing a comment
+  const handleStartEditing = (logId: string, existingComment?: string) => {
+    setEditingCommentLogId(logId);
+    setCommentText(existingComment || "");
+  };
 
   // Filter logs based on showDrafts toggle
   const filteredLogs = allLogs?.filter(log => showDrafts || log.isSubmitted) || [];
@@ -360,6 +391,71 @@ function AdminDailyLogView() {
                                 {log.autoActivities.totalActions} total actions
                               </span>
                             </div>
+                          </div>
+                        )}
+
+                        {/* Reviewer Notes - Only for submitted logs */}
+                        {log.isSubmitted && (
+                          <div className="mt-4 pt-4 border-t border-slate-700">
+                            <div className="flex items-center justify-between mb-2">
+                              <h4 className="text-slate-400 text-xs uppercase tracking-wide flex items-center gap-2">
+                                <svg className="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                                Reviewer Notes
+                                <span className="text-slate-500 normal-case text-xs">(not visible to submitter)</span>
+                              </h4>
+                              {!editingCommentLogId && (
+                                <button
+                                  onClick={() => handleStartEditing(log._id, log.reviewerComment)}
+                                  className="text-indigo-400 hover:text-indigo-300 text-xs flex items-center gap-1"
+                                >
+                                  {log.reviewerComment ? "Edit" : "Add Note"}
+                                </button>
+                              )}
+                            </div>
+
+                            {editingCommentLogId === log._id ? (
+                              <div className="space-y-2">
+                                <textarea
+                                  value={commentText}
+                                  onChange={(e) => setCommentText(e.target.value)}
+                                  className="w-full px-3 py-2 bg-slate-900/50 border border-indigo-500/50 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-indigo-400 text-sm resize-none"
+                                  placeholder="Add reviewer notes for this log..."
+                                  rows={3}
+                                />
+                                <div className="flex justify-end gap-2">
+                                  <button
+                                    onClick={() => {
+                                      setEditingCommentLogId(null);
+                                      setCommentText("");
+                                    }}
+                                    className="px-3 py-1.5 text-slate-400 hover:text-white text-sm"
+                                    disabled={savingComment}
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    onClick={() => handleSaveComment(log._id as Id<"dailyLogs">)}
+                                    disabled={savingComment}
+                                    className="px-3 py-1.5 bg-indigo-500 text-white text-sm rounded-lg hover:bg-indigo-600 disabled:opacity-50"
+                                  >
+                                    {savingComment ? "Saving..." : "Save Note"}
+                                  </button>
+                                </div>
+                              </div>
+                            ) : log.reviewerComment ? (
+                              <div className="bg-indigo-500/10 border border-indigo-500/30 rounded-lg p-3">
+                                <p className="text-indigo-300 text-sm">{log.reviewerComment}</p>
+                                {log.reviewerCommentByName && log.reviewerCommentAt && (
+                                  <p className="text-slate-500 text-xs mt-2">
+                                    — {log.reviewerCommentByName}, {new Date(log.reviewerCommentAt).toLocaleDateString()}
+                                  </p>
+                                )}
+                              </div>
+                            ) : (
+                              <p className="text-slate-500 text-sm italic">No reviewer notes yet</p>
+                            )}
                           </div>
                         )}
                       </div>
