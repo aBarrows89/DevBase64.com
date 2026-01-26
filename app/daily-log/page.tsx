@@ -8,7 +8,174 @@ import { api } from "@/convex/_generated/api";
 import { useAuth } from "../auth-context";
 import { Id } from "@/convex/_generated/dataModel";
 
-function DailyLogContent() {
+// Admin View Component - Shows all team logs
+function AdminDailyLogView() {
+  const allLogs = useQuery(api.dailyLogs.getAllRecentLogs, { limit: 50 });
+
+  // Group logs by date
+  const logsByDate = allLogs?.reduce((acc, log) => {
+    if (!acc[log.date]) {
+      acc[log.date] = [];
+    }
+    acc[log.date].push(log);
+    return acc;
+  }, {} as Record<string, typeof allLogs>) || {};
+
+  const sortedDates = Object.keys(logsByDate).sort((a, b) => b.localeCompare(a));
+
+  return (
+    <div className="flex h-screen bg-slate-900">
+      <Sidebar />
+
+      <main className="flex-1 flex flex-col overflow-hidden">
+        <MobileHeader />
+
+        {/* Header */}
+        <header className="flex-shrink-0 bg-slate-900/80 backdrop-blur-sm border-b border-slate-700 px-4 sm:px-8 py-3 sm:py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold text-white">Team Daily Logs</h1>
+              <p className="text-slate-400 text-xs sm:text-sm mt-1">
+                View submitted daily activity logs from your team
+              </p>
+            </div>
+          </div>
+        </header>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+          <div className="max-w-4xl mx-auto space-y-6">
+            {!allLogs ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500"></div>
+              </div>
+            ) : sortedDates.length === 0 ? (
+              <div className="bg-slate-800 border border-slate-700 rounded-xl p-8 text-center">
+                <svg className="w-12 h-12 mx-auto text-slate-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <p className="text-slate-400">No submitted daily logs yet</p>
+                <p className="text-slate-500 text-sm mt-2">
+                  Team members with &quot;Requires Daily Log&quot; enabled can submit logs from their Daily Log page
+                </p>
+              </div>
+            ) : (
+              sortedDates.map((date) => (
+                <div key={date} className="space-y-4">
+                  <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                    <svg className="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    {new Date(date + "T12:00:00").toLocaleDateString("en-US", {
+                      weekday: "long",
+                      month: "long",
+                      day: "numeric",
+                      year: "numeric",
+                    })}
+                  </h2>
+
+                  {logsByDate[date]?.map((log) => (
+                    <div
+                      key={log._id}
+                      className="bg-slate-800 border border-slate-700 rounded-xl p-4 sm:p-6"
+                    >
+                      {/* User Header */}
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-400 font-medium">
+                            {log.userName
+                              .split(" ")
+                              .map((n) => n[0])
+                              .join("")
+                              .slice(0, 2)}
+                          </div>
+                          <div>
+                            <p className="text-white font-medium">{log.userName}</p>
+                            {log.hoursWorked && (
+                              <p className="text-slate-400 text-sm">{log.hoursWorked} hours worked</p>
+                            )}
+                          </div>
+                        </div>
+                        <span className="text-green-400 text-xs flex items-center gap-1 bg-green-500/10 px-2 py-1 rounded-full">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          Submitted
+                        </span>
+                      </div>
+
+                      {/* Summary */}
+                      <div className="mb-4">
+                        <h4 className="text-slate-400 text-xs uppercase tracking-wide mb-1">Summary</h4>
+                        <p className="text-white">{log.summary}</p>
+                      </div>
+
+                      {/* Accomplishments */}
+                      {log.accomplishments.length > 0 && (
+                        <div className="mb-4">
+                          <h4 className="text-slate-400 text-xs uppercase tracking-wide mb-2">Accomplishments</h4>
+                          <ul className="space-y-1">
+                            {log.accomplishments.map((acc, i) => (
+                              <li key={i} className="flex items-start gap-2 text-green-400">
+                                <span className="mt-1">•</span>
+                                <span>{acc}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Blockers */}
+                      {log.blockers && (
+                        <div className="mb-4">
+                          <h4 className="text-slate-400 text-xs uppercase tracking-wide mb-1">Blockers</h4>
+                          <p className="text-amber-400">{log.blockers}</p>
+                        </div>
+                      )}
+
+                      {/* Goals for Tomorrow */}
+                      {log.goalsForTomorrow && (
+                        <div>
+                          <h4 className="text-slate-400 text-xs uppercase tracking-wide mb-1">Goals for Tomorrow</h4>
+                          <p className="text-slate-300">{log.goalsForTomorrow}</p>
+                        </div>
+                      )}
+
+                      {/* Auto Activities */}
+                      {log.autoActivities && log.autoActivities.totalActions > 0 && (
+                        <div className="mt-4 pt-4 border-t border-slate-700">
+                          <h4 className="text-slate-400 text-xs uppercase tracking-wide mb-2">Auto-Tracked Activity</h4>
+                          <div className="flex gap-4 text-sm">
+                            {log.autoActivities.projectsCreated > 0 && (
+                              <span className="text-slate-300">
+                                {log.autoActivities.projectsCreated} project{log.autoActivities.projectsCreated !== 1 ? "s" : ""} created
+                              </span>
+                            )}
+                            {log.autoActivities.tasksCompleted > 0 && (
+                              <span className="text-slate-300">
+                                {log.autoActivities.tasksCompleted} task{log.autoActivities.tasksCompleted !== 1 ? "s" : ""} completed
+                              </span>
+                            )}
+                            <span className="text-cyan-400">
+                              {log.autoActivities.totalActions} total actions
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+// Employee View Component - Entry form for daily logs
+function EmployeeDailyLogView() {
   const { user } = useAuth();
   const today = new Date().toISOString().split("T")[0];
 
@@ -18,7 +185,6 @@ function DailyLogContent() {
   const [blockers, setBlockers] = useState("");
   const [goalsForTomorrow, setGoalsForTomorrow] = useState("");
   const [hoursWorked, setHoursWorked] = useState<string>("");
-  const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [showPastLogs, setShowPastLogs] = useState(false);
 
@@ -35,7 +201,6 @@ function DailyLogContent() {
     api.dailyLogs.getMyLogs,
     user?._id ? { userId: user._id, limit: 14 } : "skip"
   );
-  const projects = useQuery(api.projects.getAll, user?._id ? { userId: user._id } : {}) || [];
 
   // Mutations
   const saveLog = useMutation(api.dailyLogs.saveLog);
@@ -50,9 +215,6 @@ function DailyLogContent() {
       setBlockers(existingLog.blockers || "");
       setGoalsForTomorrow(existingLog.goalsForTomorrow || "");
       setHoursWorked(existingLog.hoursWorked?.toString() || "");
-      setSelectedProjects(
-        existingLog.projectIds?.map((id) => id.toString()) || []
-      );
     } else {
       // Reset form for new date
       setSummary("");
@@ -60,7 +222,6 @@ function DailyLogContent() {
       setBlockers("");
       setGoalsForTomorrow("");
       setHoursWorked("");
-      setSelectedProjects([]);
     }
   }, [existingLog, selectedDate]);
 
@@ -93,9 +254,6 @@ function DailyLogContent() {
         blockers: blockers || undefined,
         goalsForTomorrow: goalsForTomorrow || undefined,
         hoursWorked: hoursWorked ? parseFloat(hoursWorked) : undefined,
-        projectIds: selectedProjects.length > 0
-          ? selectedProjects.map((id) => id as Id<"projects">)
-          : undefined,
         isSubmitted: submit,
       });
     } catch (error) {
@@ -252,49 +410,22 @@ function DailyLogContent() {
                 />
               </div>
 
-              {/* Hours & Projects Row */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 sm:p-6">
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Hours Worked
-                  </label>
-                  <input
-                    type="number"
-                    value={hoursWorked}
-                    onChange={(e) => setHoursWorked(e.target.value)}
-                    disabled={isLocked}
-                    min="0"
-                    max="24"
-                    step="0.5"
-                    className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 disabled:opacity-50"
-                    placeholder="8"
-                  />
-                </div>
-
-                <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 sm:p-6">
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Projects Worked On
-                  </label>
-                  <select
-                    multiple
-                    value={selectedProjects}
-                    onChange={(e) =>
-                      setSelectedProjects(
-                        Array.from(e.target.selectedOptions, (opt) => opt.value)
-                      )
-                    }
-                    disabled={isLocked}
-                    className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-cyan-500 disabled:opacity-50"
-                    size={3}
-                  >
-                    {projects.map((p) => (
-                      <option key={p._id} value={p._id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-slate-500 mt-1">Hold Ctrl/Cmd to select multiple</p>
-                </div>
+              {/* Hours Worked */}
+              <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 sm:p-6">
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Hours Worked
+                </label>
+                <input
+                  type="number"
+                  value={hoursWorked}
+                  onChange={(e) => setHoursWorked(e.target.value)}
+                  disabled={isLocked}
+                  min="0"
+                  max="24"
+                  step="0.5"
+                  className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 disabled:opacity-50"
+                  placeholder="8"
+                />
               </div>
 
               {/* Action Buttons */}
@@ -426,6 +557,25 @@ function DailyLogContent() {
       </main>
     </div>
   );
+}
+
+// Main Component - Decides which view to show
+function DailyLogContent() {
+  const { user } = useAuth();
+
+  // Show admin view if user doesn't have requiresDailyLog set
+  // Show employee view if they need to fill out daily logs
+  const isEmployee = user?.requiresDailyLog === true;
+
+  if (!user) {
+    return (
+      <div className="flex h-screen bg-slate-900 items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500"></div>
+      </div>
+    );
+  }
+
+  return isEmployee ? <EmployeeDailyLogView /> : <AdminDailyLogView />;
 }
 
 export default function DailyLogPage() {

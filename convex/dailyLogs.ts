@@ -61,6 +61,25 @@ export const getMyLogs = query({
   },
 });
 
+// Get all recent submitted logs (for admin view)
+export const getAllRecentLogs = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const allLogs = await ctx.db
+      .query("dailyLogs")
+      .withIndex("by_date")
+      .order("desc")
+      .collect();
+
+    // Only return submitted logs, limited
+    return allLogs
+      .filter((log) => log.isSubmitted)
+      .slice(0, args.limit || 50);
+  },
+});
+
 // Get weekly overview for all users (for stakeholder report)
 export const getWeeklyOverview = query({
   args: {
