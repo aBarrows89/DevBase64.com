@@ -345,6 +345,20 @@ export const setForcePasswordChange = mutation({
   },
 });
 
+// Set requiresDailyLog flag for a user (admin only)
+export const setRequiresDailyLog = mutation({
+  args: {
+    userId: v.id("users"),
+    requiresDailyLog: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.userId, {
+      requiresDailyLog: args.requiresDailyLog,
+    });
+    return { success: true };
+  },
+});
+
 // Update user (admin only)
 export const updateUser = mutation({
   args: {

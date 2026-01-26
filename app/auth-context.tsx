@@ -223,6 +223,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         managedDepartments: userData.managedDepartments,
         managedLocationIds: userData.managedLocationIds,
         personnelId: userData.personnelId,
+        requiresDailyLog: userData.requiresDailyLog,
       }
     : null;
 
