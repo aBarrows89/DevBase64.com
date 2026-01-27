@@ -1348,10 +1348,8 @@ function EmployeeDailyLogView() {
 function DailyLogContent() {
   const { user } = useAuth();
 
-  // Roles that can view all team logs (admin view)
-  const adminRoles = ["super_admin", "admin", "warehouse_director"];
-  const canViewAllLogs = adminRoles.includes(user?.role || "");
-  const isEmployee = user?.requiresDailyLog === true;
+  // If requiresDailyLog is checked, user fills out their own log (employee view)
+  const requiresDailyLog = user?.requiresDailyLog === true;
 
   if (!user) {
     return (
@@ -1361,12 +1359,9 @@ function DailyLogContent() {
     );
   }
 
-  // Admin roles always see the admin view (can view all team logs)
-  // Non-admin users with requiresDailyLog see the employee entry form
-  // Users without requiresDailyLog and no admin role also see admin view (read-only)
-  return canViewAllLogs ? <AdminDailyLogView /> :
-         isEmployee ? <EmployeeDailyLogView /> :
-         <AdminDailyLogView />;
+  // If user has requiresDailyLog checked, they see the entry form (regardless of role)
+  // Otherwise, they see the admin view to monitor team logs
+  return requiresDailyLog ? <EmployeeDailyLogView /> : <AdminDailyLogView />;
 }
 
 export default function DailyLogPage() {
