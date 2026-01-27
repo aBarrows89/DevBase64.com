@@ -22,6 +22,7 @@ function ReportContent() {
 
   const [startDate, setStartDate] = useState(monday);
   const [endDate, setEndDate] = useState(today);
+  const [selectedPerson, setSelectedPerson] = useState<string>("all");
   const reportRef = useRef<HTMLDivElement>(null);
 
   const weeklyOverview = useQuery(
@@ -33,11 +34,66 @@ function ReportContent() {
     window.print();
   };
 
-  // Get user summaries from the response
-  const userSummaries = weeklyOverview?.userSummaries || [];
+  // Date range presets
+  const applyPreset = (preset: string) => {
+    const now = new Date();
+    let start: Date;
+    let end: Date;
 
-  // Use totals from the response or calculate from user summaries
-  const totals = weeklyOverview ? weeklyOverview.totals : null;
+    switch (preset) {
+      case "this_week":
+        start = getMonday(now);
+        end = now;
+        break;
+      case "last_week":
+        const lastWeek = new Date(now);
+        lastWeek.setDate(lastWeek.getDate() - 7);
+        start = getMonday(lastWeek);
+        end = new Date(start);
+        end.setDate(end.getDate() + 4); // Friday of last week
+        break;
+      case "this_month":
+        start = new Date(now.getFullYear(), now.getMonth(), 1);
+        end = now;
+        break;
+      case "last_month":
+        start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        end = new Date(now.getFullYear(), now.getMonth(), 0); // Last day of previous month
+        break;
+      default:
+        return;
+    }
+
+    setStartDate(start.toISOString().split("T")[0]);
+    setEndDate(end.toISOString().split("T")[0]);
+  };
+
+  // Get user summaries from the response
+  const allUserSummaries = weeklyOverview?.userSummaries || [];
+
+  // Get unique users for filter dropdown
+  const uniqueUsers = React.useMemo(() => {
+    return allUserSummaries.map(u => ({ id: u.userId, name: u.userName })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [allUserSummaries]);
+
+  // Filter user summaries based on selected person
+  const userSummaries = selectedPerson === "all"
+    ? allUserSummaries
+    : allUserSummaries.filter(u => u.userId === selectedPerson);
+
+  // Calculate totals based on filtered users
+  const totals = React.useMemo(() => {
+    if (!weeklyOverview) return null;
+    if (selectedPerson === "all") return weeklyOverview.totals;
+
+    // Recalculate totals for filtered user
+    return {
+      totalLogs: userSummaries.reduce((sum, u) => sum + u.daysLogged, 0),
+      totalHours: userSummaries.reduce((sum, u) => sum + u.totalHours, 0),
+      totalAccomplishments: userSummaries.reduce((sum, u) => sum + u.totalAccomplishments, 0),
+      uniqueUsers: userSummaries.length,
+    };
+  }, [weeklyOverview, selectedPerson, userSummaries]);
 
   const formatDateRange = () => {
     const start = new Date(startDate + "T12:00:00");
@@ -49,39 +105,19 @@ function ReportContent() {
     <div className="min-h-screen bg-slate-900 print:bg-white">
       {/* Controls - Hidden when printing */}
       <div className="print:hidden bg-slate-800 border-b border-slate-700 px-6 py-4">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <a
-              href="/daily-log"
-              className="text-slate-400 hover:text-white transition-colors"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-              </svg>
-            </a>
-            <h1 className="text-xl font-bold text-white">Daily Log Report</h1>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <label className="text-slate-400 text-sm">From:</label>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                max={endDate}
-                className="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <label className="text-slate-400 text-sm">To:</label>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                min={startDate}
-                max={today}
-                className="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500"
-              />
+        <div className="max-w-4xl mx-auto space-y-4">
+          {/* Top Row */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <a
+                href="/daily-log"
+                className="text-slate-400 hover:text-white transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+              </a>
+              <h1 className="text-xl font-bold text-white">Daily Log Report</h1>
             </div>
             <button
               onClick={handlePrint}
@@ -92,6 +128,72 @@ function ReportContent() {
               </svg>
               Print Report
             </button>
+          </div>
+
+          {/* Filters Row */}
+          <div className="flex flex-wrap items-center gap-4">
+            {/* Date Range Presets */}
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400 text-sm">Quick:</span>
+              <div className="flex gap-1">
+                {[
+                  { id: "this_week", label: "This Week" },
+                  { id: "last_week", label: "Last Week" },
+                  { id: "this_month", label: "This Month" },
+                  { id: "last_month", label: "Last Month" },
+                ].map((preset) => (
+                  <button
+                    key={preset.id}
+                    onClick={() => applyPreset(preset.id)}
+                    className="px-3 py-1.5 text-xs bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 hover:text-white transition-colors"
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="h-6 w-px bg-slate-700"></div>
+
+            {/* Custom Date Range */}
+            <div className="flex items-center gap-2">
+              <label className="text-slate-400 text-sm">From:</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                max={endDate}
+                className="px-3 py-1.5 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-slate-400 text-sm">To:</label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                min={startDate}
+                max={today}
+                className="px-3 py-1.5 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500"
+              />
+            </div>
+
+            <div className="h-6 w-px bg-slate-700"></div>
+
+            {/* Person Filter */}
+            <div className="flex items-center gap-2">
+              <label className="text-slate-400 text-sm">Person:</label>
+              <select
+                value={selectedPerson}
+                onChange={(e) => setSelectedPerson(e.target.value)}
+                className="px-3 py-1.5 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500"
+              >
+                <option value="all">All Team Members</option>
+                {uniqueUsers.map((u) => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
       </div>

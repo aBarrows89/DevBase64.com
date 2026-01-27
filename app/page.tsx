@@ -105,6 +105,30 @@ function DashboardContent() {
     }
   );
 
+  // Daily log reminder - check if today's log is submitted
+  const today = new Date().toISOString().split("T")[0];
+  const todaysDailyLog = useQuery(
+    api.dailyLogs.getByDate,
+    user?.requiresDailyLog && user?._id ? { userId: user._id, date: today } : "skip"
+  );
+  // Check if it's after 3pm (15:00)
+  const [showDailyLogReminder, setShowDailyLogReminder] = useState(false);
+  useEffect(() => {
+    const checkTime = () => {
+      const now = new Date();
+      const hour = now.getHours();
+      // Show reminder after 3pm if daily log not submitted
+      const shouldShow = hour >= 15 &&
+        user?.requiresDailyLog === true &&
+        todaysDailyLog !== undefined &&
+        !todaysDailyLog?.isSubmitted;
+      setShowDailyLogReminder(shouldShow);
+    };
+    checkTime();
+    const interval = setInterval(checkTime, 60000); // Check every minute
+    return () => clearInterval(interval);
+  }, [todaysDailyLog, user?.requiresDailyLog]);
+
   // Broadcast messages
   const broadcastMessages = useQuery(
     api.broadcastMessages.getActiveForUser,
@@ -438,6 +462,39 @@ function DashboardContent() {
                 </div>
               ))}
             </div>
+          )}
+
+          {/* Daily Log Reminder */}
+          {showDailyLogReminder && (
+            <Link href="/daily-log">
+              <div className={`rounded-xl p-4 border cursor-pointer transition-all hover:scale-[1.01] ${
+                isDark ? "bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-amber-500/30 hover:border-amber-500/50" : "bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200 hover:border-amber-300"
+              }`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex-shrink-0 w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className={`text-sm font-semibold ${isDark ? "text-amber-300" : "text-amber-700"}`}>
+                        Daily Log Reminder
+                      </p>
+                      <p className={`text-sm ${isDark ? "text-amber-200/80" : "text-amber-600"}`}>
+                        {todaysDailyLog ? "Your draft is saved - click here to submit your daily log before leaving." : "Don't forget to fill out your daily activity log before leaving today!"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${isDark ? "bg-amber-500/20 text-amber-400" : "bg-amber-100 text-amber-700"}`}>
+                    <span className="text-sm font-medium">Submit Log</span>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            </Link>
           )}
 
           {/* Day at a Glance - Calendar Events */}

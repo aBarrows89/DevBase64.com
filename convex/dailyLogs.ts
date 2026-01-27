@@ -1,5 +1,6 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalMutation } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 
 // ============ QUERIES ============
@@ -713,5 +714,129 @@ export const addReviewerComment = mutation({
     });
 
     return { success: true };
+  },
+});
+
+// Internal mutation to send weekly digest emails to admins
+export const sendWeeklyDigestEmails = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    // Calculate last week's date range (Monday to Friday)
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+
+    // Get last week's Monday
+    const lastMonday = new Date(now);
+    lastMonday.setDate(now.getDate() - dayOfWeek - 6); // Go back to last Monday
+    lastMonday.setHours(0, 0, 0, 0);
+
+    // Get last week's Friday
+    const lastFriday = new Date(lastMonday);
+    lastFriday.setDate(lastMonday.getDate() + 4);
+
+    const startDate = lastMonday.toISOString().split("T")[0];
+    const endDate = lastFriday.toISOString().split("T")[0];
+
+    // Get all submitted logs from last week
+    const allLogs = await ctx.db
+      .query("dailyLogs")
+      .filter((q) => q.eq(q.field("isSubmitted"), true))
+      .collect();
+
+    const weekLogs = allLogs.filter(
+      (log) => log.date >= startDate && log.date <= endDate
+    );
+
+    if (weekLogs.length === 0) {
+      console.log("No daily logs for last week, skipping digest");
+      return { sent: 0 };
+    }
+
+    // Get users who require daily logs
+    const usersRequiringLogs = await ctx.db
+      .query("users")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("isActive"), true),
+          q.eq(q.field("requiresDailyLog"), true)
+        )
+      )
+      .collect();
+
+    // Calculate weekdays in the range (for missed days calculation)
+    const weekdays: string[] = [];
+    const currentDate = new Date(lastMonday);
+    while (currentDate <= lastFriday) {
+      if (currentDate.getDay() !== 0 && currentDate.getDay() !== 6) {
+        weekdays.push(currentDate.toISOString().split("T")[0]);
+      }
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    // Build user summaries
+    const userSummaries = usersRequiringLogs.map((user) => {
+      const userLogs = weekLogs.filter((log) => log.userId === user._id);
+      const loggedDates = new Set(userLogs.map((log) => log.date));
+      const missedDays = weekdays.filter((d) => !loggedDates.has(d)).length;
+
+      return {
+        userName: user.name,
+        daysLogged: userLogs.length,
+        totalHours: userLogs.reduce((sum, log) => sum + (log.hoursWorked || 0), 0),
+        totalAccomplishments: userLogs.reduce(
+          (sum, log) => sum + (log.accomplishments?.length || 0),
+          0
+        ),
+        missedDays,
+      };
+    });
+
+    // Calculate totals
+    const totals = {
+      totalLogs: weekLogs.length,
+      totalHours: weekLogs.reduce((sum, log) => sum + (log.hoursWorked || 0), 0),
+      totalAccomplishments: weekLogs.reduce(
+        (sum, log) => sum + (log.accomplishments?.length || 0),
+        0
+      ),
+      teamMembers: usersRequiringLogs.length,
+    };
+
+    // Get admins to send the digest to
+    const admins = await ctx.db
+      .query("users")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("isActive"), true),
+          q.or(
+            q.eq(q.field("role"), "super_admin"),
+            q.eq(q.field("role"), "admin"),
+            q.eq(q.field("role"), "warehouse_director")
+          )
+        )
+      )
+      .collect();
+
+    // Send email to each admin
+    let sentCount = 0;
+    for (const admin of admins) {
+      if (!admin.email) continue;
+
+      await ctx.scheduler.runAfter(0, internal.emails.sendWeeklyDailyLogDigest, {
+        adminEmail: admin.email,
+        adminName: admin.name,
+        startDate,
+        endDate,
+        totalLogs: totals.totalLogs,
+        totalHours: totals.totalHours,
+        totalAccomplishments: totals.totalAccomplishments,
+        teamMembers: totals.teamMembers,
+        userSummaries,
+      });
+      sentCount++;
+    }
+
+    console.log(`Weekly digest emails scheduled for ${sentCount} admins`);
+    return { sent: sentCount };
   },
 });

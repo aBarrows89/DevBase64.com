@@ -18,4 +18,11 @@ crons.daily(
   internal.applications.autoExpireOldApplications
 );
 
+// Send weekly daily log digest to admins every Monday at 9 AM EST (14:00 UTC)
+crons.weekly(
+  "weekly-daily-log-digest",
+  { dayOfWeek: "monday", hourUTC: 14, minuteUTC: 0 },
+  internal.dailyLogs.sendWeeklyDigestEmails
+);
+
 export default crons;

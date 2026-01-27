@@ -17,6 +17,7 @@ function AdminDailyLogView() {
   const [editingCommentLogId, setEditingCommentLogId] = useState<string | null>(null);
   const [commentText, setCommentText] = useState("");
   const [savingComment, setSavingComment] = useState(false);
+  const [selectedPerson, setSelectedPerson] = useState<string>("all");
 
   // Toggle log expansion
   const toggleLogExpansion = (logId: string) => {
@@ -31,9 +32,103 @@ function AdminDailyLogView() {
     });
   };
 
-  const allLogs = useQuery(api.dailyLogs.getAllLogsIncludingDrafts, { limit: 50 });
+  const allLogs = useQuery(api.dailyLogs.getAllLogsIncludingDrafts, { limit: 100 });
   const todayLiveActivity = useQuery(api.dailyLogs.getTodayLiveActivity, {});
   const addReviewerComment = useMutation(api.dailyLogs.addReviewerComment);
+
+  // Get unique users from logs for filter dropdown
+  const uniqueUsers = React.useMemo(() => {
+    if (!allLogs) return [];
+    const usersMap = new Map<string, string>();
+    allLogs.forEach(log => {
+      if (!usersMap.has(log.userId)) {
+        usersMap.set(log.userId, log.userName);
+      }
+    });
+    return Array.from(usersMap.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [allLogs]);
+
+  // Calculate user stats (streaks, totals)
+  const userStats = React.useMemo(() => {
+    if (!allLogs) return new Map();
+    const stats = new Map<string, {
+      totalLogs: number;
+      totalHours: number;
+      totalAccomplishments: number;
+      currentStreak: number;
+      submittedDates: Set<string>;
+    }>();
+
+    // Group logs by user
+    allLogs.filter(l => l.isSubmitted).forEach(log => {
+      const existing = stats.get(log.userId) || {
+        totalLogs: 0,
+        totalHours: 0,
+        totalAccomplishments: 0,
+        currentStreak: 0,
+        submittedDates: new Set<string>(),
+      };
+      existing.totalLogs++;
+      existing.totalHours += log.hoursWorked || 0;
+      existing.totalAccomplishments += log.accomplishments?.length || 0;
+      existing.submittedDates.add(log.date);
+      stats.set(log.userId, existing);
+    });
+
+    // Calculate current streak for each user
+    stats.forEach((stat, userId) => {
+      const sortedDates = Array.from(stat.submittedDates).sort((a, b) => b.localeCompare(a));
+      let streak = 0;
+      const today = new Date();
+
+      for (let i = 0; i < 30; i++) {
+        const checkDate = new Date(today);
+        checkDate.setDate(checkDate.getDate() - i);
+        const dateStr = checkDate.toISOString().split("T")[0];
+
+        // Skip weekends
+        const dayOfWeek = checkDate.getDay();
+        if (dayOfWeek === 0 || dayOfWeek === 6) continue;
+
+        if (stat.submittedDates.has(dateStr)) {
+          streak++;
+        } else if (i > 0) {
+          break; // Streak broken
+        }
+      }
+      stat.currentStreak = streak;
+    });
+
+    return stats;
+  }, [allLogs]);
+
+  // Export to CSV function
+  const exportToCSV = () => {
+    if (!allLogs) return;
+
+    const logsToExport = selectedPerson === "all"
+      ? allLogs.filter(l => l.isSubmitted)
+      : allLogs.filter(l => l.isSubmitted && l.userId === selectedPerson);
+
+    const headers = ["Date", "Name", "Hours", "Summary", "Accomplishments", "Blockers", "Goals for Tomorrow", "Reviewer Notes"];
+    const rows = logsToExport.map(log => [
+      log.date,
+      log.userName,
+      log.hoursWorked?.toString() || "",
+      `"${(log.summary || "").replace(/"/g, '""')}"`,
+      `"${(log.accomplishments || []).join("; ").replace(/"/g, '""')}"`,
+      `"${(log.blockers || "").replace(/"/g, '""')}"`,
+      `"${(log.goalsForTomorrow || "").replace(/"/g, '""')}"`,
+      `"${(log.reviewerComment || "").replace(/"/g, '""')}"`,
+    ]);
+
+    const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `daily-logs-${new Date().toISOString().split("T")[0]}.csv`;
+    link.click();
+  };
 
   // Handle saving reviewer comment
   const handleSaveComment = async (logId: Id<"dailyLogs">) => {
@@ -61,8 +156,12 @@ function AdminDailyLogView() {
     setCommentText(existingComment || "");
   };
 
-  // Filter logs based on showDrafts toggle
-  const filteredLogs = allLogs?.filter(log => showDrafts || log.isSubmitted) || [];
+  // Filter logs based on showDrafts toggle and selected person
+  const filteredLogs = allLogs?.filter(log => {
+    const matchesDraft = showDrafts || log.isSubmitted;
+    const matchesPerson = selectedPerson === "all" || log.userId === selectedPerson;
+    return matchesDraft && matchesPerson;
+  }) || [];
 
   // Group logs by date
   const logsByDate = filteredLogs.reduce((acc, log) => {
@@ -76,6 +175,9 @@ function AdminDailyLogView() {
   const sortedDates = Object.keys(logsByDate).sort((a, b) => b.localeCompare(a));
   const today = new Date().toISOString().split("T")[0];
 
+  // Get selected user's stats
+  const selectedUserStats = selectedPerson !== "all" ? userStats.get(selectedPerson) : null;
+
   return (
     <div className="flex h-screen bg-slate-900">
       <Sidebar />
@@ -85,33 +187,90 @@ function AdminDailyLogView() {
 
         {/* Header */}
         <header className="flex-shrink-0 bg-slate-900/80 backdrop-blur-sm border-b border-slate-700 px-4 sm:px-8 py-3 sm:py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-white">Team Daily Logs</h1>
-              <p className="text-slate-400 text-xs sm:text-sm mt-1">
-                View team activity and daily logs in real-time
-              </p>
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-xl sm:text-2xl font-bold text-white">Team Daily Logs</h1>
+                <p className="text-slate-400 text-xs sm:text-sm mt-1">
+                  View team activity and daily logs in real-time
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                {/* Filter by Person */}
+                <select
+                  value={selectedPerson}
+                  onChange={(e) => setSelectedPerson(e.target.value)}
+                  className="px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500"
+                >
+                  <option value="all">All Team Members</option>
+                  {uniqueUsers.map(u => (
+                    <option key={u.id} value={u.id}>{u.name}</option>
+                  ))}
+                </select>
+
+                <label className="hidden sm:flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showDrafts}
+                    onChange={(e) => setShowDrafts(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-0"
+                  />
+                  <span className="text-sm text-slate-300">Drafts</span>
+                </label>
+
+                {/* Export CSV */}
+                <button
+                  onClick={exportToCSV}
+                  className="px-3 py-2 bg-slate-700 text-slate-300 font-medium rounded-lg hover:bg-slate-600 hover:text-white transition-colors flex items-center gap-2 text-sm"
+                  title="Export to CSV"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <span className="hidden sm:inline">Export</span>
+                </button>
+
+                <a
+                  href="/daily-log/report"
+                  className="px-3 py-2 bg-cyan-500 text-white font-medium rounded-lg hover:bg-cyan-600 transition-colors flex items-center gap-2 text-sm"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                  </svg>
+                  <span className="hidden sm:inline">Print</span>
+                </a>
+              </div>
             </div>
-            <div className="flex items-center gap-4">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showDrafts}
-                  onChange={(e) => setShowDrafts(e.target.checked)}
-                  className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-0"
-                />
-                <span className="text-sm text-slate-300">Show Drafts</span>
-              </label>
-              <a
-                href="/daily-log/report"
-                className="px-4 py-2 bg-cyan-500 text-white font-medium rounded-lg hover:bg-cyan-600 transition-colors flex items-center gap-2 text-sm"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Print Report
-              </a>
-            </div>
+
+            {/* Stats Bar - Show when filtering by person */}
+            {selectedUserStats && (
+              <div className="flex items-center gap-6 py-2 px-4 bg-slate-800/50 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-cyan-500/20 flex items-center justify-center">
+                    <span className="text-cyan-400 text-sm font-bold">{selectedUserStats.currentStreak}</span>
+                  </div>
+                  <div>
+                    <p className="text-white text-sm font-medium">Day Streak</p>
+                    <p className="text-slate-500 text-xs">Consecutive submissions</p>
+                  </div>
+                </div>
+                <div className="h-8 w-px bg-slate-700"></div>
+                <div>
+                  <p className="text-white text-sm font-medium">{selectedUserStats.totalLogs} Logs</p>
+                  <p className="text-slate-500 text-xs">Total submitted</p>
+                </div>
+                <div className="h-8 w-px bg-slate-700"></div>
+                <div>
+                  <p className="text-white text-sm font-medium">{selectedUserStats.totalHours.toFixed(1)}h</p>
+                  <p className="text-slate-500 text-xs">Hours logged</p>
+                </div>
+                <div className="h-8 w-px bg-slate-700"></div>
+                <div>
+                  <p className="text-white text-sm font-medium">{selectedUserStats.totalAccomplishments}</p>
+                  <p className="text-slate-500 text-xs">Accomplishments</p>
+                </div>
+              </div>
+            )}
           </div>
         </header>
 
@@ -854,6 +1013,42 @@ function EmployeeDailyLogView() {
                     </div>
                   ))}
                 </div>
+
+                {/* Quick Templates */}
+                {!isLocked && (
+                  <div className="mt-4 pt-4 border-t border-slate-700">
+                    <p className="text-xs text-slate-500 mb-2">Quick add:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        "Completed project tasks",
+                        "Attended team meeting",
+                        "Resolved customer issue",
+                        "Processed orders/shipments",
+                        "Updated documentation",
+                        "Conducted inventory check",
+                        "Trained team member",
+                        "Fixed bug/issue",
+                      ].map((template) => (
+                        <button
+                          key={template}
+                          type="button"
+                          onClick={() => {
+                            // Find first empty slot or add new one
+                            const emptyIndex = accomplishments.findIndex(a => a.trim() === "");
+                            if (emptyIndex !== -1) {
+                              handleAccomplishmentChange(emptyIndex, template);
+                            } else {
+                              setAccomplishments([...accomplishments, template]);
+                            }
+                          }}
+                          className="px-2.5 py-1 text-xs bg-slate-700/50 text-slate-400 rounded-full hover:bg-cyan-500/20 hover:text-cyan-400 transition-colors"
+                        >
+                          + {template}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Blockers */}
@@ -1153,8 +1348,9 @@ function EmployeeDailyLogView() {
 function DailyLogContent() {
   const { user } = useAuth();
 
-  // Show admin view if user doesn't have requiresDailyLog set
-  // Show employee view if they need to fill out daily logs
+  // Roles that can view all team logs (admin view)
+  const adminRoles = ["super_admin", "admin", "warehouse_director"];
+  const canViewAllLogs = adminRoles.includes(user?.role || "");
   const isEmployee = user?.requiresDailyLog === true;
 
   if (!user) {
@@ -1165,7 +1361,12 @@ function DailyLogContent() {
     );
   }
 
-  return isEmployee ? <EmployeeDailyLogView /> : <AdminDailyLogView />;
+  // Admin roles always see the admin view (can view all team logs)
+  // Non-admin users with requiresDailyLog see the employee entry form
+  // Users without requiresDailyLog and no admin role also see admin view (read-only)
+  return canViewAllLogs ? <AdminDailyLogView /> :
+         isEmployee ? <EmployeeDailyLogView /> :
+         <AdminDailyLogView />;
 }
 
 export default function DailyLogPage() {

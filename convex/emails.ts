@@ -828,6 +828,174 @@ The ${companyName} Team
   },
 });
 
+// Send weekly daily log digest email to admins
+export const sendWeeklyDailyLogDigest = internalAction({
+  args: {
+    adminEmail: v.string(),
+    adminName: v.string(),
+    startDate: v.string(),
+    endDate: v.string(),
+    totalLogs: v.number(),
+    totalHours: v.number(),
+    totalAccomplishments: v.number(),
+    teamMembers: v.number(),
+    userSummaries: v.array(v.object({
+      userName: v.string(),
+      daysLogged: v.number(),
+      totalHours: v.number(),
+      totalAccomplishments: v.number(),
+      missedDays: v.number(),
+    })),
+    companyName: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const resendApiKey = process.env.RESEND_API_KEY;
+    if (!resendApiKey) {
+      console.error("RESEND_API_KEY not configured");
+      return { success: false, error: "Email service not configured" };
+    }
+
+    const resend = new Resend(resendApiKey);
+
+    const companyName = args.companyName || "Import Export Tire Co";
+    const formattedStartDate = formatDateForEmail(args.startDate);
+    const formattedEndDate = formatDateForEmail(args.endDate);
+
+    // Generate user summaries HTML
+    const userSummariesHtml = args.userSummaries.map(user => `
+      <tr>
+        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">
+          <strong>${user.userName}</strong>
+          ${user.missedDays > 0 ? `<br><span style="color: #ef4444; font-size: 12px;">${user.missedDays} day(s) missed</span>` : ''}
+        </td>
+        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: center;">${user.daysLogged}</td>
+        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: center;">${user.totalHours.toFixed(1)}h</td>
+        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: center; color: #10b981; font-weight: bold;">${user.totalAccomplishments}</td>
+      </tr>
+    `).join('');
+
+    const emailHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Weekly Daily Log Digest</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 700px; margin: 0 auto; padding: 20px;">
+  <div style="background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%); padding: 30px; border-radius: 10px 10px 0 0;">
+    <h1 style="color: white; margin: 0; font-size: 24px;">Weekly Daily Log Digest</h1>
+    <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0;">${formattedStartDate} - ${formattedEndDate}</p>
+  </div>
+
+  <div style="background: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; border-top: none;">
+    <p style="margin-top: 0;">Hi ${args.adminName.split(' ')[0]},</p>
+
+    <p>Here's your weekly summary of team daily activity logs.</p>
+
+    <!-- Summary Cards -->
+    <div style="display: flex; gap: 15px; margin: 20px 0; flex-wrap: wrap;">
+      <div style="flex: 1; min-width: 120px; background: white; border-radius: 8px; padding: 15px; text-align: center; border: 1px solid #e5e7eb;">
+        <p style="margin: 0; font-size: 28px; font-weight: bold; color: #3b82f6;">${args.totalLogs}</p>
+        <p style="margin: 5px 0 0 0; font-size: 12px; color: #6b7280;">Logs Submitted</p>
+      </div>
+      <div style="flex: 1; min-width: 120px; background: white; border-radius: 8px; padding: 15px; text-align: center; border: 1px solid #e5e7eb;">
+        <p style="margin: 0; font-size: 28px; font-weight: bold; color: #10b981;">${args.totalHours.toFixed(1)}</p>
+        <p style="margin: 5px 0 0 0; font-size: 12px; color: #6b7280;">Hours Logged</p>
+      </div>
+      <div style="flex: 1; min-width: 120px; background: white; border-radius: 8px; padding: 15px; text-align: center; border: 1px solid #e5e7eb;">
+        <p style="margin: 0; font-size: 28px; font-weight: bold; color: #8b5cf6;">${args.totalAccomplishments}</p>
+        <p style="margin: 5px 0 0 0; font-size: 12px; color: #6b7280;">Accomplishments</p>
+      </div>
+      <div style="flex: 1; min-width: 120px; background: white; border-radius: 8px; padding: 15px; text-align: center; border: 1px solid #e5e7eb;">
+        <p style="margin: 0; font-size: 28px; font-weight: bold; color: #06b6d4;">${args.teamMembers}</p>
+        <p style="margin: 5px 0 0 0; font-size: 12px; color: #6b7280;">Team Members</p>
+      </div>
+    </div>
+
+    <!-- Team Breakdown -->
+    <div style="background: white; border-radius: 8px; margin: 20px 0; border: 1px solid #e5e7eb; overflow: hidden;">
+      <h3 style="margin: 0; padding: 15px; background: #f3f4f6; border-bottom: 1px solid #e5e7eb;">Team Breakdown</h3>
+      <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+          <tr style="background: #f9fafb;">
+            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e5e7eb;">Team Member</th>
+            <th style="padding: 12px; text-align: center; border-bottom: 2px solid #e5e7eb;">Days</th>
+            <th style="padding: 12px; text-align: center; border-bottom: 2px solid #e5e7eb;">Hours</th>
+            <th style="padding: 12px; text-align: center; border-bottom: 2px solid #e5e7eb;">Accomplishments</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${userSummariesHtml}
+        </tbody>
+      </table>
+    </div>
+
+    <div style="text-align: center; margin: 25px 0;">
+      <a href="https://iecentral.com/daily-log/report" style="display: inline-block; background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%); color: white; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: bold;">
+        View Full Report
+      </a>
+    </div>
+
+    <p style="margin-bottom: 0; color: #6b7280; font-size: 14px;">
+      This is your weekly automated digest. You can view detailed reports and manage daily logs at <a href="https://iecentral.com/daily-log" style="color: #06b6d4;">iecentral.com/daily-log</a>.
+    </p>
+  </div>
+
+  <div style="background: #1f2937; padding: 20px; border-radius: 0 0 10px 10px; text-align: center;">
+    <img src="https://iecentral.com/logo.gif" alt="Import Export Tire Co" style="max-width: 150px; margin-bottom: 15px;">
+    <p style="color: #9ca3af; margin: 0; font-size: 12px;">
+      IE Central Weekly Digest • ${companyName}
+    </p>
+  </div>
+</body>
+</html>
+    `;
+
+    const textContent = `
+Weekly Daily Log Digest
+${formattedStartDate} - ${formattedEndDate}
+
+Hi ${args.adminName.split(' ')[0]},
+
+Here's your weekly summary of team daily activity logs.
+
+SUMMARY
+-------
+Logs Submitted: ${args.totalLogs}
+Hours Logged: ${args.totalHours.toFixed(1)}
+Accomplishments: ${args.totalAccomplishments}
+Team Members: ${args.teamMembers}
+
+TEAM BREAKDOWN
+--------------
+${args.userSummaries.map(user => `${user.userName}: ${user.daysLogged} days, ${user.totalHours.toFixed(1)}h, ${user.totalAccomplishments} accomplishments${user.missedDays > 0 ? ` (${user.missedDays} days missed)` : ''}`).join('\n')}
+
+View full report at: https://iecentral.com/daily-log/report
+
+---
+IE Central Weekly Digest
+${companyName}
+    `;
+
+    try {
+      const result = await resend.emails.send({
+        from: `IE Central <notifications@notifications.iecentral.com>`,
+        to: args.adminEmail,
+        subject: `Weekly Daily Log Digest - ${formattedStartDate} to ${formattedEndDate}`,
+        html: emailHtml,
+        text: textContent,
+      });
+
+      console.log("Weekly digest email sent:", result, "to:", args.adminEmail);
+      return { success: true, emailId: result.data?.id };
+    } catch (error) {
+      console.error("Failed to send weekly digest email:", error);
+      return { success: false, error: String(error) };
+    }
+  },
+});
+
 // Send new user welcome email with login credentials
 export const sendNewUserWelcomeEmail = internalAction({
   args: {
