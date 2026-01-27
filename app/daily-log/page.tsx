@@ -13,9 +13,23 @@ function AdminDailyLogView() {
   const { user } = useAuth();
   const [showDrafts, setShowDrafts] = useState(true);
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
+  const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
   const [editingCommentLogId, setEditingCommentLogId] = useState<string | null>(null);
   const [commentText, setCommentText] = useState("");
   const [savingComment, setSavingComment] = useState(false);
+
+  // Toggle log expansion
+  const toggleLogExpansion = (logId: string) => {
+    setExpandedLogs(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(logId)) {
+        newSet.delete(logId);
+      } else {
+        newSet.add(logId);
+      }
+      return newSet;
+    });
+  };
 
   const allLogs = useQuery(api.dailyLogs.getAllLogsIncludingDrafts, { limit: 50 });
   const todayLiveActivity = useQuery(api.dailyLogs.getTodayLiveActivity, {});
@@ -294,15 +308,20 @@ function AdminDailyLogView() {
                       {date === today && <span className="text-cyan-400 text-xs bg-cyan-500/20 px-2 py-0.5 rounded-full ml-2">Today</span>}
                     </h3>
 
-                    {logsByDate[date]?.map((log) => (
+                    {logsByDate[date]?.map((log) => {
+                      const isExpanded = expandedLogs.has(log._id);
+                      return (
                       <div
                         key={log._id}
-                        className={`bg-slate-800 border rounded-xl p-4 sm:p-6 ${
+                        className={`bg-slate-800 border rounded-xl overflow-hidden ${
                           log.isSubmitted ? 'border-slate-700' : 'border-amber-500/30'
                         }`}
                       >
-                        {/* User Header */}
-                        <div className="flex items-center justify-between mb-4">
+                        {/* Clickable User Header */}
+                        <div
+                          className="flex items-center justify-between p-4 sm:p-6 cursor-pointer hover:bg-slate-700/30 transition-colors"
+                          onClick={() => toggleLogExpansion(log._id)}
+                        >
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-400 font-medium">
                               {log.userName
@@ -313,30 +332,54 @@ function AdminDailyLogView() {
                             </div>
                             <div>
                               <p className="text-white font-medium">{log.userName}</p>
-                              {log.hoursWorked && (
-                                <p className="text-slate-400 text-sm">{log.hoursWorked} hours worked</p>
-                              )}
+                              <div className="flex items-center gap-2 text-slate-400 text-sm">
+                                {log.hoursWorked && <span>{log.hoursWorked}h</span>}
+                                {log.accomplishments && log.accomplishments.length > 0 && (
+                                  <span className="text-green-400">{log.accomplishments.length} accomplishments</span>
+                                )}
+                                {log.reviewerComment && (
+                                  <span className="text-indigo-400 flex items-center gap-1">
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                                    </svg>
+                                    Note
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
-                          {log.isSubmitted ? (
-                            <span className="text-green-400 text-xs flex items-center gap-1 bg-green-500/10 px-2 py-1 rounded-full">
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                              Submitted
-                            </span>
-                          ) : (
-                            <span className="text-amber-400 text-xs flex items-center gap-1 bg-amber-500/10 px-2 py-1 rounded-full">
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                              </svg>
-                              Draft
-                            </span>
-                          )}
+                          <div className="flex items-center gap-3">
+                            {log.isSubmitted ? (
+                              <span className="text-green-400 text-xs flex items-center gap-1 bg-green-500/10 px-2 py-1 rounded-full">
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                                Submitted
+                              </span>
+                            ) : (
+                              <span className="text-amber-400 text-xs flex items-center gap-1 bg-amber-500/10 px-2 py-1 rounded-full">
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                                Draft
+                              </span>
+                            )}
+                            <svg
+                              className={`w-5 h-5 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </div>
                         </div>
 
+                        {/* Expandable Content */}
+                        {isExpanded && (
+                        <div className="px-4 sm:px-6 pb-4 sm:pb-6 border-t border-slate-700/50">
                         {/* Summary */}
-                        <div className="mb-4">
+                        <div className="mb-4 pt-4">
                           <h4 className="text-slate-400 text-xs uppercase tracking-wide mb-1">Summary</h4>
                           <p className="text-white">{log.summary || <span className="text-slate-500 italic">No summary yet</span>}</p>
                         </div>
@@ -407,7 +450,10 @@ function AdminDailyLogView() {
                               </h4>
                               {!editingCommentLogId && (
                                 <button
-                                  onClick={() => handleStartEditing(log._id, log.reviewerComment)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleStartEditing(log._id, log.reviewerComment);
+                                  }}
                                   className="text-indigo-400 hover:text-indigo-300 text-xs flex items-center gap-1"
                                 >
                                   {log.reviewerComment ? "Edit" : "Add Note"}
@@ -416,7 +462,7 @@ function AdminDailyLogView() {
                             </div>
 
                             {editingCommentLogId === log._id ? (
-                              <div className="space-y-2">
+                              <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
                                 <textarea
                                   value={commentText}
                                   onChange={(e) => setCommentText(e.target.value)}
@@ -458,8 +504,11 @@ function AdminDailyLogView() {
                             )}
                           </div>
                         )}
+                        </div>
+                        )}
                       </div>
-                    ))}
+                    );
+                    })}
                   </div>
                 ))
               )}
