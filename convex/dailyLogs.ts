@@ -840,3 +840,209 @@ export const sendWeeklyDigestEmails = internalMutation({
     return { sent: sentCount };
   },
 });
+
+// ============ DAILY TASKS ============
+
+// Get all daily task templates for a user
+export const getDailyTasks = query({
+  args: {
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const tasks = await ctx.db
+      .query("dailyTaskTemplates")
+      .withIndex("by_user_active", (q) =>
+        q.eq("userId", args.userId).eq("isActive", true)
+      )
+      .collect();
+
+    return tasks.sort((a, b) => a.order - b.order);
+  },
+});
+
+// Get daily task completions for a user on a specific date
+export const getDailyTaskCompletions = query({
+  args: {
+    userId: v.id("users"),
+    date: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const completions = await ctx.db
+      .query("dailyTaskCompletions")
+      .withIndex("by_user_date", (q) =>
+        q.eq("userId", args.userId).eq("date", args.date)
+      )
+      .collect();
+
+    return completions;
+  },
+});
+
+// Get tasks with completion status for today
+export const getDailyTasksWithStatus = query({
+  args: {
+    userId: v.id("users"),
+    date: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Get active tasks
+    const tasks = await ctx.db
+      .query("dailyTaskTemplates")
+      .withIndex("by_user_active", (q) =>
+        q.eq("userId", args.userId).eq("isActive", true)
+      )
+      .collect();
+
+    // Get completions for today
+    const completions = await ctx.db
+      .query("dailyTaskCompletions")
+      .withIndex("by_user_date", (q) =>
+        q.eq("userId", args.userId).eq("date", args.date)
+      )
+      .collect();
+
+    const completedTaskIds = new Set(completions.map((c) => c.taskId));
+
+    // Merge tasks with completion status
+    return tasks
+      .sort((a, b) => a.order - b.order)
+      .map((task) => ({
+        ...task,
+        isCompletedToday: completedTaskIds.has(task._id),
+        completedAt: completions.find((c) => c.taskId === task._id)?.completedAt,
+      }));
+  },
+});
+
+// Create a new daily task template
+export const createDailyTask = mutation({
+  args: {
+    userId: v.id("users"),
+    title: v.string(),
+    description: v.optional(v.string()),
+    createdBy: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    // Get current max order for this user
+    const existingTasks = await ctx.db
+      .query("dailyTaskTemplates")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect();
+
+    const maxOrder = existingTasks.reduce(
+      (max, task) => Math.max(max, task.order),
+      0
+    );
+
+    const taskId = await ctx.db.insert("dailyTaskTemplates", {
+      userId: args.userId,
+      title: args.title,
+      description: args.description,
+      isActive: true,
+      order: maxOrder + 1,
+      createdBy: args.createdBy,
+      createdAt: Date.now(),
+    });
+
+    return taskId;
+  },
+});
+
+// Update a daily task template
+export const updateDailyTask = mutation({
+  args: {
+    taskId: v.id("dailyTaskTemplates"),
+    title: v.optional(v.string()),
+    description: v.optional(v.string()),
+    isActive: v.optional(v.boolean()),
+    order: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const { taskId, ...updates } = args;
+
+    // Filter out undefined values
+    const cleanUpdates: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(updates)) {
+      if (value !== undefined) {
+        cleanUpdates[key] = value;
+      }
+    }
+
+    if (Object.keys(cleanUpdates).length > 0) {
+      await ctx.db.patch(taskId, cleanUpdates);
+    }
+
+    return { success: true };
+  },
+});
+
+// Delete a daily task template
+export const deleteDailyTask = mutation({
+  args: {
+    taskId: v.id("dailyTaskTemplates"),
+  },
+  handler: async (ctx, args) => {
+    // Delete all completions for this task
+    const completions = await ctx.db
+      .query("dailyTaskCompletions")
+      .filter((q) => q.eq(q.field("taskId"), args.taskId))
+      .collect();
+
+    for (const completion of completions) {
+      await ctx.db.delete(completion._id);
+    }
+
+    // Delete the task template
+    await ctx.db.delete(args.taskId);
+
+    return { success: true };
+  },
+});
+
+// Toggle task completion for today
+export const toggleDailyTaskCompletion = mutation({
+  args: {
+    taskId: v.id("dailyTaskTemplates"),
+    userId: v.id("users"),
+    date: v.string(),
+    completed: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    // Check if already completed today
+    const existing = await ctx.db
+      .query("dailyTaskCompletions")
+      .withIndex("by_task_date", (q) =>
+        q.eq("taskId", args.taskId).eq("date", args.date)
+      )
+      .first();
+
+    if (args.completed && !existing) {
+      // Mark as completed
+      await ctx.db.insert("dailyTaskCompletions", {
+        taskId: args.taskId,
+        userId: args.userId,
+        date: args.date,
+        completedAt: Date.now(),
+      });
+    } else if (!args.completed && existing) {
+      // Unmark completion
+      await ctx.db.delete(existing._id);
+    }
+
+    return { success: true };
+  },
+});
+
+// Reorder daily tasks
+export const reorderDailyTasks = mutation({
+  args: {
+    userId: v.id("users"),
+    taskIds: v.array(v.id("dailyTaskTemplates")),
+  },
+  handler: async (ctx, args) => {
+    for (let i = 0; i < args.taskIds.length; i++) {
+      await ctx.db.patch(args.taskIds[i], { order: i + 1 });
+    }
+    return { success: true };
+  },
+});

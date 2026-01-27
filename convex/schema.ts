@@ -374,6 +374,29 @@ export default defineSchema({
     .index("by_date", ["date"])
     .index("by_user", ["userId"]),
 
+  // Daily task templates - recurring tasks that reset each day
+  dailyTaskTemplates: defineTable({
+    userId: v.id("users"), // Who this task is assigned to
+    title: v.string(),
+    description: v.optional(v.string()),
+    isActive: v.boolean(),
+    order: v.number(), // Display order
+    createdBy: v.id("users"), // Who created it (admin or self)
+    createdAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_active", ["userId", "isActive"]),
+
+  // Daily task completions - track when tasks are completed
+  dailyTaskCompletions: defineTable({
+    taskId: v.id("dailyTaskTemplates"),
+    userId: v.id("users"),
+    date: v.string(), // "YYYY-MM-DD"
+    completedAt: v.number(),
+  })
+    .index("by_user_date", ["userId", "date"])
+    .index("by_task_date", ["taskId", "date"]),
+
   // ============ WEBSITE INQUIRIES (from ietires.com) ============
   contactMessages: defineTable({
     name: v.string(),

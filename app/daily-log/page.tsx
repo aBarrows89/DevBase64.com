@@ -700,6 +700,10 @@ function EmployeeDailyLogView() {
   const isInitialLoad = React.useRef(true);
   const autoSaveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
+  // Daily tasks state
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [showAddTask, setShowAddTask] = useState(false);
+
   // Queries
   const existingLog = useQuery(
     api.dailyLogs.getByDate,
@@ -713,9 +717,68 @@ function EmployeeDailyLogView() {
     api.dailyLogs.getMyLogs,
     user?._id ? { userId: user._id, limit: 14 } : "skip"
   );
+  const dailyTasksWithStatus = useQuery(
+    api.dailyLogs.getDailyTasksWithStatus,
+    user?._id ? { userId: user._id, date: selectedDate } : "skip"
+  );
 
   // Mutations
   const saveLog = useMutation(api.dailyLogs.saveLog);
+  const toggleTaskCompletion = useMutation(api.dailyLogs.toggleDailyTaskCompletion);
+  const createDailyTask = useMutation(api.dailyLogs.createDailyTask);
+  const deleteDailyTask = useMutation(api.dailyLogs.deleteDailyTask);
+
+  // Handle task completion toggle
+  const handleToggleTask = async (taskId: Id<"dailyTaskTemplates">, taskTitle: string, currentlyCompleted: boolean) => {
+    if (!user) return;
+
+    const newCompletedState = !currentlyCompleted;
+
+    // Toggle the task completion
+    await toggleTaskCompletion({
+      taskId,
+      userId: user._id,
+      date: selectedDate,
+      completed: newCompletedState,
+    });
+
+    // If completing the task, add to accomplishments
+    if (newCompletedState && !existingLog?.isSubmitted) {
+      const taskAccomplishment = `✓ ${taskTitle}`;
+      // Check if already in accomplishments
+      if (!accomplishments.includes(taskAccomplishment)) {
+        // Find first empty slot or add new
+        const emptyIndex = accomplishments.findIndex(a => a.trim() === "");
+        if (emptyIndex !== -1) {
+          const updated = [...accomplishments];
+          updated[emptyIndex] = taskAccomplishment;
+          setAccomplishments(updated);
+        } else {
+          setAccomplishments([...accomplishments, taskAccomplishment]);
+        }
+      }
+    }
+  };
+
+  // Handle adding a new daily task
+  const handleAddTask = async () => {
+    if (!user || !newTaskTitle.trim()) return;
+
+    await createDailyTask({
+      userId: user._id,
+      title: newTaskTitle.trim(),
+      createdBy: user._id,
+    });
+
+    setNewTaskTitle("");
+    setShowAddTask(false);
+  };
+
+  // Handle deleting a daily task
+  const handleDeleteTask = async (taskId: Id<"dailyTaskTemplates">) => {
+    if (!confirm("Delete this daily task? This will remove it from your recurring tasks.")) return;
+    await deleteDailyTask({ taskId });
+  };
 
   // Load existing log into form when date changes
   useEffect(() => {
@@ -957,9 +1020,46 @@ function EmployeeDailyLogView() {
 
               {/* Summary */}
               <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 sm:p-6">
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  What did you work on today? <span className="text-red-400">*</span>
-                </label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-slate-300">
+                    What did you work on today? <span className="text-red-400">*</span>
+                  </label>
+                  {!isLocked && autoActivities && (autoActivities.totalActions > 0 || (dailyTasksWithStatus && dailyTasksWithStatus.some(t => t.isCompletedToday))) && (
+                    <button
+                      onClick={() => {
+                        const parts: string[] = [];
+
+                        // Add auto-tracked activities
+                        if (autoActivities.projectsCreated > 0) {
+                          parts.push(`Created ${autoActivities.projectsCreated} project${autoActivities.projectsCreated > 1 ? "s" : ""}`);
+                        }
+                        if (autoActivities.projectsMoved > 0) {
+                          parts.push(`Updated ${autoActivities.projectsMoved} project status${autoActivities.projectsMoved > 1 ? "es" : ""}`);
+                        }
+                        if (autoActivities.tasksCompleted > 0) {
+                          parts.push(`Completed ${autoActivities.tasksCompleted} task${autoActivities.tasksCompleted > 1 ? "s" : ""}`);
+                        }
+
+                        // Add completed daily tasks
+                        const completedTasks = dailyTasksWithStatus?.filter(t => t.isCompletedToday) || [];
+                        if (completedTasks.length > 0) {
+                          parts.push(`Completed daily tasks: ${completedTasks.map(t => t.title).join(", ")}`);
+                        }
+
+                        if (parts.length > 0) {
+                          const newSummary = parts.join(". ") + ".";
+                          setSummary(prev => prev ? `${prev} ${newSummary}` : newSummary);
+                        }
+                      }}
+                      className="text-purple-400 hover:text-purple-300 text-xs flex items-center gap-1"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      Generate from activities
+                    </button>
+                  )}
+                </div>
                 <textarea
                   value={summary}
                   onChange={(e) => setSummary(e.target.value)}
@@ -976,17 +1076,41 @@ function EmployeeDailyLogView() {
                   <label className="block text-sm font-medium text-slate-300">
                     Accomplishments <span className="text-red-400">*</span>
                   </label>
-                  {!isLocked && (
-                    <button
-                      onClick={handleAddAccomplishment}
-                      className="text-cyan-400 hover:text-cyan-300 text-sm flex items-center gap-1"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      </svg>
-                      Add
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {!isLocked && dailyTasksWithStatus && dailyTasksWithStatus.some(t => t.isCompletedToday) && (
+                      <button
+                        onClick={() => {
+                          const completedTasks = dailyTasksWithStatus.filter(t => t.isCompletedToday);
+                          const newAccomplishments = completedTasks
+                            .map(t => `✓ ${t.title}`)
+                            .filter(item => !accomplishments.includes(item));
+
+                          if (newAccomplishments.length > 0) {
+                            // Filter out empty entries and add new ones
+                            const currentNonEmpty = accomplishments.filter(a => a.trim() !== "");
+                            setAccomplishments([...currentNonEmpty, ...newAccomplishments, ""]);
+                          }
+                        }}
+                        className="text-emerald-400 hover:text-emerald-300 text-xs flex items-center gap-1"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                        </svg>
+                        Add daily tasks
+                      </button>
+                    )}
+                    {!isLocked && (
+                      <button
+                        onClick={handleAddAccomplishment}
+                        className="text-cyan-400 hover:text-cyan-300 text-sm flex items-center gap-1"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        Add
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="space-y-2">
                   {accomplishments.map((item, index) => (
@@ -1119,8 +1243,142 @@ function EmployeeDailyLogView() {
               )}
             </div>
 
-            {/* Sidebar - Auto Activities & Past Logs */}
+            {/* Sidebar - Daily Tasks, Auto Activities & Past Logs */}
             <div className="space-y-6">
+              {/* Daily Tasks Checklist */}
+              <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 sm:p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-medium text-slate-300 flex items-center gap-2">
+                    <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                    </svg>
+                    Daily Tasks
+                  </h3>
+                  {!isLocked && (
+                    <button
+                      onClick={() => setShowAddTask(!showAddTask)}
+                      className="text-emerald-400 hover:text-emerald-300 text-xs flex items-center gap-1"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Add
+                    </button>
+                  )}
+                </div>
+
+                {/* Add new task form */}
+                {showAddTask && (
+                  <div className="mb-4 p-3 bg-slate-900/50 rounded-lg border border-slate-600">
+                    <input
+                      type="text"
+                      value={newTaskTitle}
+                      onChange={(e) => setNewTaskTitle(e.target.value)}
+                      placeholder="New daily task..."
+                      className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500 focus:outline-none focus:border-emerald-500 mb-2"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleAddTask();
+                        if (e.key === "Escape") {
+                          setShowAddTask(false);
+                          setNewTaskTitle("");
+                        }
+                      }}
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleAddTask}
+                        disabled={!newTaskTitle.trim()}
+                        className="flex-1 px-3 py-1.5 bg-emerald-500 text-white text-xs font-medium rounded-lg hover:bg-emerald-600 disabled:opacity-50"
+                      >
+                        Add Task
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowAddTask(false);
+                          setNewTaskTitle("");
+                        }}
+                        className="px-3 py-1.5 text-slate-400 text-xs hover:text-white"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Task list */}
+                {dailyTasksWithStatus && dailyTasksWithStatus.length > 0 ? (
+                  <div className="space-y-2">
+                    {dailyTasksWithStatus.map((task) => (
+                      <div
+                        key={task._id}
+                        className={`flex items-center gap-3 p-2 rounded-lg transition-colors group ${
+                          task.isCompletedToday
+                            ? "bg-emerald-500/10 border border-emerald-500/30"
+                            : "bg-slate-900/30 hover:bg-slate-900/50"
+                        }`}
+                      >
+                        <button
+                          onClick={() => handleToggleTask(task._id, task.title, task.isCompletedToday)}
+                          disabled={isLocked}
+                          className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                            task.isCompletedToday
+                              ? "bg-emerald-500 border-emerald-500 text-white"
+                              : "border-slate-500 hover:border-emerald-400"
+                          } ${isLocked ? "opacity-50 cursor-not-allowed" : ""}`}
+                        >
+                          {task.isCompletedToday && (
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </button>
+                        <span
+                          className={`flex-1 text-sm ${
+                            task.isCompletedToday ? "text-emerald-400 line-through" : "text-slate-300"
+                          }`}
+                        >
+                          {task.title}
+                        </span>
+                        {!isLocked && (
+                          <button
+                            onClick={() => handleDeleteTask(task._id)}
+                            className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400 p-1 transition-opacity"
+                            title="Delete task"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    {/* Completion summary */}
+                    <div className="pt-2 border-t border-slate-700 flex justify-between items-center">
+                      <span className="text-slate-500 text-xs">
+                        {dailyTasksWithStatus.filter(t => t.isCompletedToday).length} of {dailyTasksWithStatus.length} complete
+                      </span>
+                      {dailyTasksWithStatus.length > 0 && dailyTasksWithStatus.every(t => t.isCompletedToday) && (
+                        <span className="text-emerald-400 text-xs font-medium flex items-center gap-1">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          All done!
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ) : dailyTasksWithStatus && dailyTasksWithStatus.length === 0 ? (
+                  <div className="text-center py-4">
+                    <p className="text-slate-500 text-sm mb-2">No daily tasks yet</p>
+                    <p className="text-slate-600 text-xs">
+                      Add recurring tasks that you do every day
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-slate-500 text-sm">Loading...</p>
+                )}
+              </div>
+
               {/* Auto-Tracked Activities */}
               <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 sm:p-6">
                 <h3 className="text-sm font-medium text-slate-300 mb-4 flex items-center gap-2">
