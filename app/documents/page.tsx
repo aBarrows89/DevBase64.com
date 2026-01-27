@@ -217,6 +217,32 @@ function DocumentsContent() {
     }
   };
 
+  // Helper to get correct MIME type for file
+  const getFileMimeType = (file: File): string => {
+    // If browser detected a MIME type, use it (unless it's empty or generic)
+    if (file.type && file.type !== "application/octet-stream") {
+      return file.type;
+    }
+
+    // Fallback: determine MIME type from extension
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    const mimeTypes: Record<string, string> = {
+      pdf: "application/pdf",
+      doc: "application/msword",
+      docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      xls: "application/vnd.ms-excel",
+      xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      txt: "text/plain",
+      png: "image/png",
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      gif: "image/gif",
+      csv: "text/csv",
+    };
+
+    return mimeTypes[ext || ""] || "application/octet-stream";
+  };
+
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedFile || !user) return;
@@ -232,10 +258,13 @@ function DocumentsContent() {
         throw new Error("Failed to generate upload URL");
       }
 
+      // Get the correct MIME type (some browsers don't detect Excel properly)
+      const mimeType = getFileMimeType(selectedFile);
+
       // Upload file to Convex storage
       const response = await fetch(uploadUrl, {
         method: "POST",
-        headers: { "Content-Type": selectedFile.type },
+        headers: { "Content-Type": mimeType },
         body: selectedFile,
       });
 
@@ -259,7 +288,7 @@ function DocumentsContent() {
         folderId: currentFolderId || undefined,
         fileId: storageId,
         fileName: selectedFile.name,
-        fileType: selectedFile.type,
+        fileType: mimeType,
         fileSize: selectedFile.size,
         uploadedBy: user._id,
         uploadedByName: user.name,
@@ -1686,7 +1715,7 @@ function DocumentsContent() {
                         type="file"
                         onChange={handleFileSelect}
                         className="sr-only"
-                        accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.png,.jpg,.jpeg"
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.png,.jpg,.jpeg,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain,image/png,image/jpeg"
                       />
                       {selectedFile ? (
                         <div>
@@ -1698,7 +1727,7 @@ function DocumentsContent() {
                         <div>
                           <div className="text-2xl mb-2">📤</div>
                           <p className={isDark ? "text-slate-400" : "text-gray-500"}>Click to select a file</p>
-                          <p className={`text-xs mt-1 ${isDark ? "text-slate-500" : "text-gray-400"}`}>PDF, DOC, XLS, TXT, Images</p>
+                          <p className={`text-xs mt-1 ${isDark ? "text-slate-500" : "text-gray-400"}`}>PDF, DOC, XLS, XLSX, CSV, TXT, Images</p>
                         </div>
                       )}
                     </label>
