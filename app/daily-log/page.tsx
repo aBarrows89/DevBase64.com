@@ -486,6 +486,12 @@ function EmployeeDailyLogView() {
   const [showPastLogs, setShowPastLogs] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
 
+  // Auto-save state
+  const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const isInitialLoad = React.useRef(true);
+  const autoSaveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
   // Queries
   const existingLog = useQuery(
     api.dailyLogs.getByDate,
@@ -505,6 +511,7 @@ function EmployeeDailyLogView() {
 
   // Load existing log into form when date changes
   useEffect(() => {
+    isInitialLoad.current = true;
     if (existingLog) {
       setSummary(existingLog.summary);
       setAccomplishments(
@@ -513,6 +520,9 @@ function EmployeeDailyLogView() {
       setBlockers(existingLog.blockers || "");
       setGoalsForTomorrow(existingLog.goalsForTomorrow || "");
       setHoursWorked(existingLog.hoursWorked?.toString() || "");
+      if (existingLog.updatedAt) {
+        setLastSaved(new Date(existingLog.updatedAt));
+      }
     } else {
       // Reset form for new date
       setSummary("");
@@ -520,8 +530,69 @@ function EmployeeDailyLogView() {
       setBlockers("");
       setGoalsForTomorrow("");
       setHoursWorked("");
+      setLastSaved(null);
     }
+    // Allow auto-save after a short delay to prevent saving on initial load
+    setTimeout(() => {
+      isInitialLoad.current = false;
+    }, 500);
   }, [existingLog, selectedDate]);
+
+  // Auto-save function
+  const performAutoSave = React.useCallback(async () => {
+    if (!user || isInitialLoad.current) return;
+
+    // Don't auto-save if already submitted
+    if (existingLog?.isSubmitted) return;
+
+    // Don't auto-save empty forms
+    const hasContent = summary.trim() || accomplishments.some(a => a.trim()) || blockers.trim() || goalsForTomorrow.trim() || hoursWorked;
+    if (!hasContent) return;
+
+    setAutoSaveStatus("saving");
+    try {
+      await saveLog({
+        userId: user._id,
+        date: selectedDate,
+        summary,
+        accomplishments: accomplishments.filter((a) => a.trim() !== ""),
+        blockers: blockers || undefined,
+        goalsForTomorrow: goalsForTomorrow || undefined,
+        hoursWorked: hoursWorked ? parseFloat(hoursWorked) : undefined,
+        isSubmitted: false,
+      });
+      setAutoSaveStatus("saved");
+      setLastSaved(new Date());
+      // Reset to idle after 3 seconds
+      setTimeout(() => setAutoSaveStatus("idle"), 3000);
+    } catch (error) {
+      console.error("Auto-save failed:", error);
+      setAutoSaveStatus("error");
+    }
+  }, [user, selectedDate, summary, accomplishments, blockers, goalsForTomorrow, hoursWorked, saveLog, existingLog?.isSubmitted]);
+
+  // Debounced auto-save effect - triggers 2 seconds after user stops typing
+  useEffect(() => {
+    if (isInitialLoad.current) return;
+    if (existingLog?.isSubmitted) return;
+
+    // Clear existing timeout
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+
+    // Set new timeout for auto-save
+    autoSaveTimeoutRef.current = setTimeout(() => {
+      performAutoSave();
+    }, 2000);
+
+    // Cleanup on unmount
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, [summary, accomplishments, blockers, goalsForTomorrow, hoursWorked, performAutoSave, existingLog?.isSubmitted]);
 
   const handleAddAccomplishment = () => {
     setAccomplishments([...accomplishments, ""]);
@@ -577,9 +648,43 @@ function EmployeeDailyLogView() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-xl sm:text-2xl font-bold text-white">Daily Activity Log</h1>
-              <p className="text-slate-400 text-xs sm:text-sm mt-1">
-                Track your daily work and accomplishments
-              </p>
+              <div className="flex items-center gap-3 mt-1">
+                <p className="text-slate-400 text-xs sm:text-sm">
+                  Track your daily work and accomplishments
+                </p>
+                {/* Auto-save status indicator */}
+                {!existingLog?.isSubmitted && (
+                  <div className="flex items-center gap-1.5">
+                    {autoSaveStatus === "saving" && (
+                      <>
+                        <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></div>
+                        <span className="text-amber-400 text-xs">Saving...</span>
+                      </>
+                    )}
+                    {autoSaveStatus === "saved" && (
+                      <>
+                        <svg className="w-3.5 h-3.5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span className="text-green-400 text-xs">Saved</span>
+                      </>
+                    )}
+                    {autoSaveStatus === "error" && (
+                      <>
+                        <svg className="w-3.5 h-3.5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span className="text-red-400 text-xs">Save failed</span>
+                      </>
+                    )}
+                    {autoSaveStatus === "idle" && lastSaved && (
+                      <span className="text-slate-500 text-xs">
+                        Last saved {lastSaved.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-3">
               <input
@@ -621,8 +726,7 @@ function EmployeeDailyLogView() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
               <p className="text-amber-400 text-sm">
-                <span className="font-medium">Daily log reminder:</span> Please fill out your daily activity log and submit it before the end of the day.
-                Click the <span className="font-medium">?</span> icon for help.
+                <span className="font-medium">Daily log reminder:</span> Add your accomplishments throughout the day - they auto-save as you type! Submit before you leave.
               </p>
             </div>
           </div>
@@ -753,14 +857,13 @@ function EmployeeDailyLogView() {
 
               {/* Action Buttons */}
               {!isLocked && (
-                <div className="flex justify-end gap-3">
-                  <button
-                    onClick={() => handleSave(false)}
-                    disabled={isSaving}
-                    className="px-6 py-3 bg-slate-700 text-white font-medium rounded-lg hover:bg-slate-600 transition-colors disabled:opacity-50"
-                  >
-                    {isSaving ? "Saving..." : "Save Draft"}
-                  </button>
+                <div className="flex items-center justify-between">
+                  <p className="text-slate-500 text-sm flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    Changes auto-save as you type
+                  </p>
                   <button
                     onClick={() => handleSave(true)}
                     disabled={isSaving || !canSubmit}
@@ -956,11 +1059,11 @@ function EmployeeDailyLogView() {
                     <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
                     </svg>
-                    Save Draft vs Submit
+                    Auto-Save & Submit
                   </h3>
                   <ul className="text-sm text-slate-400 space-y-2 ml-7">
-                    <li><span className="text-white font-medium">Save Draft:</span> Saves your progress but keeps it editable. Use this throughout the day.</li>
-                    <li><span className="text-white font-medium">Submit:</span> Finalizes your log and sends it to management. You cannot edit after submitting.</li>
+                    <li><span className="text-white font-medium">Auto-Save:</span> Your progress saves automatically as you type - no need to click save! Just add items throughout the day.</li>
+                    <li><span className="text-white font-medium">Submit:</span> Finalizes your log and sends it to management. Click this at the end of your day.</li>
                   </ul>
                 </div>
 
@@ -973,8 +1076,8 @@ function EmployeeDailyLogView() {
                     Pro Tips
                   </h3>
                   <ul className="text-sm text-cyan-300/80 space-y-1 list-disc ml-5">
-                    <li>Fill out your log throughout the day, not just at the end</li>
-                    <li>Be specific with accomplishments - &quot;Fixed login bug&quot; is better than &quot;worked on bugs&quot;</li>
+                    <li>Add accomplishments throughout the day - everything auto-saves!</li>
+                    <li>Be specific - &quot;Fixed login bug&quot; is better than &quot;worked on bugs&quot;</li>
                     <li>Submit before you leave for the day</li>
                     <li>Check the sidebar for your auto-tracked activities</li>
                   </ul>
