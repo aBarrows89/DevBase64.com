@@ -591,19 +591,33 @@ function UsersContent() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-400 mb-1">Role</label>
+                <label className="block text-sm font-medium text-slate-400 mb-1">Role & Tier</label>
                 <select
                   value={newUser.role}
                   onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
                   className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-cyan-500"
                 >
-                  <option value="super_admin">Super Admin</option>
-                  <option value="admin">Admin</option>
-                  <option value="warehouse_director">Warehouse Director</option>
-                  <option value="warehouse_manager">Warehouse Manager</option>
-                  <option value="department_manager">Department Manager</option>
-                  <option value="office_manager">Office Manager</option>
-                  <option value="member">Member</option>
+                  <optgroup label="T5 - Super Admin">
+                    <option value="super_admin">Super Admin</option>
+                  </optgroup>
+                  <optgroup label="T4 - Admin">
+                    <option value="admin">Admin</option>
+                  </optgroup>
+                  <optgroup label="T3 - Director">
+                    <option value="warehouse_director">Warehouse Director</option>
+                  </optgroup>
+                  <optgroup label="T2 - Manager">
+                    <option value="warehouse_manager">Warehouse Manager</option>
+                    <option value="office_manager">Office Manager</option>
+                  </optgroup>
+                  <optgroup label="T1 - Shift Lead">
+                    <option value="department_manager">Department Manager</option>
+                    <option value="shift_lead">Shift Lead</option>
+                  </optgroup>
+                  <optgroup label="T0 - Employee">
+                    <option value="member">Member</option>
+                    <option value="employee">Employee</option>
+                  </optgroup>
                 </select>
               </div>
               <div className="flex items-center gap-3 p-3 bg-slate-900/50 rounded-lg border border-slate-700">
@@ -665,20 +679,37 @@ function UsersContent() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-400 mb-1">Role</label>
+                <label className="block text-sm font-medium text-slate-400 mb-1">Role & Tier</label>
                 <select
                   value={editForm.role}
                   onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
                   className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-cyan-500"
                 >
-                  <option value="super_admin">Super Admin</option>
-                  <option value="admin">Admin</option>
-                  <option value="warehouse_director">Warehouse Director</option>
-                  <option value="warehouse_manager">Warehouse Manager</option>
-                  <option value="department_manager">Department Manager</option>
-                  <option value="office_manager">Office Manager</option>
-                  <option value="member">Member</option>
+                  <optgroup label="T5 - Super Admin">
+                    <option value="super_admin">Super Admin</option>
+                  </optgroup>
+                  <optgroup label="T4 - Admin">
+                    <option value="admin">Admin</option>
+                  </optgroup>
+                  <optgroup label="T3 - Director">
+                    <option value="warehouse_director">Warehouse Director</option>
+                  </optgroup>
+                  <optgroup label="T2 - Manager">
+                    <option value="warehouse_manager">Warehouse Manager</option>
+                    <option value="office_manager">Office Manager</option>
+                  </optgroup>
+                  <optgroup label="T1 - Shift Lead">
+                    <option value="department_manager">Department Manager</option>
+                    <option value="shift_lead">Shift Lead</option>
+                  </optgroup>
+                  <optgroup label="T0 - Employee">
+                    <option value="member">Member</option>
+                    <option value="employee">Employee</option>
+                  </optgroup>
                 </select>
+                <p className="text-xs text-slate-500 mt-1">
+                  Tier determines base permissions. Higher tiers have more access.
+                </p>
               </div>
               <div>
                 <label className="flex items-center gap-3 cursor-pointer">
