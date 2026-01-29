@@ -396,8 +396,9 @@ export const sendSurvey = mutation({
         });
         sent++;
 
-        // Send email notification if requested
-        if (args.sendEmails && personnel?.email) {
+        // Send email notification (defaults to true if not specified)
+        const shouldSendEmails = args.sendEmails !== false;
+        if (shouldSendEmails && personnel?.email) {
           await ctx.scheduler.runAfter(1000 + (emailsSent * 500), internal.emails.sendSurveyEmail, {
             employeeName: `${personnel.firstName} ${personnel.lastName}`,
             employeeEmail: personnel.email,

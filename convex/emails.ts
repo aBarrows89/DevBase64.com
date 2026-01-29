@@ -1439,7 +1439,7 @@ Import Export Tire Co
 
     try {
       const result = await resend.emails.send({
-        from: `IE Central <notifications@notifications.iecentral.com>`,
+        from: `Import Export Tire Co <notifications@notifications.iecentral.com>`,
         to: args.employeeEmail,
         subject: `Survey: ${args.surveyName} - Import Export Tire Co`,
         html: emailHtml,
