@@ -219,8 +219,15 @@ export function usePermissions(): UsePermissionsResult {
     requiresDailyLog: false,
   };
 
-  if (loading || !user) {
+  // If auth is still loading, return loading state
+  if (loading) {
     return emptyPermissions;
+  }
+
+  // If no user (not logged in), return empty permissions but NOT loading
+  // This allows the redirect to login page to happen
+  if (!user) {
+    return { ...emptyPermissions, isLoading: false };
   }
 
   const permissionUser: PermissionUser = {
