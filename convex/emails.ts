@@ -1,6 +1,7 @@
 import { v } from "convex/values";
-import { internalAction } from "./_generated/server";
+import { action, internalAction } from "./_generated/server";
 import { Resend } from "resend";
+import { internal } from "./_generated/api";
 
 // Extract email addresses from text (resume)
 function extractEmailsFromText(text: string): string[] {
@@ -1451,5 +1452,24 @@ Import Export Tire Co
       console.error("Failed to send survey email:", error);
       return { success: false, error: String(error) };
     }
+  },
+});
+
+// Test action for sending exit interview email (admin use only)
+export const testExitInterviewEmail = action({
+  args: {
+    employeeName: v.string(),
+    employeeEmail: v.string(),
+  },
+  handler: async (ctx, args): Promise<{ success: boolean; emailId?: string; error?: string }> => {
+    const result = await ctx.runAction(internal.emails.sendExitInterviewEmail, {
+      employeeName: args.employeeName,
+      employeeEmail: args.employeeEmail,
+      exitInterviewId: "test-" + Date.now(),
+      terminationDate: new Date().toISOString().split("T")[0],
+      position: "Test Position",
+      department: "IT",
+    });
+    return result as { success: boolean; emailId?: string; error?: string };
   },
 });
