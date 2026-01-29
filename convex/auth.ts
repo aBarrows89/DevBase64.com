@@ -371,12 +371,13 @@ export const updateUser = mutation({
     managedLocationIds: v.optional(v.array(v.id("locations"))),
     managedDepartments: v.optional(v.array(v.string())),
     reportsTo: v.optional(v.union(v.id("users"), v.null())), // Who this user reports to
+    personnelId: v.optional(v.id("personnel")), // Link to personnel record
     // RBAC floating permissions
     isFinalTimeApprover: v.optional(v.boolean()),
     isPayrollProcessor: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const { userId, requiresDailyLog, managedLocationIds, managedDepartments, reportsTo, isFinalTimeApprover, isPayrollProcessor, ...updates } = args;
+    const { userId, requiresDailyLog, managedLocationIds, managedDepartments, reportsTo, personnelId, isFinalTimeApprover, isPayrollProcessor, ...updates } = args;
 
     // If email is being updated, check for duplicates
     if (updates.email) {
@@ -401,6 +402,7 @@ export const updateUser = mutation({
     if (managedLocationIds !== undefined) cleanUpdates.managedLocationIds = managedLocationIds;
     if (managedDepartments !== undefined) cleanUpdates.managedDepartments = managedDepartments;
     if (reportsTo !== undefined) cleanUpdates.reportsTo = reportsTo === null ? undefined : reportsTo;
+    if (personnelId !== undefined) cleanUpdates.personnelId = personnelId;
     // RBAC floating permissions
     if (isFinalTimeApprover !== undefined) cleanUpdates.isFinalTimeApprover = isFinalTimeApprover;
     if (isPayrollProcessor !== undefined) cleanUpdates.isPayrollProcessor = isPayrollProcessor;
