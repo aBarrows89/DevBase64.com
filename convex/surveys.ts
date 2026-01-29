@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { action, mutation, query, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 
@@ -581,5 +581,63 @@ export const createDefaultPulseSurvey = mutation({
     });
 
     return campaignId;
+  },
+});
+
+// Internal query to get pending assignments with personnel data
+export const getPendingAssignmentsWithPersonnel = internalQuery({
+  args: { campaignId: v.id("surveyCampaigns") },
+  handler: async (ctx, args) => {
+    const campaign = await ctx.db.get(args.campaignId);
+    if (!campaign) return { campaign: null, assignments: [] };
+
+    const assignments = await ctx.db
+      .query("surveyAssignments")
+      .withIndex("by_campaign", (q) => q.eq("campaignId", args.campaignId))
+      .filter((q) => q.eq(q.field("status"), "pending"))
+      .collect();
+
+    const assignmentsWithPersonnel = await Promise.all(
+      assignments.map(async (a) => {
+        const personnel = await ctx.db.get(a.personnelId);
+        return { ...a, personnel };
+      })
+    );
+
+    return { campaign, assignments: assignmentsWithPersonnel };
+  },
+});
+
+// Resend emails to all pending survey assignments
+export const resendSurveyEmails = action({
+  args: { campaignId: v.id("surveyCampaigns") },
+  handler: async (ctx, args): Promise<{ sent: number; skipped: number }> => {
+    const { campaign, assignments } = await ctx.runQuery(
+      internal.surveys.getPendingAssignmentsWithPersonnel,
+      { campaignId: args.campaignId }
+    );
+
+    if (!campaign) throw new Error("Campaign not found");
+
+    let sent = 0;
+    let skipped = 0;
+
+    for (const assignment of assignments) {
+      if (assignment.personnel?.email) {
+        await ctx.runAction(internal.emails.sendSurveyEmail, {
+          employeeName: `${assignment.personnel.firstName} ${assignment.personnel.lastName}`,
+          employeeEmail: assignment.personnel.email,
+          surveyName: campaign.name,
+          surveyDescription: campaign.description,
+          assignmentId: assignment._id,
+          expiresAt: assignment.expiresAt,
+        });
+        sent++;
+      } else {
+        skipped++;
+      }
+    }
+
+    return { sent, skipped };
   },
 });
