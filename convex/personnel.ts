@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 
 // ============ QUERIES ============
@@ -519,6 +520,45 @@ export const terminate = mutation({
           timestamp: now,
         });
       }
+    }
+
+    // Create exit interview record and send survey email
+    if (existing.email) {
+      // Check if exit interview already exists
+      const existingInterview = await ctx.db
+        .query("exitInterviews")
+        .withIndex("by_personnel", (q) => q.eq("personnelId", args.personnelId))
+        .first();
+
+      let exitInterviewId: Id<"exitInterviews">;
+
+      if (existingInterview) {
+        exitInterviewId = existingInterview._id;
+      } else {
+        // Create new exit interview
+        exitInterviewId = await ctx.db.insert("exitInterviews", {
+          personnelId: args.personnelId,
+          personnelName: `${existing.firstName} ${existing.lastName}`,
+          department: existing.department,
+          position: existing.position,
+          hireDate: existing.hireDate,
+          terminationDate: args.terminationDate,
+          terminationReason: args.terminationReason,
+          status: "pending",
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+
+      // Schedule email to be sent (slight delay to ensure DB write is complete)
+      await ctx.scheduler.runAfter(1000, internal.emails.sendExitInterviewEmail, {
+        employeeName: `${existing.firstName} ${existing.lastName}`,
+        employeeEmail: existing.email,
+        exitInterviewId: exitInterviewId,
+        terminationDate: args.terminationDate,
+        position: existing.position,
+        department: existing.department,
+      });
     }
 
     return args.personnelId;

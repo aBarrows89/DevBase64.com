@@ -1187,3 +1187,269 @@ Import Export Tire Co
     }
   },
 });
+
+// Send exit interview survey email to terminated employee
+export const sendExitInterviewEmail = internalAction({
+  args: {
+    employeeName: v.string(),
+    employeeEmail: v.string(),
+    exitInterviewId: v.string(),
+    terminationDate: v.string(),
+    position: v.optional(v.string()),
+    department: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const resendApiKey = process.env.RESEND_API_KEY;
+    if (!resendApiKey) {
+      console.error("RESEND_API_KEY not configured");
+      return { success: false, error: "Email service not configured" };
+    }
+
+    const resend = new Resend(resendApiKey);
+    const firstName = args.employeeName.split(" ")[0];
+    const formattedDate = formatDateForEmail(args.terminationDate);
+    const surveyUrl = `https://iecentral.com/exit-survey/${args.exitInterviewId}`;
+
+    const emailHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Exit Interview Survey</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); padding: 30px; border-radius: 10px 10px 0 0;">
+    <h1 style="color: white; margin: 0; font-size: 24px;">Exit Interview Survey</h1>
+    <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0;">We value your feedback</p>
+  </div>
+
+  <div style="background: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; border-top: none;">
+    <p style="margin-top: 0;">Hi ${firstName},</p>
+
+    <p>As you transition from Import Export Tire Co, we would greatly appreciate your honest feedback about your time with us. Your insights will help us improve the workplace for future employees.</p>
+
+    <div style="background: white; border-radius: 8px; padding: 20px; margin: 20px 0; border: 1px solid #e5e7eb;">
+      <h3 style="margin-top: 0; color: #374151; border-bottom: 1px solid #e5e7eb; padding-bottom: 10px;">Your Details</h3>
+      <table style="width: 100%; border-collapse: collapse;">
+        ${args.position ? `<tr>
+          <td style="padding: 8px 0; color: #6b7280; width: 140px;">Position:</td>
+          <td style="padding: 8px 0; font-weight: bold;">${args.position}</td>
+        </tr>` : ""}
+        ${args.department ? `<tr>
+          <td style="padding: 8px 0; color: #6b7280;">Department:</td>
+          <td style="padding: 8px 0; font-weight: bold;">${args.department}</td>
+        </tr>` : ""}
+        <tr>
+          <td style="padding: 8px 0; color: #6b7280;">Separation Date:</td>
+          <td style="padding: 8px 0; font-weight: bold;">${formattedDate}</td>
+        </tr>
+      </table>
+    </div>
+
+    <div style="background: #eff6ff; border-radius: 8px; padding: 15px; margin: 20px 0; border-left: 4px solid #3b82f6;">
+      <p style="margin: 0; color: #1e40af;">
+        <strong>Your feedback is confidential.</strong> This survey takes approximately 5-10 minutes to complete and covers topics like job satisfaction, management, work environment, and suggestions for improvement.
+      </p>
+    </div>
+
+    <div style="text-align: center; margin: 25px 0;">
+      <a href="${surveyUrl}" style="display: inline-block; background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: white; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">
+        Complete Exit Survey
+      </a>
+    </div>
+
+    <p style="color: #6b7280; font-size: 14px;">
+      If you prefer not to complete the survey online, please contact HR to schedule an in-person or phone exit interview.
+    </p>
+
+    <p style="margin-bottom: 0;">
+      Thank you for your contributions to Import Export Tire Co. We wish you the best in your future endeavors.<br><br>
+      <strong>Human Resources</strong><br>
+      Import Export Tire Co
+    </p>
+  </div>
+
+  <div style="background: #1f2937; padding: 20px; border-radius: 0 0 10px 10px; text-align: center;">
+    <img src="https://iecentral.com/logo.gif" alt="Import Export Tire Co" style="max-width: 150px; margin-bottom: 15px;">
+    <p style="color: #9ca3af; margin: 0; font-size: 12px;">
+      This is an automated message from IE Central.
+    </p>
+  </div>
+</body>
+</html>
+    `;
+
+    const textContent = `
+EXIT INTERVIEW SURVEY
+
+Hi ${firstName},
+
+As you transition from Import Export Tire Co, we would greatly appreciate your honest feedback about your time with us. Your insights will help us improve the workplace for future employees.
+
+YOUR DETAILS:
+${args.position ? `Position: ${args.position}` : ""}
+${args.department ? `Department: ${args.department}` : ""}
+Separation Date: ${formattedDate}
+
+Your feedback is confidential. This survey takes approximately 5-10 minutes to complete.
+
+Complete your exit survey here: ${surveyUrl}
+
+If you prefer not to complete the survey online, please contact HR to schedule an in-person or phone exit interview.
+
+Thank you for your contributions to Import Export Tire Co. We wish you the best in your future endeavors.
+
+Human Resources
+Import Export Tire Co
+    `;
+
+    try {
+      const result = await resend.emails.send({
+        from: `IE Central HR <notifications@notifications.iecentral.com>`,
+        to: args.employeeEmail,
+        replyTo: "hr@ietires.com",
+        subject: `Exit Interview Survey - Import Export Tire Co`,
+        html: emailHtml,
+        text: textContent,
+      });
+
+      console.log("Exit interview email sent:", result, "to:", args.employeeEmail);
+      return { success: true, emailId: result.data?.id };
+    } catch (error) {
+      console.error("Failed to send exit interview email:", error);
+      return { success: false, error: String(error) };
+    }
+  },
+});
+
+// Send survey email to employee
+export const sendSurveyEmail = internalAction({
+  args: {
+    employeeName: v.string(),
+    employeeEmail: v.string(),
+    surveyName: v.string(),
+    surveyDescription: v.optional(v.string()),
+    assignmentId: v.string(),
+    expiresAt: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const resendApiKey = process.env.RESEND_API_KEY;
+    if (!resendApiKey) {
+      console.error("RESEND_API_KEY not configured");
+      return { success: false, error: "Email service not configured" };
+    }
+
+    const resend = new Resend(resendApiKey);
+    const firstName = args.employeeName.split(" ")[0];
+    const surveyUrl = `https://iecentral.com/portal/surveys?assignment=${args.assignmentId}`;
+
+    // Format expiration date if provided
+    let expirationText = "";
+    if (args.expiresAt) {
+      const expiresDate = new Date(args.expiresAt);
+      expirationText = expiresDate.toLocaleDateString("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+    }
+
+    const emailHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Survey Request</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 30px; border-radius: 10px 10px 0 0;">
+    <h1 style="color: white; margin: 0; font-size: 24px;">Survey Request</h1>
+    <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0;">Your feedback matters to us</p>
+  </div>
+
+  <div style="background: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; border-top: none;">
+    <p style="margin-top: 0;">Hi ${firstName},</p>
+
+    <p>You have been invited to complete a survey. Your honest feedback helps us improve our workplace and make Import Export Tire Co a better place to work.</p>
+
+    <div style="background: white; border-radius: 8px; padding: 20px; margin: 20px 0; border: 1px solid #e5e7eb;">
+      <h3 style="margin-top: 0; color: #374151; border-bottom: 1px solid #e5e7eb; padding-bottom: 10px;">${args.surveyName}</h3>
+      ${args.surveyDescription ? `<p style="color: #6b7280; margin-bottom: 0;">${args.surveyDescription}</p>` : ""}
+    </div>
+
+    ${expirationText ? `
+    <div style="background: #fef3c7; border-radius: 8px; padding: 15px; margin: 20px 0; border-left: 4px solid #f59e0b;">
+      <p style="margin: 0; color: #92400e;">
+        <strong>Please complete by:</strong> ${expirationText}
+      </p>
+    </div>
+    ` : ""}
+
+    <div style="background: #ecfdf5; border-radius: 8px; padding: 15px; margin: 20px 0; border-left: 4px solid #10b981;">
+      <p style="margin: 0; color: #065f46;">
+        <strong>Your responses are anonymous.</strong> We cannot see who submitted which answers. This allows you to be completely honest in your feedback.
+      </p>
+    </div>
+
+    <div style="text-align: center; margin: 25px 0;">
+      <a href="${surveyUrl}" style="display: inline-block; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">
+        Take Survey Now
+      </a>
+    </div>
+
+    <p style="margin-bottom: 0; color: #6b7280; font-size: 14px;">
+      Thank you for taking the time to share your thoughts!<br><br>
+      <strong>Import Export Tire Co</strong>
+    </p>
+  </div>
+
+  <div style="background: #1f2937; padding: 20px; border-radius: 0 0 10px 10px; text-align: center;">
+    <img src="https://iecentral.com/logo.gif" alt="Import Export Tire Co" style="max-width: 150px; margin-bottom: 15px;">
+    <p style="color: #9ca3af; margin: 0; font-size: 12px;">
+      This is an automated message from IE Central.
+    </p>
+  </div>
+</body>
+</html>
+    `;
+
+    const textContent = `
+SURVEY REQUEST
+
+Hi ${firstName},
+
+You have been invited to complete a survey: ${args.surveyName}
+
+${args.surveyDescription ? args.surveyDescription : ""}
+
+${expirationText ? `Please complete by: ${expirationText}` : ""}
+
+Your responses are anonymous. We cannot see who submitted which answers.
+
+Take the survey here: ${surveyUrl}
+
+Thank you for taking the time to share your thoughts!
+
+Import Export Tire Co
+    `;
+
+    try {
+      const result = await resend.emails.send({
+        from: `IE Central <notifications@notifications.iecentral.com>`,
+        to: args.employeeEmail,
+        subject: `Survey: ${args.surveyName} - Import Export Tire Co`,
+        html: emailHtml,
+        text: textContent,
+      });
+
+      console.log("Survey email sent:", result, "to:", args.employeeEmail);
+      return { success: true, emailId: result.data?.id };
+    } catch (error) {
+      console.error("Failed to send survey email:", error);
+      return { success: false, error: String(error) };
+    }
+  },
+});

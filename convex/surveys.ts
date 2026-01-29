@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 
 // ============ SURVEY CAMPAIGN QUERIES ============
@@ -318,6 +319,7 @@ export const sendSurvey = mutation({
   args: {
     campaignId: v.id("surveyCampaigns"),
     personnelIds: v.optional(v.array(v.id("personnel"))), // Specific employees, or all active if empty
+    sendEmails: v.optional(v.boolean()), // Whether to send notification emails
   },
   handler: async (ctx, args) => {
     const campaign = await ctx.db.get(args.campaignId);
@@ -367,6 +369,7 @@ export const sendSurvey = mutation({
 
     // Create assignments for employees who don't have pending surveys
     let sent = 0;
+    let emailsSent = 0;
     const expiresAt = now + (7 * 24 * 60 * 60 * 1000); // 7 days
 
     for (const personnelId of targetPersonnel) {
@@ -382,7 +385,7 @@ export const sendSurvey = mutation({
           if (user) userId = user._id;
         }
 
-        await ctx.db.insert("surveyAssignments", {
+        const assignmentId = await ctx.db.insert("surveyAssignments", {
           campaignId: args.campaignId,
           personnelId,
           userId,
@@ -392,6 +395,19 @@ export const sendSurvey = mutation({
           createdAt: now,
         });
         sent++;
+
+        // Send email notification if requested
+        if (args.sendEmails && personnel?.email) {
+          await ctx.scheduler.runAfter(1000 + (emailsSent * 500), internal.emails.sendSurveyEmail, {
+            employeeName: `${personnel.firstName} ${personnel.lastName}`,
+            employeeEmail: personnel.email,
+            surveyName: campaign.name,
+            surveyDescription: campaign.description,
+            assignmentId: assignmentId,
+            expiresAt,
+          });
+          emailsSent++;
+        }
       }
     }
 
@@ -402,7 +418,7 @@ export const sendSurvey = mutation({
       updatedAt: now,
     });
 
-    return { sent, total: targetPersonnel.length };
+    return { sent, total: targetPersonnel.length, emailsSent };
   },
 });
 

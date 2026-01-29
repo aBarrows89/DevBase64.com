@@ -1,19 +1,54 @@
 import { query } from "./_generated/server";
 
-// Role hierarchy order (highest to lowest)
-const ROLE_HIERARCHY = [
-  "super_admin",
-  "admin",
-  "warehouse_director",
-  "warehouse_manager",
-  "department_manager",
-  "office_manager",
-] as const;
+// RBAC Tier Hierarchy (T5 highest to T0 lowest)
+const TIER_HIERARCHY = [5, 4, 3, 2, 1, 0] as const;
 
-// Roles to exclude from org chart display (these are base-level roles)
-const EXCLUDED_ROLES = ["employee", "member"];
+// Map roles to tiers
+function getTier(role: string): number {
+  switch (role) {
+    case "super_admin":
+      return 5;
+    case "admin":
+      return 4;
+    case "warehouse_director":
+      return 3;
+    case "warehouse_manager":
+    case "office_manager":
+      return 2;
+    case "department_manager":
+    case "shift_lead":
+      return 1;
+    case "member":
+    case "employee":
+    default:
+      return 0;
+  }
+}
 
-// Role display names
+// Roles to exclude from org chart display (T0 - base level employees)
+const EXCLUDED_TIERS = [0];
+
+// Tier display names
+const TIER_LABELS: Record<number, string> = {
+  5: "T5 - Super Admin",
+  4: "T4 - Admin",
+  3: "T3 - Director",
+  2: "T2 - Manager",
+  1: "T1 - Shift Lead",
+  0: "T0 - Employee",
+};
+
+// Short tier labels for badges
+const TIER_BADGE_LABELS: Record<number, string> = {
+  5: "T5",
+  4: "T4",
+  3: "T3",
+  2: "T2",
+  1: "T1",
+  0: "T0",
+};
+
+// Role display names (for individual cards)
 const ROLE_LABELS: Record<string, string> = {
   super_admin: "Super Admin",
   admin: "Admin",
@@ -21,76 +56,69 @@ const ROLE_LABELS: Record<string, string> = {
   warehouse_manager: "Warehouse Manager",
   department_manager: "Department Manager",
   office_manager: "Office Manager",
+  shift_lead: "Shift Lead",
   employee: "Employee",
   member: "Member",
 };
 
-// Role-specific permissions - aligned with auth-context.tsx
-const ROLE_PERMISSIONS: Record<string, string[]> = {
-  super_admin: [
+// Tier badge colors (for UI)
+const TIER_COLORS: Record<number, string> = {
+  5: "purple",
+  4: "cyan",
+  3: "blue",
+  2: "green",
+  1: "amber",
+  0: "slate",
+};
+
+// Tier-specific permissions summary
+const TIER_PERMISSIONS: Record<number, string[]> = {
+  5: [
     "Full system access",
     "Manage all users & admins",
     "View all locations",
     "Delete records (approve)",
-    "Edit personnel info",
-    "Approve time off",
-    "Manage announcements",
-    "Moderate chat",
-    "Hiring & ATS",
+    "Time change audit log",
+    "Create company announcements",
+    "Tech wizard access",
   ],
-  admin: [
-    "Manage users (not admins)",
+  4: [
+    "Manage users (not T5)",
+    "View all locations",
+    "Manage job listings",
+    "Bulk upload applications",
+    "Manage equipment",
+    "Reports access",
+    "QuickBooks integration",
+  ],
+  3: [
     "View all locations",
     "Edit personnel info",
-    "Approve time off",
-    "Manage announcements",
-    "Moderate chat",
-    "Hiring & ATS",
-    "Request deletion",
+    "Schedule interviews",
+    "Approve applications",
+    "Mileage & expenses",
   ],
-  warehouse_director: [
-    "Manage users",
-    "View all locations",
-    "Edit shifts",
-    "Edit personnel info",
-    "Approve time off",
-    "Manage call-offs",
-    "Manage announcements",
-    "Moderate chat",
-  ],
-  warehouse_manager: [
-    "View assigned locations only",
+  2: [
+    "Location-scoped access",
     "View & manage personnel",
-    "Edit shifts (assigned locations)",
+    "Approve time (location)",
     "Manage call-offs",
+    "Award merits",
   ],
-  department_manager: [
-    "View assigned departments",
-    "Manage department personnel",
-    "Manage call-offs",
-    "Moderate chat",
+  1: [
     "Department portal access",
+    "Receive call-off notifications",
+    "Department chat moderation",
   ],
-  office_manager: [
-    "Limited access",
-    "No personnel management",
-    "No equipment access",
-    "No employee portal admin",
-  ],
-  employee: [
+  0: [
     "Employee portal access",
     "View own schedule",
     "Request time off",
-    "Call off",
-    "View announcements",
-  ],
-  member: [
-    "View shifts",
-    "Basic dashboard access",
+    "Submit call-offs",
   ],
 };
 
-// Get org chart data grouped by role level
+// Get org chart data grouped by tier level
 export const getOrgChartData = query({
   args: {},
   handler: async (ctx) => {
@@ -104,53 +132,68 @@ export const getOrgChartData = query({
     const locations = await ctx.db.query("locations").collect();
     const locationMap = new Map(locations.map((l) => [l._id, l.name]));
 
-    // Deduplicate users by email - keep only the highest role
-    // This handles cases where someone has multiple accounts
+    // Deduplicate users by email - keep only the highest tier
     const seenEmails = new Set<string>();
     const deduplicatedUsers: typeof users = [];
 
-    // All roles for processing (including employee/member for deduplication)
-    const ALL_ROLES = [...ROLE_HIERARCHY, "employee", "member"] as const;
-
-    // Process in hierarchy order (highest first) so we keep the highest role
-    for (const role of ALL_ROLES) {
+    // Process in tier order (highest first) so we keep the highest tier
+    for (const tier of TIER_HIERARCHY) {
       for (const user of users) {
+        const userTier = getTier(user.role);
+        if (userTier !== tier) continue;
+
         const emailKey = (user.email || user._id).toLowerCase();
-        if (user.role === role && !seenEmails.has(emailKey)) {
+        if (!seenEmails.has(emailKey)) {
           seenEmails.add(emailKey);
-          // Only add to display if not an excluded role
-          if (!EXCLUDED_ROLES.includes(role)) {
+          // Only add to display if not an excluded tier
+          if (!EXCLUDED_TIERS.includes(tier)) {
             deduplicatedUsers.push(user);
           }
         }
       }
     }
 
-    // Group users by role
-    const usersByRole: Record<string, typeof users> = {};
-    for (const role of ROLE_HIERARCHY) {
-      usersByRole[role] = deduplicatedUsers.filter((u) => u.role === role);
+    // Group users by tier
+    const usersByTier: Record<number, typeof users> = {};
+    for (const tier of TIER_HIERARCHY) {
+      if (EXCLUDED_TIERS.includes(tier)) continue;
+      usersByTier[tier] = deduplicatedUsers.filter((u) => getTier(u.role) === tier);
     }
 
-    // Transform users to include location names
-    const transformUser = (user: (typeof users)[0]) => ({
-      _id: user._id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      roleLabel: ROLE_LABELS[user.role] || user.role,
-      managedDepartments: user.managedDepartments || [],
-      managedLocationNames: (user.managedLocationIds || [])
-        .map((id) => locationMap.get(id))
-        .filter(Boolean) as string[],
-    });
+    // Transform users to include tier and location names
+    const transformUser = (user: (typeof users)[0]) => {
+      const tier = getTier(user.role);
+      return {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        roleLabel: ROLE_LABELS[user.role] || user.role,
+        tier,
+        tierBadge: TIER_BADGE_LABELS[tier],
+        managedDepartments: user.managedDepartments || [],
+        managedLocationNames: (user.managedLocationIds || [])
+          .map((id) => locationMap.get(id))
+          .filter(Boolean) as string[],
+        // Special flags
+        isFinalTimeApprover: user.isFinalTimeApprover || false,
+        isPayrollProcessor: user.isPayrollProcessor || false,
+        requiresDailyLog: user.requiresDailyLog || false,
+      };
+    };
+
+    // Build display hierarchy (excluding T0)
+    const displayTiers = TIER_HIERARCHY.filter((t) => !EXCLUDED_TIERS.includes(t));
 
     return {
-      roleHierarchy: ROLE_HIERARCHY as unknown as string[],
+      tierHierarchy: displayTiers,
+      tierLabels: TIER_LABELS,
+      tierBadgeLabels: TIER_BADGE_LABELS,
+      tierPermissions: TIER_PERMISSIONS,
+      tierColors: TIER_COLORS,
       roleLabels: ROLE_LABELS,
-      rolePermissions: ROLE_PERMISSIONS,
-      usersByRole: Object.fromEntries(
-        ROLE_HIERARCHY.map((role) => [role, usersByRole[role].map(transformUser)])
+      usersByTier: Object.fromEntries(
+        displayTiers.map((tier) => [tier, (usersByTier[tier] || []).map(transformUser)])
       ),
       totalUsers: deduplicatedUsers.length,
     };

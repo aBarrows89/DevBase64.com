@@ -340,3 +340,42 @@ export const getReasonOptions = query({
     ];
   },
 });
+
+// Submit exit interview survey (self-service - no auth required)
+// This is used by terminated employees via email link
+export const submitSelfService = mutation({
+  args: {
+    interviewId: v.id("exitInterviews"),
+    responses: v.object({
+      primaryReason: v.optional(v.string()),
+      wouldReturn: v.optional(v.string()),
+      wouldRecommend: v.optional(v.string()),
+      satisfactionRating: v.optional(v.number()),
+      managementRating: v.optional(v.number()),
+      workLifeBalanceRating: v.optional(v.number()),
+      compensationRating: v.optional(v.number()),
+      growthOpportunityRating: v.optional(v.number()),
+      whatLikedMost: v.optional(v.string()),
+      whatCouldImprove: v.optional(v.string()),
+      additionalComments: v.optional(v.string()),
+    }),
+  },
+  handler: async (ctx, args) => {
+    const interview = await ctx.db.get(args.interviewId);
+    if (!interview) throw new Error("Exit interview not found");
+    if (interview.status === "completed") {
+      throw new Error("This survey has already been submitted");
+    }
+
+    const now = Date.now();
+
+    await ctx.db.patch(args.interviewId, {
+      status: "completed",
+      responses: args.responses,
+      completedAt: now,
+      updatedAt: now,
+    });
+
+    return { success: true };
+  },
+});
