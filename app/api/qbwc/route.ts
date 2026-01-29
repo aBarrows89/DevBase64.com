@@ -2,8 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "@/convex/_generated/api";
 
-// Initialize Convex client
-const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+// Create Convex client lazily to avoid build-time errors
+function getConvexClient() {
+  const url = process.env.NEXT_PUBLIC_CONVEX_URL;
+  if (!url) {
+    throw new Error("NEXT_PUBLIC_CONVEX_URL is not configured");
+  }
+  return new ConvexHttpClient(url);
+}
 
 // Session storage (in production, use Redis or database)
 const sessions: Map<string, {
@@ -123,7 +129,7 @@ async function handleClientVersion(strVersion: string): Promise<string> {
 // Handle authenticate - validates credentials
 async function handleAuthenticate(username: string, password: string): Promise<string[]> {
   try {
-    const connection = await convex.query(api.quickbooks.getConnection);
+    const connection = await getConvexClient().query(api.quickbooks.getConnection);
 
     if (!connection) {
       return ["", "nvu"]; // Not valid user - no connection configured
@@ -143,12 +149,12 @@ async function handleAuthenticate(username: string, password: string): Promise<s
     });
 
     // Update connection status
-    await convex.mutation(api.quickbooks.updateConnectionStatus, {
+    await getConvexClient().mutation(api.quickbooks.updateConnectionStatus, {
       status: "connected",
     });
 
     // Log connection
-    await convex.mutation(api.quickbooks.createSyncLog, {
+    await getConvexClient().mutation(api.quickbooks.createSyncLog, {
       sessionId: ticket,
       operation: "connect",
       direction: "import",
@@ -181,7 +187,7 @@ async function handleSendRequestXML(
   // Store company file name on first request
   if (!session.companyFile && strCompanyFileName) {
     session.companyFile = strCompanyFileName;
-    await convex.mutation(api.quickbooks.updateConnectionStatus, {
+    await getConvexClient().mutation(api.quickbooks.updateConnectionStatus, {
       status: "connected",
       qbVersion: `${qbXMLMajorVers}.${qbXMLMinorVers}`,
     });
@@ -189,16 +195,16 @@ async function handleSendRequestXML(
 
   try {
     // Get pending sync items
-    const pendingItems = await convex.query(api.quickbooks.getPendingSyncItems, { limit: 1 });
+    const pendingItems = await getConvexClient().query(api.quickbooks.getPendingSyncItems, { limit: 1 });
 
     if (pendingItems.length === 0) {
       // No more work - check if we should query employees or paychecks
-      const connection = await convex.query(api.quickbooks.getConnection);
+      const connection = await getConvexClient().query(api.quickbooks.getConnection);
 
       if (connection?.syncEmployees && session.requestCount === 0) {
         session.requestCount++;
         session.lastRequest = "employee_query";
-        return await convex.query(api.quickbooks.generateEmployeeQueryXml);
+        return await getConvexClient().query(api.quickbooks.generateEmployeeQueryXml);
       }
 
       // No more work to do
@@ -208,7 +214,7 @@ async function handleSendRequestXML(
     const item = pendingItems[0];
 
     // Update item to processing
-    await convex.mutation(api.quickbooks.updateSyncQueueItem, {
+    await getConvexClient().mutation(api.quickbooks.updateSyncQueueItem, {
       itemId: item._id,
       status: "processing",
     });
@@ -218,7 +224,7 @@ async function handleSendRequestXML(
 
     // Generate appropriate QBXML based on type
     if (item.type === "time_entry" && item.referenceType === "qbPendingTimeExport") {
-      const xml = await convex.query(api.quickbooks.generateTimeTrackingAddXml, {
+      const xml = await getConvexClient().query(api.quickbooks.generateTimeTrackingAddXml, {
         exportId: item.referenceId as any,
       });
       return xml || "";
@@ -245,7 +251,7 @@ async function handleReceiveResponseXML(
 
   try {
     // Log the response
-    await convex.mutation(api.quickbooks.createSyncLog, {
+    await getConvexClient().mutation(api.quickbooks.createSyncLog, {
       sessionId: ticket,
       operation: "sync",
       direction: "import",
@@ -261,7 +267,7 @@ async function handleReceiveResponseXML(
     } else if (session.lastRequest) {
       // This was a sync queue item - mark as completed or failed
       const success = hresult === "" || hresult === "0";
-      await convex.mutation(api.quickbooks.updateSyncQueueItem, {
+      await getConvexClient().mutation(api.quickbooks.updateSyncQueueItem, {
         itemId: session.lastRequest as any,
         status: success ? "completed" : "failed",
         qbResponseXml: response,
@@ -279,7 +285,7 @@ async function handleReceiveResponseXML(
     }
 
     // Return positive number for more work, 0 or negative for done
-    const pendingItems = await convex.query(api.quickbooks.getPendingSyncItems, { limit: 1 });
+    const pendingItems = await getConvexClient().query(api.quickbooks.getPendingSyncItems, { limit: 1 });
     return pendingItems.length > 0 ? "1" : "0";
   } catch (error) {
     console.error("receiveResponseXML error:", error);
@@ -304,7 +310,7 @@ async function processEmployeeQueryResponse(response: string, sessionId: string)
     }
 
     // Log employee sync
-    await convex.mutation(api.quickbooks.createSyncLog, {
+    await getConvexClient().mutation(api.quickbooks.createSyncLog, {
       sessionId,
       operation: "sync_employees",
       direction: "import",
@@ -327,12 +333,12 @@ async function handleConnectionError(
   hresult: string,
   message: string
 ): Promise<string> {
-  await convex.mutation(api.quickbooks.updateConnectionStatus, {
+  await getConvexClient().mutation(api.quickbooks.updateConnectionStatus, {
     status: "error",
     error: `${hresult}: ${message}`,
   });
 
-  await convex.mutation(api.quickbooks.createSyncLog, {
+  await getConvexClient().mutation(api.quickbooks.createSyncLog, {
     sessionId: ticket,
     operation: "error",
     direction: "import",
@@ -353,7 +359,7 @@ async function handleGetLastError(ticket: string): Promise<string> {
 async function handleCloseConnection(ticket: string): Promise<string> {
   const session = sessions.get(ticket);
   if (session) {
-    await convex.mutation(api.quickbooks.createSyncLog, {
+    await getConvexClient().mutation(api.quickbooks.createSyncLog, {
       sessionId: ticket,
       operation: "disconnect",
       direction: "export",
@@ -362,7 +368,7 @@ async function handleCloseConnection(ticket: string): Promise<string> {
     });
 
     // Update last sync time
-    await convex.mutation(api.quickbooks.updateConnectionStatus, {
+    await getConvexClient().mutation(api.quickbooks.updateConnectionStatus, {
       status: "disconnected",
     });
 

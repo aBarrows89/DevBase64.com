@@ -166,6 +166,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Timeout to clear stuck sessions - if userData is undefined for too long, clear the session
+  useEffect(() => {
+    if (userId && userData === undefined) {
+      const timeout = setTimeout(() => {
+        // If still loading after 5 seconds, the session is likely invalid
+        if (userData === undefined && !hasLoadedUserData.current) {
+          console.warn("Session validation timed out, clearing invalid session...");
+          sessionStorage.removeItem("ie_central_user_id");
+          setUserId(null);
+          setInitialLoadComplete(true);
+        }
+      }, 5000);
+      return () => clearTimeout(timeout);
+    }
+  }, [userId, userData]);
+
   // Update loading state based on user data
   // Track successful user loads to avoid clearing session during transient null states
   useEffect(() => {

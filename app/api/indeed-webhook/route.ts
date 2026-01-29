@@ -4,7 +4,14 @@ import { api } from "@/convex/_generated/api";
 import { extractText } from "unpdf";
 import crypto from "crypto";
 
-const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+// Create Convex client lazily to avoid build-time errors
+function getConvexClient() {
+  const url = process.env.NEXT_PUBLIC_CONVEX_URL;
+  if (!url) {
+    throw new Error("NEXT_PUBLIC_CONVEX_URL is not configured");
+  }
+  return new ConvexHttpClient(url);
+}
 
 // Indeed Apply payload structure (based on Indeed docs)
 interface IndeedApplicant {
@@ -161,7 +168,7 @@ export async function POST(request: NextRequest) {
     if (resumeBuffer) {
       try {
         // Get upload URL from Convex
-        const uploadUrl = await convex.mutation(
+        const uploadUrl = await getConvexClient().mutation(
           api.applications.generateUploadUrl,
           {}
         );
@@ -188,7 +195,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Process the application through Convex
-    const result = await convex.action(
+    const result = await getConvexClient().action(
       api.indeedActions.processIndeedApplication,
       {
         indeedApplyId: payload.id,
@@ -219,7 +226,7 @@ export async function POST(request: NextRequest) {
     try {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
-      await convex.mutation(api.indeedIntegration.logWebhookError, {
+      await getConvexClient().mutation(api.indeedIntegration.logWebhookError, {
         errorMessage,
         receivedAt,
       });
