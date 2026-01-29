@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { useAuth } from "../auth-context";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -14,9 +14,11 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [inactivityMessage, setInactivityMessage] = useState(false);
-  const { login } = useAuth();
+  const [loginSuccess, setLoginSuccess] = useState(false);
+  const { login, user, isLoading: authLoading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const hasNavigated = useRef(false);
 
   // Check if redirected due to inactivity
   useEffect(() => {
@@ -24,6 +26,18 @@ export default function LoginPage() {
       setInactivityMessage(true);
     }
   }, [searchParams]);
+
+  // Wait for user data to load after successful login before navigating
+  useEffect(() => {
+    if (loginSuccess && user && !authLoading && !hasNavigated.current) {
+      hasNavigated.current = true;
+      if (user.forcePasswordChange) {
+        router.push("/change-password");
+      } else {
+        router.push("/");
+      }
+    }
+  }, [loginSuccess, user, authLoading, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,17 +47,15 @@ export default function LoginPage() {
     try {
       const result = await login(email, password);
       if (result.success) {
-        if (result.forcePasswordChange) {
-          router.push("/change-password");
-        } else {
-          router.push("/");
-        }
+        // Don't navigate immediately - wait for user data to load
+        setLoginSuccess(true);
+        // Keep showing loading state until navigation happens
       } else {
         setError(result.error || "Login failed");
+        setIsLoading(false);
       }
     } catch {
       setError("An error occurred during login");
-    } finally {
       setIsLoading(false);
     }
   };
@@ -118,10 +130,10 @@ export default function LoginPage() {
 
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || loginSuccess}
               className={`w-full py-3 px-4 bg-gradient-to-r text-white font-semibold rounded-lg focus:outline-none focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all ${isDark ? "from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 focus:ring-cyan-500 focus:ring-offset-2 focus:ring-offset-slate-900" : "from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 focus:ring-blue-600 focus:ring-offset-2 focus:ring-offset-white"}`}
             >
-              {isLoading ? (
+              {isLoading || loginSuccess ? (
                 <span className="flex items-center justify-center gap-2">
                   <svg
                     className="animate-spin h-5 w-5"
@@ -142,7 +154,7 @@ export default function LoginPage() {
                       d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                     />
                   </svg>
-                  Signing in...
+                  {loginSuccess ? "Loading..." : "Signing in..."}
                 </span>
               ) : (
                 "Sign in"
