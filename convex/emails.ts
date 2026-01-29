@@ -1209,7 +1209,7 @@ export const sendExitInterviewEmail = internalAction({
     const resend = new Resend(resendApiKey);
     const firstName = args.employeeName.split(" ")[0];
     const formattedDate = formatDateForEmail(args.terminationDate);
-    const surveyUrl = `https://iecentral.com/exit-survey/${args.exitInterviewId}`;
+    const surveyUrl = `https://www.iecentral.com/exit-survey/${args.exitInterviewId}`;
 
     const emailHtml = `
 <!DOCTYPE html>
@@ -1307,7 +1307,7 @@ Import Export Tire Co
 
     try {
       const result = await resend.emails.send({
-        from: `IE Central HR <notifications@notifications.iecentral.com>`,
+        from: `Import Export Tire Co <notifications@notifications.iecentral.com>`,
         to: args.employeeEmail,
         replyTo: "hr@ietires.com",
         subject: `Exit Interview Survey - Import Export Tire Co`,
