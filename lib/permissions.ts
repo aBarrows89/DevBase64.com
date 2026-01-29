@@ -4,7 +4,7 @@
  * Tier Levels:
  * T0 - Employee (member)
  * T1 - Shift Lead (department_manager, shift_lead)
- * T2 - Warehouse/Store/Office Manager (warehouse_manager, office_manager)
+ * T2 - Warehouse/Store/Office/Retail Manager (warehouse_manager, office_manager, retail_manager)
  * T3 - Director (warehouse_director)
  * T4 - Admin (admin)
  * T5 - Super Admin (super_admin)
@@ -38,6 +38,7 @@ export function getTier(role: string): Tier {
       return 3;
     case "warehouse_manager":
     case "office_manager":
+    case "retail_manager":
       return 2;
     case "department_manager":
     case "shift_lead":
