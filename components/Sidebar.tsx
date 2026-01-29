@@ -30,7 +30,6 @@ interface NavGroup {
 // Top-level nav items
 const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Dashboard", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
-  { href: "/department-portal", label: "Department Portal", icon: "M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4", requiresPermission: "departmentPortal" },
   { href: "/messages", label: "Messages", icon: "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" },
   { href: "/calendar", label: "Calendar", icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" },
   { href: "/notifications", label: "Notifications", icon: "M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" },
@@ -68,6 +67,7 @@ const NAV_GROUPS: NavGroup[] = [
     icon: "M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z",
     requiresPermission: "manageTimeOff",
     items: [
+      { href: "/department-portal", label: "Department Portal", icon: "M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" },
       { href: "/time-off", label: "Time Off Requests", icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" },
       { href: "/call-offs", label: "Call-Offs", icon: "M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" },
       { href: "/announcements", label: "Announcements", icon: "M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" },
@@ -183,7 +183,6 @@ export default function Sidebar() {
   // Filter nav items based on RBAC tier permissions
   const filteredNavItems = NAV_ITEMS.filter((item) => {
     // Use menu permissions from RBAC
-    if (item.href === "/department-portal") return permissions.menu.departmentPortal;
     if (item.href === "/messages") return permissions.menu.messages;
     if (item.href === "/calendar") return permissions.menu.calendar;
     if (item.href === "/notifications") return true; // All tiers
@@ -713,6 +712,7 @@ export default function Sidebar() {
             const groupActive = isGroupActive(group);
             const filteredItems = group.items.filter((item) => {
               // Use RBAC permissions for specific items
+              if (item.href === "/department-portal") return permissions.menu.departmentPortal; // T1+
               if (item.href === "/deleted-records") return permissions.menu.deletedRecords; // T4+
               if (item.href === "/reports") return permissions.menu.reports; // T4+
               if (item.href === "/audit-log") return permissions.menu.auditLog; // T4+

@@ -21,6 +21,9 @@ interface User {
   lastLoginAt?: number;
   managedLocationIds?: Id<"locations">[];
   managedDepartments?: string[];
+  // RBAC floating permissions
+  isFinalTimeApprover?: boolean;
+  isPayrollProcessor?: boolean;
 }
 
 function UsersContent() {
@@ -63,6 +66,9 @@ function UsersContent() {
     reportsTo: null as Id<"users"> | null,
     managedLocationIds: [] as Id<"locations">[],
     managedDepartments: [] as string[],
+    // RBAC floating permissions
+    isFinalTimeApprover: false,
+    isPayrollProcessor: false,
   });
 
   // Get departments from shift planning module for department_manager assignment
@@ -109,6 +115,8 @@ function UsersContent() {
       reportsTo: editForm.reportsTo,
       managedLocationIds: editForm.role === "warehouse_manager" ? editForm.managedLocationIds : undefined,
       managedDepartments: editForm.role === "department_manager" ? editForm.managedDepartments : undefined,
+      isFinalTimeApprover: editForm.isFinalTimeApprover,
+      isPayrollProcessor: editForm.isPayrollProcessor,
     });
 
     if (result.success) {
@@ -175,6 +183,8 @@ function UsersContent() {
       reportsTo: user.reportsTo || null,
       managedLocationIds: user.managedLocationIds || [],
       managedDepartments: user.managedDepartments || [],
+      isFinalTimeApprover: user.isFinalTimeApprover || false,
+      isPayrollProcessor: user.isPayrollProcessor || false,
     });
     setShowEditModal(true);
   };
@@ -695,6 +705,39 @@ function UsersContent() {
                 <p className="text-xs text-slate-500 mt-1 ml-7">
                   User will be prompted to fill out daily activity logs
                 </p>
+              </div>
+
+              {/* RBAC Floating Permissions */}
+              <div className="border-t border-slate-700 pt-4 mt-4">
+                <h4 className="text-sm font-medium text-slate-300 mb-3">Special Permissions</h4>
+
+                <div className="space-y-3">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editForm.isFinalTimeApprover}
+                      onChange={(e) => setEditForm({ ...editForm, isFinalTimeApprover: e.target.checked })}
+                      className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-cyan-500 focus:ring-cyan-500"
+                    />
+                    <span className="text-sm text-slate-400">Final Time Approver</span>
+                  </label>
+                  <p className="text-xs text-slate-500 ml-7">
+                    Can perform final approval on timesheets after location manager approval
+                  </p>
+
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editForm.isPayrollProcessor}
+                      onChange={(e) => setEditForm({ ...editForm, isPayrollProcessor: e.target.checked })}
+                      className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-green-500 focus:ring-green-500"
+                    />
+                    <span className="text-sm text-slate-400">Payroll Processor</span>
+                  </label>
+                  <p className="text-xs text-slate-500 ml-7">
+                    Can export payroll data and access payroll reports
+                  </p>
+                </div>
               </div>
 
               {/* Reports To - Manager Assignment */}
