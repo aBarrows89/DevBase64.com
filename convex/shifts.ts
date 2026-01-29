@@ -687,6 +687,8 @@ export const getDepartments = query({
       "Inventory",
       "Purchases",
       "Janitorial",
+      "Ecommerce",
+      "Retail",
     ];
 
     // Combine and dedupe

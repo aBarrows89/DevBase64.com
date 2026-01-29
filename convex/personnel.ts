@@ -395,6 +395,56 @@ export const update = mutation({
 
     await ctx.db.patch(personnelId, updateData);
 
+    // Sync changes to corresponding user account (for org chart updates)
+    const updatedPersonnel = await ctx.db.get(personnelId);
+    if (updatedPersonnel) {
+      // Find user by email or personnelId link
+      let linkedUser = await ctx.db
+        .query("users")
+        .withIndex("by_personnel", (q) => q.eq("personnelId", personnelId))
+        .first();
+
+      if (!linkedUser && updatedPersonnel.email) {
+        linkedUser = await ctx.db
+          .query("users")
+          .withIndex("by_email", (q) => q.eq("email", updatedPersonnel.email.toLowerCase()))
+          .first();
+      }
+
+      if (linkedUser) {
+        const userUpdates: Record<string, unknown> = {};
+
+        // Sync name if firstName or lastName changed
+        if (updates.firstName !== undefined || updates.lastName !== undefined) {
+          const newName = `${updatedPersonnel.firstName} ${updatedPersonnel.lastName}`;
+          if (linkedUser.name !== newName) {
+            userUpdates.name = newName;
+          }
+        }
+
+        // Sync location to managedLocationIds for warehouse managers
+        if (updates.locationId !== undefined && linkedUser.role === "warehouse_manager") {
+          const currentLocations = linkedUser.managedLocationIds || [];
+          if (updates.locationId && !currentLocations.includes(updates.locationId)) {
+            userUpdates.managedLocationIds = [...currentLocations, updates.locationId];
+          }
+        }
+
+        // Sync department to managedDepartments for department managers
+        if (updates.department !== undefined && linkedUser.role === "department_manager") {
+          const currentDepts = linkedUser.managedDepartments || [];
+          if (updates.department && !currentDepts.includes(updates.department)) {
+            userUpdates.managedDepartments = [...currentDepts, updates.department];
+          }
+        }
+
+        // Apply user updates if any
+        if (Object.keys(userUpdates).length > 0) {
+          await ctx.db.patch(linkedUser._id, userUpdates);
+        }
+      }
+    }
+
     // Log the update
     if (userId && changedFields.length > 0) {
       const user = await ctx.db.get(userId);

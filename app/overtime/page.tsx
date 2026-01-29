@@ -53,7 +53,7 @@ function OvertimeContent() {
     selectedOffer ? { offerId: selectedOffer } : "skip"
   );
   const locations = useQuery(api.locations.list);
-  const departments = ["Shipping", "Receiving", "Inventory", "Purchases", "Janitorial", "Warehouse"];
+  const departments = ["Shipping", "Receiving", "Inventory", "Purchases", "Janitorial", "Warehouse", "Ecommerce", "Retail"];
 
   // Mutations
   const createOffer = useMutation(api.overtime.createOffer);

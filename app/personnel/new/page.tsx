@@ -23,6 +23,8 @@ const DEPARTMENTS = [
   "Warehouse",
   "Office",
   "Sales",
+  "Ecommerce",
+  "Retail",
   "Management",
   "Delivery",
   "Other",

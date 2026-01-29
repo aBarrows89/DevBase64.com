@@ -74,6 +74,8 @@ function ShiftsContent() {
     "Inventory",
     "Purchases",
     "Janitorial",
+    "Ecommerce",
+    "Retail",
   ];
 
   // Parse selected date
