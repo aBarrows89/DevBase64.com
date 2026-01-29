@@ -35,6 +35,7 @@ function EngagementDashboardContent() {
   });
   const pendingExitInterviews = useQuery(api.exitInterviews.getPending);
   const offerStats = useQuery(api.offerLetters.getStats);
+  const recentOffers = useQuery(api.offerLetters.list, {});
   const departments = useQuery(api.personnel.getDepartments);
 
   // Mutations
@@ -528,16 +529,78 @@ function EngagementDashboardContent() {
               ))}
             </div>
 
-            <div className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm text-center`}>
-              <p className={`${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                Create offer letters from the Applications page when extending offers to candidates.
-              </p>
-              <Link
-                href="/applications"
-                className="inline-block mt-4 px-6 py-2 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg font-medium transition-colors"
-              >
-                Go to Applications
-              </Link>
+            {/* Offer Letters List */}
+            <div className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm`}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  Recent Offer Letters
+                </h3>
+                <Link
+                  href="/applications"
+                  className="text-sm text-cyan-500 hover:text-cyan-400"
+                >
+                  View All Applications →
+                </Link>
+              </div>
+              {recentOffers && recentOffers.length > 0 ? (
+                <div className="space-y-3">
+                  {recentOffers.slice(0, 10).map((offer) => {
+                    const statusColors: Record<string, string> = {
+                      draft: "bg-slate-500/20 text-slate-400",
+                      sent: "bg-blue-500/20 text-blue-400",
+                      viewed: "bg-cyan-500/20 text-cyan-400",
+                      accepted: "bg-green-500/20 text-green-400",
+                      declined: "bg-red-500/20 text-red-400",
+                      expired: "bg-orange-500/20 text-orange-400",
+                      withdrawn: "bg-slate-500/20 text-slate-500",
+                    };
+                    return (
+                      <Link
+                        key={offer._id}
+                        href={`/applications/${offer.applicationId}`}
+                        className={`block p-4 rounded-lg ${isDark ? "bg-slate-700 hover:bg-slate-600" : "bg-gray-50 hover:bg-gray-100"} transition-colors`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                              {offer.candidateName}
+                            </span>
+                            <span className={`mx-2 ${isDark ? "text-slate-500" : "text-gray-400"}`}>•</span>
+                            <span className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                              {offer.positionTitle}
+                            </span>
+                            {offer.department && (
+                              <>
+                                <span className={`mx-2 ${isDark ? "text-slate-500" : "text-gray-400"}`}>•</span>
+                                <span className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                                  {offer.department}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${statusColors[offer.status] || statusColors.draft}`}>
+                              {offer.status.charAt(0).toUpperCase() + offer.status.slice(1)}
+                            </span>
+                            <span className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                              {offer.sentAt ? new Date(offer.sentAt).toLocaleDateString() : new Date(offer.createdAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                        </div>
+                        {offer.compensationType && (
+                          <div className={`mt-2 text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                            ${offer.compensationAmount.toLocaleString()}{offer.compensationType === "hourly" ? "/hr" : "/yr"} • {offer.employmentType.replace("_", " ")}
+                          </div>
+                        )}
+                      </Link>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className={`text-center py-8 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                  No offer letters yet. Create offer letters from the Applications page.
+                </p>
+              )}
             </div>
           </div>
         )}

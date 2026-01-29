@@ -1,5 +1,6 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 
 // ============ QUERIES ============
@@ -387,5 +388,121 @@ export const submitSelfService = mutation({
     });
 
     return { success: true };
+  },
+});
+
+// Send exit interview emails to all terminated employees who haven't received one
+export const sendBulkExitInterviewEmails = action({
+  args: {},
+  handler: async (ctx): Promise<{ sent: number; skipped: number; errors: string[] }> => {
+    // Get all terminated personnel
+    const terminatedPersonnel = await ctx.runQuery(internal.exitInterviews.getTerminatedPersonnelForBulkEmail);
+
+    let sent = 0;
+    let skipped = 0;
+    const errors: string[] = [];
+
+    for (const person of terminatedPersonnel) {
+      try {
+        // Check if they have an exit interview already
+        let exitInterviewId = person.exitInterviewId;
+
+        // Create exit interview if doesn't exist
+        if (!exitInterviewId) {
+          exitInterviewId = await ctx.runMutation(internal.exitInterviews.createForBulkEmail, {
+            personnelId: person._id,
+            personnelName: `${person.firstName} ${person.lastName}`,
+            department: person.department,
+            position: person.position,
+            hireDate: person.hireDate,
+            terminationDate: person.terminationDate || new Date().toISOString().split("T")[0],
+            terminationReason: person.terminationReason || "Unknown",
+          });
+        }
+
+        // Send email
+        if (person.email && exitInterviewId) {
+          await ctx.runAction(internal.emails.sendExitInterviewEmail, {
+            employeeName: `${person.firstName} ${person.lastName}`,
+            employeeEmail: person.email,
+            exitInterviewId: exitInterviewId,
+            terminationDate: person.terminationDate || new Date().toISOString().split("T")[0],
+            position: person.position,
+            department: person.department,
+          });
+          sent++;
+        } else {
+          skipped++;
+        }
+      } catch (error) {
+        errors.push(`${person.firstName} ${person.lastName}: ${String(error)}`);
+      }
+    }
+
+    return { sent, skipped, errors };
+  },
+});
+
+// Internal query to get terminated personnel for bulk email
+export const getTerminatedPersonnelForBulkEmail = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    // Get all terminated personnel
+    const terminated = await ctx.db
+      .query("personnel")
+      .filter((q) => q.eq(q.field("status"), "terminated"))
+      .collect();
+
+    // Get all existing exit interviews
+    const exitInterviews = await ctx.db.query("exitInterviews").collect();
+    const interviewByPersonnelId = new Map(
+      exitInterviews.map((ei) => [ei.personnelId.toString(), ei])
+    );
+
+    // Return personnel with their exit interview status
+    return terminated.map((person) => {
+      const existingInterview = interviewByPersonnelId.get(person._id.toString());
+      return {
+        ...person,
+        exitInterviewId: existingInterview?._id,
+        exitInterviewStatus: existingInterview?.status,
+      };
+    }).filter((person) => {
+      // Only include if:
+      // 1. No exit interview exists, OR
+      // 2. Exit interview exists but is still pending
+      return !person.exitInterviewStatus || person.exitInterviewStatus === "pending";
+    });
+  },
+});
+
+// Internal mutation to create exit interview for bulk email
+export const createForBulkEmail = internalMutation({
+  args: {
+    personnelId: v.id("personnel"),
+    personnelName: v.string(),
+    department: v.optional(v.string()),
+    position: v.optional(v.string()),
+    hireDate: v.optional(v.string()),
+    terminationDate: v.string(),
+    terminationReason: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+
+    const interviewId = await ctx.db.insert("exitInterviews", {
+      personnelId: args.personnelId,
+      personnelName: args.personnelName,
+      department: args.department || "Unknown",
+      position: args.position || "Unknown",
+      hireDate: args.hireDate || "Unknown",
+      terminationDate: args.terminationDate,
+      terminationReason: args.terminationReason,
+      status: "pending",
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return interviewId;
   },
 });
