@@ -9,14 +9,14 @@ import { useTheme } from "@/app/theme-context";
 import { useSidebar } from "@/app/sidebar-context";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { usePermissions } from "@/lib/usePermissions";
 
 interface NavItem {
   href: string;
   label: string;
   icon: string;
   requiresPermission?: "viewPersonnel" | "viewShifts" | "manageTimeOff" | "departmentPortal";
-  superAdminOnly?: boolean;
-  techOnly?: boolean;
+  techOnly?: boolean; // Special access for tech team emails
 }
 
 interface NavGroup {
@@ -93,7 +93,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/payroll", label: "Payroll Approval", icon: "M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" },
       { href: "/settings/quickbooks", label: "QuickBooks Sync", icon: "M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" },
       { href: "/expense-report", label: "Expense Report", icon: "M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2zM10 8.5a.5.5 0 11-1 0 .5.5 0 011 0zm5 5a.5.5 0 11-1 0 .5.5 0 011 0z" },
-      { href: "/mileage", label: "Mileage", icon: "M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7", superAdminOnly: true },
+      { href: "/mileage", label: "Mileage", icon: "M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" }, // T3+ via finance group
     ],
   },
   {
@@ -125,7 +125,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/settings", label: "Settings", icon: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" },
       { href: "/audit-log", label: "Audit Log", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
-      { href: "/deleted-records", label: "Deleted Records", icon: "M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16", superAdminOnly: true },
+      { href: "/deleted-records", label: "Deleted Records", icon: "M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" }, // T4+ via permissions
       { href: "/tech-wizard", label: "Tech Wizard", icon: "M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z", techOnly: true },
     ],
   },
@@ -141,17 +141,21 @@ export default function Sidebar() {
   const { theme } = useTheme();
   const { isOpen, close } = useSidebar();
   const [openGroups, setOpenGroups] = useState<string[]>([]); // All closed by default
+  const permissions = usePermissions();
 
   const isDark = theme === "dark";
 
-  // Check if user is department manager (restricted view)
-  const isDepartmentManager = user?.role === "department_manager";
+  // RBAC tier checks
+  const tier = permissions.tier;
 
-  // Check if user is warehouse manager (limited view)
+  // Check if user is department manager (T1 - restricted view)
+  const isDepartmentManager = user?.role === "department_manager" || user?.role === "shift_lead";
+
+  // Check if user is warehouse manager (T2 - limited view)
   const isWarehouseManager = user?.role === "warehouse_manager";
 
-  // Check if user is employee (portal-only view)
-  const isEmployee = user?.role === "employee";
+  // Check if user is employee (T0 - portal-only view)
+  const isEmployee = user?.role === "employee" || user?.role === "member" || tier === 0;
 
   // Get unread message count
   const unreadCount = useQuery(
@@ -176,35 +180,39 @@ export default function Sidebar() {
     return group.items.some((item) => pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href)));
   };
 
-  // Filter nav items based on permissions
+  // Filter nav items based on RBAC tier permissions
   const filteredNavItems = NAV_ITEMS.filter((item) => {
-    // Warehouse manager shouldn't see Users
-    if (isWarehouseManager && item.href === "/users") return false;
-    if (!item.requiresPermission) return true;
-    if (item.requiresPermission === "viewPersonnel") return canViewPersonnel;
-    if (item.requiresPermission === "viewShifts") return canViewShifts;
-    if (item.requiresPermission === "manageTimeOff") return canManageTimeOff;
-    if (item.requiresPermission === "departmentPortal") return canAccessDepartmentPortal;
+    // Use menu permissions from RBAC
+    if (item.href === "/department-portal") return permissions.menu.departmentPortal;
+    if (item.href === "/messages") return permissions.menu.messages;
+    if (item.href === "/calendar") return permissions.menu.calendar;
+    if (item.href === "/notifications") return true; // All tiers
     return true;
   });
 
-  // Filter nav groups based on permissions
+  // Filter nav groups based on RBAC tier permissions
   const filteredNavGroups = NAV_GROUPS.filter((group) => {
-    // Warehouse manager shouldn't see Employee Portal group (but can see hiring)
-    if (isWarehouseManager && group.id === "employee-portal") return false;
-    if (!group.requiresPermission) return true;
-    if (group.requiresPermission === "viewPersonnel") return canViewPersonnel;
-    if (group.requiresPermission === "viewShifts") return canViewShifts;
-    if (group.requiresPermission === "manageTimeOff") return canManageTimeOff;
-    if (group.requiresPermission === "departmentPortal") return canAccessDepartmentPortal;
+    // Hiring & HR - T2+
+    if (group.id === "hiring") return tier >= 2;
+    // Scheduling - T2+
+    if (group.id === "scheduling") return tier >= 2;
+    // Employee Portal group (time-off, call-offs, announcements) - T2+
+    if (group.id === "employee-portal") return tier >= 2;
+    // Equipment - T2+
+    if (group.id === "equipment") return tier >= 2;
+    // Finance - T3+
+    if (group.id === "finance") return tier >= 3;
+    // Tools - T2+ for most items
+    if (group.id === "tools") return tier >= 2;
+    // People & Org - T4+
+    if (group.id === "people") return tier >= 4;
+    // System - T4+
+    if (group.id === "system") return tier >= 4;
     return true;
   });
 
-  // Check if user is super_admin
-  const isSuperAdmin = user?.role === "super_admin";
-
-  // Check if user has Tech Wizard access
-  const hasTechAccess = isSuperAdmin || TECH_EMAILS.includes(user?.email?.toLowerCase() || "");
+  // Check if user has Tech Wizard access (T5 or tech team emails)
+  const hasTechAccess = tier >= 5 || TECH_EMAILS.includes(user?.email?.toLowerCase() || "");
 
   const toggleGroup = (groupId: string) => {
     setOpenGroups((prev) =>
@@ -704,12 +712,18 @@ export default function Sidebar() {
             const isOpen = openGroups.includes(group.id);
             const groupActive = isGroupActive(group);
             const filteredItems = group.items.filter((item) => {
-              // Hide superAdminOnly items from non-super_admins
-              if (item.superAdminOnly && !isSuperAdmin) return false;
+              // Use RBAC permissions for specific items
+              if (item.href === "/deleted-records") return permissions.menu.deletedRecords; // T4+
+              if (item.href === "/reports") return permissions.menu.reports; // T4+
+              if (item.href === "/audit-log") return permissions.menu.auditLog; // T4+
+              if (item.href === "/tech-wizard") return hasTechAccess; // T5 or tech email
+              if (item.href === "/schedule-templates") return permissions.menu.scheduleTemplates; // T4+
+              if (item.href === "/jobs") return permissions.menu.jobListings; // T4+
+              if (item.href === "/settings/onboarding") return permissions.menu.onboardingDocs; // T4+
+              if (item.href === "/settings/quickbooks") return permissions.menu.quickbooks; // T4+
+              if (item.href === "/daily-log") return permissions.menu.dailyLog; // requiresDailyLog or T4+
               // Hide techOnly items from non-tech users
               if (item.techOnly && !hasTechAccess) return false;
-              // Hide Reports and Audit Log from warehouse manager
-              if (isWarehouseManager && (item.href === "/reports" || item.href === "/audit-log")) return false;
               if (!item.requiresPermission) return true;
               if (item.requiresPermission === "viewShifts") return canViewShifts;
               return true;

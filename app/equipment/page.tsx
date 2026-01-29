@@ -2718,7 +2718,7 @@ By signing below, the Employee acknowledges that they have read, understand, and
 
 export default function EquipmentPage() {
   return (
-    <Protected>
+    <Protected minTier={2}>
       <EquipmentContent />
     </Protected>
   );

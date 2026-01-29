@@ -163,7 +163,7 @@ const DAILY_QUOTES: TireQuote[] = [
   { quote: "Today's effort is tomorrow's reputation. Build it right.", type: "motivational" },
   { quote: "The difference between ordinary and extraordinary? That little 'extra' rotation.", type: "inspirational" },
   { quote: "I tried to make a belt joke, but it just went around in circles.", type: "funny" },
-  { quote: "In this shop, we don't make excuses. We make safe vehicles.", type: "motivational" },
+  { quote: "Every tire we ship keeps someone's family safe on the road.", type: "motivational" },
   { quote: "Progress is impossible without change. Time for a tire rotation!", type: "inspirational" },
   { quote: "What's a tire's favorite dance? The rubber band!", type: "funny" },
 

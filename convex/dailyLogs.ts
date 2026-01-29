@@ -62,6 +62,56 @@ export const getMyLogs = query({
   },
 });
 
+// Get recent logs for multiple users (for manager viewing reportees)
+export const getLogsForUsers = query({
+  args: {
+    userIds: v.array(v.id("users")),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit || 30;
+
+    // Get all logs for these users
+    const allLogs = [];
+    for (const userId of args.userIds) {
+      const userLogs = await ctx.db
+        .query("dailyLogs")
+        .withIndex("by_user", (q) => q.eq("userId", userId))
+        .order("desc")
+        .take(limit);
+      allLogs.push(...userLogs);
+    }
+
+    // Sort by date (newest first) and limit total
+    return allLogs
+      .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt)
+      .slice(0, limit);
+  },
+});
+
+// Get today's logs for multiple users (for manager quick view)
+export const getTodayLogsForUsers = query({
+  args: {
+    userIds: v.array(v.id("users")),
+    date: v.string(), // "YYYY-MM-DD"
+  },
+  handler: async (ctx, args) => {
+    const logs = [];
+    for (const userId of args.userIds) {
+      const log = await ctx.db
+        .query("dailyLogs")
+        .withIndex("by_user_date", (q) =>
+          q.eq("userId", userId).eq("date", args.date)
+        )
+        .first();
+      if (log) {
+        logs.push(log);
+      }
+    }
+    return logs;
+  },
+});
+
 // Get all recent submitted logs (for admin view)
 export const getAllRecentLogs = query({
   args: {
@@ -273,6 +323,25 @@ export const getWeeklyOverview = query({
       totals,
       userSummaries,
     };
+  },
+});
+
+// Get all users who require daily logs (for admin dropdown)
+export const getUsersRequiringDailyLog = query({
+  args: {},
+  handler: async (ctx) => {
+    const users = await ctx.db
+      .query("users")
+      .filter((q) =>
+        q.and(q.eq(q.field("isActive"), true), q.eq(q.field("requiresDailyLog"), true))
+      )
+      .collect();
+
+    return users.map((u) => ({
+      _id: u._id,
+      name: u.name,
+      email: u.email,
+    })).sort((a, b) => a.name.localeCompare(b.name));
   },
 });
 
@@ -551,6 +620,129 @@ export const remove = mutation({
     }
 
     await ctx.db.delete(args.logId);
+    return args.logId;
+  },
+});
+
+// Admin: Submit a log on behalf of a user who forgot
+export const submitOnBehalf = mutation({
+  args: {
+    targetUserId: v.id("users"),
+    date: v.string(),
+    summary: v.string(),
+    accomplishments: v.array(v.string()),
+    blockers: v.optional(v.string()),
+    goalsForTomorrow: v.optional(v.string()),
+    hoursWorked: v.optional(v.number()),
+    adminUserId: v.id("users"), // Who is submitting on behalf
+  },
+  handler: async (ctx, args) => {
+    // Get target user
+    const targetUser = await ctx.db.get(args.targetUserId);
+    if (!targetUser) throw new Error("User not found");
+
+    // Check if log already exists
+    const existing = await ctx.db
+      .query("dailyLogs")
+      .withIndex("by_user_date", (q) =>
+        q.eq("userId", args.targetUserId).eq("date", args.date)
+      )
+      .first();
+
+    // Get auto-activities from audit logs
+    const startOfDay = new Date(args.date + "T00:00:00").getTime();
+    const endOfDay = new Date(args.date + "T23:59:59.999").getTime();
+
+    const auditLogs = await ctx.db
+      .query("auditLogs")
+      .withIndex("by_user", (q) => q.eq("userId", args.targetUserId))
+      .collect();
+
+    const todaysLogs = auditLogs.filter(
+      (log) => log.timestamp >= startOfDay && log.timestamp <= endOfDay
+    );
+
+    const autoActivities = {
+      projectsCreated: todaysLogs.filter(
+        (l) => l.resourceType === "project" && l.actionType === "create"
+      ).length,
+      projectsMoved: todaysLogs.filter(
+        (l) =>
+          l.resourceType === "project" &&
+          l.actionType === "update" &&
+          l.action?.toLowerCase().includes("status")
+      ).length,
+      tasksCompleted: todaysLogs.filter(
+        (l) =>
+          l.resourceType === "task" &&
+          l.details?.toLowerCase().includes("done")
+      ).length,
+      totalActions: todaysLogs.length,
+    };
+
+    // Get admin user name
+    const adminUser = await ctx.db.get(args.adminUserId);
+    const adminNote = `[Submitted by ${adminUser?.name || "Admin"}]`;
+
+    if (existing) {
+      // Update existing log
+      await ctx.db.patch(existing._id, {
+        summary: args.summary,
+        accomplishments: args.accomplishments,
+        blockers: args.blockers,
+        goalsForTomorrow: args.goalsForTomorrow,
+        hoursWorked: args.hoursWorked,
+        autoActivities,
+        isSubmitted: true,
+        reviewerComment: existing.reviewerComment
+          ? `${existing.reviewerComment}\n${adminNote}`
+          : adminNote,
+        updatedAt: Date.now(),
+      });
+      return existing._id;
+    } else {
+      // Create new log
+      const logId = await ctx.db.insert("dailyLogs", {
+        userId: args.targetUserId,
+        userName: targetUser.name,
+        date: args.date,
+        summary: args.summary,
+        accomplishments: args.accomplishments,
+        blockers: args.blockers,
+        goalsForTomorrow: args.goalsForTomorrow,
+        hoursWorked: args.hoursWorked,
+        autoActivities,
+        isSubmitted: true,
+        reviewerComment: adminNote,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      return logId;
+    }
+  },
+});
+
+// Admin: Unlock a submitted log for editing
+export const unlockLog = mutation({
+  args: {
+    logId: v.id("dailyLogs"),
+    adminUserId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const log = await ctx.db.get(args.logId);
+    if (!log) throw new Error("Log not found");
+
+    const adminUser = await ctx.db.get(args.adminUserId);
+    const unlockNote = `[Unlocked by ${adminUser?.name || "Admin"} on ${new Date().toLocaleDateString()}]`;
+
+    await ctx.db.patch(args.logId, {
+      isSubmitted: false,
+      reviewerComment: log.reviewerComment
+        ? `${log.reviewerComment}\n${unlockNote}`
+        : unlockNote,
+      updatedAt: Date.now(),
+    });
+
     return args.logId;
   },
 });

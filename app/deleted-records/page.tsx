@@ -252,7 +252,7 @@ function DeletedRecordsContent() {
 
 export default function DeletedRecordsPage() {
   return (
-    <Protected requiredRoles={["super_admin"]}>
+    <Protected minTier={4}>
       <DeletedRecordsContent />
     </Protected>
   );

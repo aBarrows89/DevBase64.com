@@ -7,6 +7,7 @@ import Protected from "./protected";
 import Sidebar, { MobileHeader } from "@/components/Sidebar";
 import { useAuth } from "./auth-context";
 import { useTheme } from "./theme-context";
+import { usePermissions } from "@/lib/usePermissions";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { SearchButton } from "@/components/GlobalSearch";
@@ -53,6 +54,8 @@ function DashboardContent() {
   const { theme } = useTheme();
   const router = useRouter();
   const isDark = theme === "dark";
+  const permissions = usePermissions();
+  const widgets = permissions.dashboardWidgets;
 
   // UI State
   const [showSettings, setShowSettings] = useState(false);
@@ -629,10 +632,10 @@ function DashboardContent() {
           )}
 
           {/* Stats Grid - Only show if projects or applications cards are enabled */}
-          {(isCardEnabled("projects") || (!isOfficeManager && isCardEnabled("applications"))) && (
-          <div className={`grid grid-cols-2 md:grid-cols-2 ${isOfficeManager ? "lg:grid-cols-3" : "lg:grid-cols-4"} gap-3 sm:gap-6`}>
-            {/* Projects Stats - Only show if projects card enabled */}
-            {isCardEnabled("projects") && (
+          {((widgets.activeProjects && isCardEnabled("projects")) || (widgets.recentApplications && isCardEnabled("applications"))) && (
+          <div className={`grid grid-cols-2 md:grid-cols-2 ${!widgets.recentApplications ? "lg:grid-cols-3" : "lg:grid-cols-4"} gap-3 sm:gap-6`}>
+            {/* Projects Stats - Only show if projects card enabled and permission granted */}
+            {widgets.activeProjects && isCardEnabled("projects") && (
             <>
             <div className={`border rounded-xl p-4 sm:p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
               <div className="flex items-center justify-between mb-2 sm:mb-4">
@@ -721,8 +724,8 @@ function DashboardContent() {
             </>
             )}
 
-            {/* Applications - Hide for office managers and check card setting */}
-            {!isOfficeManager && isCardEnabled("applications") && (
+            {/* Applications - Hide based on RBAC permissions and check card setting */}
+            {widgets.recentApplications && isCardEnabled("applications") && (
               <div className={`border rounded-xl p-4 sm:p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
                 <div className="flex items-center justify-between mb-2 sm:mb-4">
                   <h3 className={`text-xs sm:text-sm font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
@@ -756,10 +759,10 @@ function DashboardContent() {
           )}
 
           {/* Content Sections */}
-          {(isCardEnabled("projects") || (!isOfficeManager && isCardEnabled("applications"))) && (
-          <div className={`grid grid-cols-1 ${isOfficeManager ? "" : "lg:grid-cols-2"} gap-4 sm:gap-6`}>
+          {((widgets.activeProjects && isCardEnabled("projects")) || (widgets.recentApplications && isCardEnabled("applications"))) && (
+          <div className={`grid grid-cols-1 ${!widgets.recentApplications ? "" : "lg:grid-cols-2"} gap-4 sm:gap-6`}>
             {/* Recent Projects */}
-            {isCardEnabled("projects") && (
+            {widgets.activeProjects && isCardEnabled("projects") && (
             <div className={`border rounded-xl p-4 sm:p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
               <div className="flex items-center justify-between mb-4 sm:mb-6">
                 <h2 className={`text-base sm:text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
@@ -811,8 +814,8 @@ function DashboardContent() {
             </div>
             )}
 
-            {/* Recent Applications - Hide for office managers and check card setting */}
-            {!isOfficeManager && isCardEnabled("applications") && (
+            {/* Recent Applications - Hide based on RBAC permissions and check card setting */}
+            {widgets.recentApplications && isCardEnabled("applications") && (
               <div className={`border rounded-xl p-4 sm:p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
                 <div className="flex items-center justify-between mb-4 sm:mb-6">
                   <h2 className={`text-base sm:text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
@@ -877,11 +880,11 @@ function DashboardContent() {
           </div>
           )}
 
-          {/* Website Messages & Hiring Analytics - Hide for office managers and check card settings */}
-          {!isOfficeManager && (isCardEnabled("websiteMessages") || isCardEnabled("hiringAnalytics")) && (
+          {/* Website Messages & Hiring Analytics - Hide based on RBAC permissions and check card settings */}
+          {((widgets.websiteMessages && isCardEnabled("websiteMessages")) || (widgets.hiringAnalytics && isCardEnabled("hiringAnalytics"))) && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
             {/* Website Messages */}
-            {isCardEnabled("websiteMessages") && (
+            {widgets.websiteMessages && isCardEnabled("websiteMessages") && (
             <div className={`border rounded-xl p-4 sm:p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
               <div className="flex items-center justify-between mb-4 sm:mb-6">
                 <h2 className={`text-base sm:text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
@@ -952,7 +955,7 @@ function DashboardContent() {
             )}
 
             {/* Hiring Analytics */}
-            {isCardEnabled("hiringAnalytics") && (
+            {widgets.hiringAnalytics && isCardEnabled("hiringAnalytics") && (
             <div className={`border rounded-xl p-4 sm:p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
               <div className="flex items-center justify-between mb-4 sm:mb-6">
                 <h2 className={`text-base sm:text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
@@ -1073,12 +1076,12 @@ function DashboardContent() {
           )}
 
           {/* Activity Feed & Tenure Check-ins */}
-          {(isCardEnabled("activityFeed") || (!isOfficeManager && isCardEnabled("tenureCheckIns"))) && (
-          <div className={`grid grid-cols-1 ${isOfficeManager ? "" : "lg:grid-cols-2"} gap-4 sm:gap-6`}>
-            {isCardEnabled("activityFeed") && <ActivityFeed limit={15} />}
+          {((widgets.activityFeed && isCardEnabled("activityFeed")) || (widgets.tenureCheckins && isCardEnabled("tenureCheckIns"))) && (
+          <div className={`grid grid-cols-1 ${!widgets.tenureCheckins ? "" : "lg:grid-cols-2"} gap-4 sm:gap-6`}>
+            {widgets.activityFeed && isCardEnabled("activityFeed") && <ActivityFeed limit={15} />}
 
-            {/* Pending Tenure Check-ins - Hide for office managers and check card setting */}
-            {!isOfficeManager && isCardEnabled("tenureCheckIns") && pendingTenureCheckIns && pendingTenureCheckIns.length > 0 && (
+            {/* Pending Tenure Check-ins - Hide based on RBAC permissions and check card setting */}
+            {widgets.tenureCheckins && isCardEnabled("tenureCheckIns") && pendingTenureCheckIns && pendingTenureCheckIns.length > 0 && (
               <div className={`border rounded-xl p-4 sm:p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
                 <div className="flex items-center justify-between mb-4 sm:mb-6">
                   <h2 className={`text-base sm:text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
@@ -1185,10 +1188,13 @@ function DashboardContent() {
             <div className="space-y-3 mb-6">
               {DASHBOARD_CARDS.map((card) => {
                 const enabled = isCardEnabled(card.id);
-                // Hide certain cards for office managers
-                if (isOfficeManager && ["applications", "websiteMessages", "hiringAnalytics", "tenureCheckIns"].includes(card.id)) {
-                  return null;
-                }
+                // Hide cards based on RBAC permissions
+                if (card.id === "projects" && !widgets.activeProjects) return null;
+                if (card.id === "applications" && !widgets.recentApplications) return null;
+                if (card.id === "websiteMessages" && !widgets.websiteMessages) return null;
+                if (card.id === "hiringAnalytics" && !widgets.hiringAnalytics) return null;
+                if (card.id === "tenureCheckIns" && !widgets.tenureCheckins) return null;
+                if (card.id === "activityFeed" && !widgets.activityFeed) return null;
                 return (
                   <label
                     key={card.id}

@@ -247,6 +247,7 @@ export const submitApplication = mutation({
     resumeFileId: v.optional(v.id("_storage")), // Actual PDF file
     appliedJobId: v.optional(v.id("jobs")),
     appliedJobTitle: v.string(),
+    appliedLocation: v.optional(v.string()), // Which location the applicant selected
     aiAnalysis: v.optional(v.object({
       suggestedJobId: v.optional(v.id("jobs")),
       suggestedJobTitle: v.optional(v.string()),
@@ -290,6 +291,7 @@ export const submitApplication = mutation({
       recommendedAction: v.string(),
       hiringTeamNotes: v.string(),
     })),
+    source: v.optional(v.string()), // "indeed" | "manual" | "bulk-upload" | "website"
   },
   handler: async (ctx, args) => {
     const now = Date.now();

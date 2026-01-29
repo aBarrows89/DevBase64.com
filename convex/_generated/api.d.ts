@@ -37,6 +37,8 @@ import type * as events from "../events.js";
 import type * as exitInterviews from "../exitInterviews.js";
 import type * as expenseReports from "../expenseReports.js";
 import type * as holidays from "../holidays.js";
+import type * as indeedActions from "../indeedActions.js";
+import type * as indeedIntegration from "../indeedIntegration.js";
 import type * as jobs from "../jobs.js";
 import type * as locations from "../locations.js";
 import type * as merits from "../merits.js";
@@ -103,6 +105,8 @@ declare const fullApi: ApiFromModules<{
   exitInterviews: typeof exitInterviews;
   expenseReports: typeof expenseReports;
   holidays: typeof holidays;
+  indeedActions: typeof indeedActions;
+  indeedIntegration: typeof indeedIntegration;
   jobs: typeof jobs;
   locations: typeof locations;
   merits: typeof merits;

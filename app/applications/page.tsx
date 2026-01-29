@@ -69,7 +69,16 @@ function ApplicationsContent() {
 
   const [viewMode, setViewMode] = useState<"table" | "kanban">("table");
   const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterDepartment, setFilterDepartment] = useState<string>("all");
+  const [filterLocation, setFilterLocation] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
+
+  // Get unique departments and locations from jobs for filters
+  const departments = [...new Set(jobs.map(j => j.department))].sort();
+  const locations = [...new Set(jobs.flatMap(j => j.locations || [j.location]))].sort();
+
+  // Helper to get job details by ID
+  const getJobById = (jobId: Id<"jobs"> | undefined) => jobs.find(j => j._id === jobId);
   const [deleteConfirmId, setDeleteConfirmId] = useState<Id<"applications"> | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [sortBy, setSortBy] = useState<"score" | "position" | "date" | "status">("date");
@@ -113,6 +122,19 @@ function ApplicationsContent() {
     .filter((app) => {
       const matchesStatus =
         filterStatus === "all" || app.status === filterStatus;
+
+      // Department filter - check against the job's department
+      const job = getJobById(app.appliedJobId);
+      const matchesDepartment =
+        filterDepartment === "all" || job?.department === filterDepartment;
+
+      // Location filter - check against job locations or appliedLocation
+      const jobLocations = job?.locations || (job?.location ? [job.location] : []);
+      const matchesLocation =
+        filterLocation === "all" ||
+        app.appliedLocation === filterLocation ||
+        jobLocations.includes(filterLocation);
+
       // Normalize phone search - strip non-digits for comparison
       const normalizedSearch = searchTerm.replace(/\D/g, "");
       const normalizedPhone = app.phone?.replace(/\D/g, "") || "";
@@ -126,7 +148,7 @@ function ApplicationsContent() {
         app.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
         app.appliedJobTitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
         matchesPhone;
-      return matchesStatus && matchesSearch;
+      return matchesStatus && matchesSearch && matchesDepartment && matchesLocation;
     })
     .sort((a, b) => {
       let comparison = 0;
@@ -613,6 +635,30 @@ function ApplicationsContent() {
                 {STATUS_OPTIONS.map((status) => (
                   <option key={status.value} value={status.value}>
                     {status.label}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={filterDepartment}
+                onChange={(e) => setFilterDepartment(e.target.value)}
+                className={`px-3 sm:px-4 py-2 text-sm sm:text-base rounded-lg focus:outline-none ${isDark ? "bg-slate-800/50 border border-slate-700 text-white focus:border-cyan-500" : "bg-white border border-gray-200 text-gray-900 focus:border-blue-600"}`}
+              >
+                <option value="all">All Departments</option>
+                {departments.map((dept) => (
+                  <option key={dept} value={dept}>
+                    {dept}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={filterLocation}
+                onChange={(e) => setFilterLocation(e.target.value)}
+                className={`px-3 sm:px-4 py-2 text-sm sm:text-base rounded-lg focus:outline-none ${isDark ? "bg-slate-800/50 border border-slate-700 text-white focus:border-cyan-500" : "bg-white border border-gray-200 text-gray-900 focus:border-blue-600"}`}
+              >
+                <option value="all">All Locations</option>
+                {locations.map((loc) => (
+                  <option key={loc} value={loc}>
+                    {loc}
                   </option>
                 ))}
               </select>
@@ -1219,7 +1265,7 @@ function ApplicationsContent() {
 
 export default function ApplicationsPage() {
   return (
-    <Protected>
+    <Protected minTier={2}>
       <ApplicationsContent />
     </Protected>
   );

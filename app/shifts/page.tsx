@@ -1523,7 +1523,7 @@ function ShiftsContent() {
 
 export default function ShiftsPage() {
   return (
-    <Protected>
+    <Protected minTier={2}>
       <ShiftsContent />
     </Protected>
   );

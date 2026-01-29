@@ -14,10 +14,15 @@ export default defineSchema({
     managedDepartments: v.optional(v.array(v.string())), // For department_manager - which departments they manage
     managedLocationIds: v.optional(v.array(v.id("locations"))), // For warehouse_manager - which locations they manage
     personnelId: v.optional(v.id("personnel")), // For employee role - links to their personnel record
+    // Reporting structure
+    reportsTo: v.optional(v.id("users")), // Who this user reports to (their manager)
     // Push notification token for mobile app
     expoPushToken: v.optional(v.string()),
     // Daily activity log requirement
     requiresDailyLog: v.optional(v.boolean()), // Admin-configurable per user
+    // Time & Payroll flags (floating permissions - RBAC)
+    isFinalTimeApprover: v.optional(v.boolean()), // Can do final time approval after T2 location approval
+    isPayrollProcessor: v.optional(v.boolean()), // Can export payroll data
     createdAt: v.optional(v.number()),
     lastLoginAt: v.optional(v.number()),
     // Legacy fields from old system
@@ -28,7 +33,8 @@ export default defineSchema({
     pin: v.optional(v.string()),
   })
     .index("by_email", ["email"])
-    .index("by_personnel", ["personnelId"]),
+    .index("by_personnel", ["personnelId"])
+    .index("by_reports_to", ["reportsTo"]),
 
   // ============ SYSTEM BANNERS ============
   systemBanners: defineTable({
@@ -116,7 +122,8 @@ export default defineSchema({
   // ============ APPLICATIONS (from ietires.com) ============
   jobs: defineTable({
     title: v.string(),
-    location: v.string(),
+    location: v.string(), // Primary/default location (kept for backwards compatibility)
+    locations: v.optional(v.array(v.string())), // Multiple locations for this job
     type: v.string(), // "Full-time" | "Part-time"
     positionType: v.optional(v.string()), // "hourly" | "salaried" | "management"
     department: v.string(),
@@ -145,6 +152,7 @@ export default defineSchema({
     resumeFileId: v.optional(v.id("_storage")), // Actual PDF file in storage
     appliedJobId: v.optional(v.id("jobs")),
     appliedJobTitle: v.string(),
+    appliedLocation: v.optional(v.string()), // Which location the applicant selected
     aiAnalysis: v.optional(
       v.object({
         suggestedJobId: v.optional(v.id("jobs")),
@@ -202,6 +210,7 @@ export default defineSchema({
       })
     ),
     status: v.string(), // "new" | "reviewed" | "contacted" | "scheduled" | "interviewed" | "dns" | "hired" | "rejected"
+    source: v.optional(v.string()), // "indeed" | "manual" | "bulk-upload" | "website" - where the application came from
     isArchived: v.optional(v.boolean()), // For archiving rejected applicants
     archivedAt: v.optional(v.number()),
     notes: v.optional(v.string()),
@@ -776,12 +785,16 @@ export default defineSchema({
   // ============ LOCATIONS ============
   locations: defineTable({
     name: v.string(), // e.g., "Main Warehouse", "Distribution Center 2"
+    locationType: v.optional(v.string()), // "warehouse" | "retail" | "office" | "distribution"
     address: v.optional(v.string()),
     city: v.optional(v.string()),
     state: v.optional(v.string()),
     zipCode: v.optional(v.string()),
+    phone: v.optional(v.string()), // Location phone number
     isActive: v.boolean(),
     managerId: v.optional(v.id("users")), // Manager responsible for this location
+    // Departments available at this location
+    departments: v.optional(v.array(v.string())), // e.g., ["Retail", "Retail Management"] or ["Shipping", "Receiving"]
     // Warehouse manager contact info (displayed on shift prints)
     warehouseManagerName: v.optional(v.string()),
     warehouseManagerPhone: v.optional(v.string()),
@@ -792,7 +805,8 @@ export default defineSchema({
   })
     .index("by_name", ["name"])
     .index("by_active", ["isActive"])
-    .index("by_manager", ["managerId"]),
+    .index("by_manager", ["managerId"])
+    .index("by_type", ["locationType"]),
 
   // ============ EQUIPMENT INVENTORY ============
   // Scanners (RF scanners, barcode scanners, etc.)
@@ -2216,4 +2230,37 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_updated", ["updatedAt"]),
+
+  // ============ INDEED INTEGRATION ============
+  // Logs for tracking Indeed webhook activity
+  indeedWebhookLogs: defineTable({
+    indeedApplyId: v.string(), // The 64-char unique ID from Indeed
+    receivedAt: v.number(),
+    applicantName: v.string(),
+    applicantEmail: v.string(),
+    indeedJobId: v.optional(v.string()),
+    indeedJobTitle: v.optional(v.string()),
+
+    // Processing result
+    status: v.string(), // "success" | "duplicate" | "error"
+    applicationId: v.optional(v.id("applications")),
+    errorMessage: v.optional(v.string()),
+
+    // Raw payload for debugging (truncated if too large)
+    rawPayload: v.optional(v.string()),
+  })
+    .index("by_indeed_apply_id", ["indeedApplyId"])
+    .index("by_status", ["status"])
+    .index("by_received", ["receivedAt"]),
+
+  // Mapping Indeed job postings to internal jobs
+  indeedJobMappings: defineTable({
+    indeedJobId: v.string(), // Job ID from Indeed
+    indeedJobTitle: v.string(), // Job title on Indeed (for reference)
+    internalJobId: v.id("jobs"), // Your job ID in the system
+    internalJobTitle: v.string(), // Your job title (for reference)
+    location: v.optional(v.string()),
+    isActive: v.boolean(),
+    createdAt: v.number(),
+  }).index("by_indeed_job", ["indeedJobId"]),
 });

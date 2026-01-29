@@ -8,7 +8,7 @@ import { Id } from "@/convex/_generated/dataModel";
 // Inactivity timeout in milliseconds (5 minutes)
 const INACTIVITY_TIMEOUT = 5 * 60 * 1000;
 
-export type UserRole = "super_admin" | "admin" | "warehouse_director" | "warehouse_manager" | "department_manager" | "office_manager" | "member" | "employee";
+export type UserRole = "super_admin" | "admin" | "warehouse_director" | "warehouse_manager" | "department_manager" | "office_manager" | "shift_lead" | "member" | "employee";
 
 export interface User {
   _id: Id<"users">;
@@ -21,6 +21,10 @@ export interface User {
   managedLocationIds?: Id<"locations">[];
   personnelId?: Id<"personnel">; // For employee role - links to their personnel record
   requiresDailyLog?: boolean; // If true, user must fill out daily activity logs
+  // RBAC floating permission flags
+  isFinalTimeApprover?: boolean; // Can do final time approval
+  isPayrollProcessor?: boolean; // Can export payroll data
+  reportsTo?: Id<"users">; // Who this user reports to
 }
 
 interface AuthContextType {

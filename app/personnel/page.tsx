@@ -481,7 +481,7 @@ function PersonnelContent() {
 
 export default function PersonnelPage() {
   return (
-    <Protected>
+    <Protected minTier={2}>
       <PersonnelContent />
     </Protected>
   );

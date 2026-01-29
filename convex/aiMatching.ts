@@ -168,6 +168,43 @@ You MUST populate the candidateAnalysis section with detailed analysis:
    - "entrepreneurship": Founded or owned a business (shows initiative and leadership)
    - "technical_skills": Software development, IT, analytics, or technical expertise
 
+=== POSITION-SPECIFIC SCORING ===
+
+TIRE TECHNICIAN - RETAIL - EXPORT POSITIONS:
+When scoring for "Tire Technician", "Tire Technician - Retail - Export", "Tire Changer", or similar tire service positions, apply these specific criteria:
+
+HIGH VALUE EXPERIENCE (+20-30 bonus points):
+- Previous tire shop experience (Discount Tire, Tire Kingdom, Big O Tires, Les Schwab, local tire shops)
+- Automotive service technician or mechanic experience
+- Lube tech, oil change technician experience
+- Auto body shop experience
+
+MODERATE VALUE EXPERIENCE (+10-15 bonus points):
+- General automotive interest or background
+- Warehouse/physical labor jobs (shows ability to handle physical work)
+- Retail customer service (will interact with customers at retail locations)
+- Any job requiring hand tools or mechanical aptitude
+
+REQUIRED SKILLS TO LOOK FOR:
+- Physical fitness/ability to lift heavy tires (40-80 lbs repeatedly)
+- Ability to stand for long periods
+- Basic mechanical aptitude
+- Customer service skills (retail locations = customer-facing)
+- Reliability and punctuality (critical for retail shifts)
+
+RED FLAGS specific to Tire Changer:
+- No physical labor experience at all
+- History of attendance issues
+- Only office/desk job experience with no indication of physical capability
+- Overqualified (e.g., software engineer applying - likely a flight risk)
+
+GREEN FLAGS specific to Tire Changer:
+- TIA (Tire Industry Association) certification
+- ASE certification
+- Any automotive certifications
+- Experience with tire equipment (changers, balancers, TPMS)
+- Bilingual (bonus for customer service)
+
 4. EDUCATION SCORING (add bonus points):
    - Bachelor's degree: +10 to experienceScore
    - Master's/MBA: +15 to experienceScore

@@ -317,7 +317,7 @@ function ReportContent() {
 
                           {/* Summary */}
                           {log.summary && (
-                            <p className="text-gray-700 text-sm mb-3">{log.summary}</p>
+                            <p className="text-gray-700 text-sm mb-3 whitespace-pre-wrap leading-relaxed">{log.summary}</p>
                           )}
 
                           {/* Accomplishments */}
@@ -343,7 +343,7 @@ function ReportContent() {
                               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
                                 Goals for Next Day
                               </p>
-                              <p className="text-sm text-gray-600">{log.goalsForTomorrow}</p>
+                              <p className="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed">{log.goalsForTomorrow}</p>
                             </div>
                           )}
 

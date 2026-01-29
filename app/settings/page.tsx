@@ -892,7 +892,7 @@ function SettingsContent() {
 
 export default function SettingsPage() {
   return (
-    <Protected>
+    <Protected minTier={4}>
       <SettingsContent />
     </Protected>
   );

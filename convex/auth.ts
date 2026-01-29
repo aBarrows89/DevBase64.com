@@ -370,9 +370,10 @@ export const updateUser = mutation({
     requiresDailyLog: v.optional(v.boolean()),
     managedLocationIds: v.optional(v.array(v.id("locations"))),
     managedDepartments: v.optional(v.array(v.string())),
+    reportsTo: v.optional(v.union(v.id("users"), v.null())), // Who this user reports to
   },
   handler: async (ctx, args) => {
-    const { userId, requiresDailyLog, managedLocationIds, managedDepartments, ...updates } = args;
+    const { userId, requiresDailyLog, managedLocationIds, managedDepartments, reportsTo, ...updates } = args;
 
     // If email is being updated, check for duplicates
     if (updates.email) {
@@ -396,9 +397,36 @@ export const updateUser = mutation({
     if (requiresDailyLog !== undefined) cleanUpdates.requiresDailyLog = requiresDailyLog;
     if (managedLocationIds !== undefined) cleanUpdates.managedLocationIds = managedLocationIds;
     if (managedDepartments !== undefined) cleanUpdates.managedDepartments = managedDepartments;
+    if (reportsTo !== undefined) cleanUpdates.reportsTo = reportsTo === null ? undefined : reportsTo;
 
     await ctx.db.patch(userId, cleanUpdates);
     return { success: true };
+  },
+});
+
+// Get users who report to a specific user (reportees)
+export const getReportees = query({
+  args: { managerId: v.id("users") },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("users")
+      .withIndex("by_reports_to", (q) => q.eq("reportsTo", args.managerId))
+      .filter((q) => q.eq(q.field("isActive"), true))
+      .collect();
+  },
+});
+
+// Get reportees who require daily logs
+export const getReporteesRequiringDailyLog = query({
+  args: { managerId: v.id("users") },
+  handler: async (ctx, args) => {
+    const reportees = await ctx.db
+      .query("users")
+      .withIndex("by_reports_to", (q) => q.eq("reportsTo", args.managerId))
+      .filter((q) => q.eq(q.field("isActive"), true))
+      .collect();
+
+    return reportees.filter(u => u.requiresDailyLog === true);
   },
 });
 

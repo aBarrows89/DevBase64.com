@@ -47,6 +47,7 @@ export const create = mutation({
   args: {
     title: v.string(),
     location: v.string(),
+    locations: v.optional(v.array(v.string())), // Multiple locations
     type: v.string(),
     positionType: v.optional(v.string()),
     department: v.string(),
@@ -76,6 +77,7 @@ export const update = mutation({
     jobId: v.id("jobs"),
     title: v.optional(v.string()),
     location: v.optional(v.string()),
+    locations: v.optional(v.array(v.string())), // Multiple locations
     type: v.optional(v.string()),
     positionType: v.optional(v.string()),
     department: v.optional(v.string()),

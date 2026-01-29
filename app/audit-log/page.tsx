@@ -317,7 +317,7 @@ function AuditLogContent() {
 
 export default function AuditLogPage() {
   return (
-    <Protected>
+    <Protected minTier={4}>
       <AuditLogContent />
     </Protected>
   );

@@ -19,6 +19,17 @@ function AdminDailyLogView() {
   const [savingComment, setSavingComment] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState<string>("all");
 
+  // Submit on behalf modal state
+  const [showSubmitOnBehalfModal, setShowSubmitOnBehalfModal] = useState(false);
+  const [submitOnBehalfUser, setSubmitOnBehalfUser] = useState<string>("");
+  const [submitOnBehalfDate, setSubmitOnBehalfDate] = useState(new Date().toISOString().split("T")[0]);
+  const [submitOnBehalfSummary, setSubmitOnBehalfSummary] = useState("");
+  const [submitOnBehalfAccomplishments, setSubmitOnBehalfAccomplishments] = useState<string[]>([""]);
+  const [submitOnBehalfBlockers, setSubmitOnBehalfBlockers] = useState("");
+  const [submitOnBehalfGoals, setSubmitOnBehalfGoals] = useState("");
+  const [submitOnBehalfHours, setSubmitOnBehalfHours] = useState<number | undefined>();
+  const [isSubmittingOnBehalf, setIsSubmittingOnBehalf] = useState(false);
+
   // Toggle log expansion
   const toggleLogExpansion = (logId: string) => {
     setExpandedLogs(prev => {
@@ -34,7 +45,10 @@ function AdminDailyLogView() {
 
   const allLogs = useQuery(api.dailyLogs.getAllLogsIncludingDrafts, { limit: 100 });
   const todayLiveActivity = useQuery(api.dailyLogs.getTodayLiveActivity, {});
+  const dailyLogUsers = useQuery(api.dailyLogs.getUsersRequiringDailyLog, {});
   const addReviewerComment = useMutation(api.dailyLogs.addReviewerComment);
+  const submitOnBehalf = useMutation(api.dailyLogs.submitOnBehalf);
+  const unlockLog = useMutation(api.dailyLogs.unlockLog);
 
   // Get unique users from logs for filter dropdown
   const uniqueUsers = React.useMemo(() => {
@@ -156,6 +170,70 @@ function AdminDailyLogView() {
     setCommentText(existingComment || "");
   };
 
+  // Handle submit on behalf
+  const handleSubmitOnBehalf = async () => {
+    if (!user || !submitOnBehalfUser || !submitOnBehalfSummary) return;
+    setIsSubmittingOnBehalf(true);
+    try {
+      const filteredAccomplishments = submitOnBehalfAccomplishments.filter(a => a.trim() !== "");
+      await submitOnBehalf({
+        targetUserId: submitOnBehalfUser as Id<"users">,
+        date: submitOnBehalfDate,
+        summary: submitOnBehalfSummary,
+        accomplishments: filteredAccomplishments,
+        blockers: submitOnBehalfBlockers || undefined,
+        goalsForTomorrow: submitOnBehalfGoals || undefined,
+        hoursWorked: submitOnBehalfHours,
+        adminUserId: user._id,
+      });
+      // Reset form
+      setShowSubmitOnBehalfModal(false);
+      setSubmitOnBehalfUser("");
+      setSubmitOnBehalfDate(new Date().toISOString().split("T")[0]);
+      setSubmitOnBehalfSummary("");
+      setSubmitOnBehalfAccomplishments([""]);
+      setSubmitOnBehalfBlockers("");
+      setSubmitOnBehalfGoals("");
+      setSubmitOnBehalfHours(undefined);
+    } catch (error) {
+      console.error("Failed to submit on behalf:", error);
+      alert("Failed to submit log. " + (error instanceof Error ? error.message : ""));
+    } finally {
+      setIsSubmittingOnBehalf(false);
+    }
+  };
+
+  // Handle unlock log
+  const handleUnlockLog = async (logId: Id<"dailyLogs">) => {
+    if (!user) return;
+    if (!confirm("Are you sure you want to unlock this log for editing? The user will be able to modify it.")) return;
+    try {
+      await unlockLog({ logId, adminUserId: user._id });
+    } catch (error) {
+      console.error("Failed to unlock log:", error);
+      alert("Failed to unlock log");
+    }
+  };
+
+  // Add accomplishment field for submit on behalf
+  const addAccomplishmentField = () => {
+    setSubmitOnBehalfAccomplishments([...submitOnBehalfAccomplishments, ""]);
+  };
+
+  // Update accomplishment
+  const updateAccomplishment = (index: number, value: string) => {
+    const updated = [...submitOnBehalfAccomplishments];
+    updated[index] = value;
+    setSubmitOnBehalfAccomplishments(updated);
+  };
+
+  // Remove accomplishment
+  const removeAccomplishment = (index: number) => {
+    if (submitOnBehalfAccomplishments.length > 1) {
+      setSubmitOnBehalfAccomplishments(submitOnBehalfAccomplishments.filter((_, i) => i !== index));
+    }
+  };
+
   // Filter logs based on showDrafts toggle and selected person
   const filteredLogs = allLogs?.filter(log => {
     const matchesDraft = showDrafts || log.isSubmitted;
@@ -217,6 +295,18 @@ function AdminDailyLogView() {
                   />
                   <span className="text-sm text-slate-300">Drafts</span>
                 </label>
+
+                {/* Submit on Behalf */}
+                <button
+                  onClick={() => setShowSubmitOnBehalfModal(true)}
+                  className="px-3 py-2 bg-amber-500/20 text-amber-400 font-medium rounded-lg hover:bg-amber-500/30 transition-colors flex items-center gap-2 text-sm border border-amber-500/30"
+                  title="Submit log on behalf of employee"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                  </svg>
+                  <span className="hidden sm:inline">Submit for Employee</span>
+                </button>
 
                 {/* Export CSV */}
                 <button
@@ -385,8 +475,8 @@ function AdminDailyLogView() {
                               </h4>
                               {userActivity.todayLog.summary && (
                                 <div className="mb-2">
-                                  <span className="text-slate-400 text-xs">Summary: </span>
-                                  <span className="text-white text-sm">{userActivity.todayLog.summary}</span>
+                                  <span className="text-slate-400 text-xs block mb-1">Summary:</span>
+                                  <p className="text-white text-sm whitespace-pre-wrap leading-relaxed">{userActivity.todayLog.summary}</p>
                                 </div>
                               )}
                               {userActivity.todayLog.accomplishments && userActivity.todayLog.accomplishments.length > 0 && (
@@ -509,12 +599,27 @@ function AdminDailyLogView() {
                           </div>
                           <div className="flex items-center gap-3">
                             {log.isSubmitted ? (
-                              <span className="text-green-400 text-xs flex items-center gap-1 bg-green-500/10 px-2 py-1 rounded-full">
-                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                                Submitted
-                              </span>
+                              <>
+                                <span className="text-green-400 text-xs flex items-center gap-1 bg-green-500/10 px-2 py-1 rounded-full">
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                  Submitted
+                                </span>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleUnlockLog(log._id);
+                                  }}
+                                  className="text-slate-500 hover:text-amber-400 text-xs flex items-center gap-1 px-2 py-1 rounded hover:bg-slate-700/50 transition-colors"
+                                  title="Unlock for editing"
+                                >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                                  </svg>
+                                  Unlock
+                                </button>
+                              </>
                             ) : (
                               <span className="text-amber-400 text-xs flex items-center gap-1 bg-amber-500/10 px-2 py-1 rounded-full">
                                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -538,19 +643,29 @@ function AdminDailyLogView() {
                         {isExpanded && (
                         <div className="px-4 sm:px-6 pb-4 sm:pb-6 border-t border-slate-700/50">
                         {/* Summary */}
-                        <div className="mb-4 pt-4">
-                          <h4 className="text-slate-400 text-xs uppercase tracking-wide mb-1">Summary</h4>
-                          <p className="text-white">{log.summary || <span className="text-slate-500 italic">No summary yet</span>}</p>
+                        <div className="pt-4">
+                          <h4 className="text-slate-400 text-xs uppercase tracking-wide mb-2 flex items-center gap-2">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
+                            </svg>
+                            Summary
+                          </h4>
+                          <p className="text-white text-sm leading-relaxed whitespace-pre-wrap">{log.summary || <span className="text-slate-500 italic">No summary yet</span>}</p>
                         </div>
 
                         {/* Accomplishments */}
                         {log.accomplishments && log.accomplishments.length > 0 && (
-                          <div className="mb-4">
-                            <h4 className="text-slate-400 text-xs uppercase tracking-wide mb-2">Accomplishments</h4>
-                            <ul className="space-y-1">
+                          <div className="pt-4 mt-4 border-t border-slate-700/50">
+                            <h4 className="text-slate-400 text-xs uppercase tracking-wide mb-2 flex items-center gap-2">
+                              <svg className="w-3.5 h-3.5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              Accomplishments ({log.accomplishments.length})
+                            </h4>
+                            <ul className="space-y-1.5">
                               {log.accomplishments.map((acc, i) => (
-                                <li key={i} className="flex items-start gap-2 text-green-400">
-                                  <span className="mt-1">•</span>
+                                <li key={i} className="flex items-start gap-2 text-green-400 text-sm">
+                                  <span className="mt-0.5 text-green-500">•</span>
                                   <span>{acc}</span>
                                 </li>
                               ))}
@@ -560,17 +675,27 @@ function AdminDailyLogView() {
 
                         {/* Blockers */}
                         {log.blockers && (
-                          <div className="mb-4">
-                            <h4 className="text-slate-400 text-xs uppercase tracking-wide mb-1">Blockers</h4>
-                            <p className="text-amber-400">{log.blockers}</p>
+                          <div className="pt-4 mt-4 border-t border-slate-700/50">
+                            <h4 className="text-slate-400 text-xs uppercase tracking-wide mb-2 flex items-center gap-2">
+                              <svg className="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                              </svg>
+                              Blockers
+                            </h4>
+                            <p className="text-amber-400 text-sm leading-relaxed whitespace-pre-wrap">{log.blockers}</p>
                           </div>
                         )}
 
                         {/* Goals for Tomorrow */}
                         {log.goalsForTomorrow && (
-                          <div>
-                            <h4 className="text-slate-400 text-xs uppercase tracking-wide mb-1">Goals for Tomorrow</h4>
-                            <p className="text-slate-300">{log.goalsForTomorrow}</p>
+                          <div className="pt-4 mt-4 border-t border-slate-700/50">
+                            <h4 className="text-slate-400 text-xs uppercase tracking-wide mb-2 flex items-center gap-2">
+                              <svg className="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                              </svg>
+                              Goals for Tomorrow
+                            </h4>
+                            <p className="text-slate-300 text-sm leading-relaxed whitespace-pre-wrap">{log.goalsForTomorrow}</p>
                           </div>
                         )}
 
@@ -675,6 +800,170 @@ function AdminDailyLogView() {
           </div>
         </div>
       </main>
+
+      {/* Submit on Behalf Modal */}
+      {showSubmitOnBehalfModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-slate-700">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white">Submit Log on Behalf of Employee</h2>
+                <button
+                  onClick={() => setShowSubmitOnBehalfModal(false)}
+                  className="text-slate-400 hover:text-white"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <p className="text-slate-400 text-sm mt-1">Fill out a daily log for an employee who forgot to submit.</p>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {/* Employee Select */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1">Employee</label>
+                <select
+                  value={submitOnBehalfUser}
+                  onChange={(e) => setSubmitOnBehalfUser(e.target.value)}
+                  className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-cyan-500"
+                >
+                  <option value="">Select an employee...</option>
+                  {dailyLogUsers?.map((u) => (
+                    <option key={u._id} value={u._id}>{u.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Date */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1">Date</label>
+                <input
+                  type="date"
+                  value={submitOnBehalfDate}
+                  onChange={(e) => setSubmitOnBehalfDate(e.target.value)}
+                  max={new Date().toISOString().split("T")[0]}
+                  className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              {/* Summary */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1">Summary</label>
+                <textarea
+                  value={submitOnBehalfSummary}
+                  onChange={(e) => setSubmitOnBehalfSummary(e.target.value)}
+                  placeholder="What did they work on?"
+                  rows={2}
+                  className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              {/* Accomplishments */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1">Accomplishments</label>
+                <div className="space-y-2">
+                  {submitOnBehalfAccomplishments.map((acc, index) => (
+                    <div key={index} className="flex gap-2">
+                      <input
+                        type="text"
+                        value={acc}
+                        onChange={(e) => updateAccomplishment(index, e.target.value)}
+                        placeholder="Enter accomplishment..."
+                        className="flex-1 px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                      />
+                      {submitOnBehalfAccomplishments.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeAccomplishment(index)}
+                          className="p-2 text-red-400 hover:text-red-300"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={addAccomplishmentField}
+                    className="text-sm text-cyan-400 hover:text-cyan-300"
+                  >
+                    + Add another
+                  </button>
+                </div>
+              </div>
+
+              {/* Hours */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1">Hours Worked</label>
+                <input
+                  type="number"
+                  value={submitOnBehalfHours || ""}
+                  onChange={(e) => setSubmitOnBehalfHours(e.target.value ? parseFloat(e.target.value) : undefined)}
+                  min="0"
+                  max="24"
+                  step="0.5"
+                  placeholder="8"
+                  className="w-32 px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              {/* Blockers (optional) */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1">Blockers <span className="text-slate-500">(optional)</span></label>
+                <textarea
+                  value={submitOnBehalfBlockers}
+                  onChange={(e) => setSubmitOnBehalfBlockers(e.target.value)}
+                  placeholder="Any blockers or challenges?"
+                  rows={2}
+                  className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              {/* Goals (optional) */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1">Goals for Tomorrow <span className="text-slate-500">(optional)</span></label>
+                <textarea
+                  value={submitOnBehalfGoals}
+                  onChange={(e) => setSubmitOnBehalfGoals(e.target.value)}
+                  placeholder="What will they work on next?"
+                  rows={2}
+                  className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-700 flex justify-end gap-3">
+              <button
+                onClick={() => setShowSubmitOnBehalfModal(false)}
+                className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmitOnBehalf}
+                disabled={!submitOnBehalfUser || !submitOnBehalfSummary || isSubmittingOnBehalf}
+                className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {isSubmittingOnBehalf ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Submitting...
+                  </>
+                ) : (
+                  "Submit on Behalf"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1602,12 +1891,872 @@ function EmployeeDailyLogView() {
   );
 }
 
+// Reportee User Type
+interface ReporteeUser {
+  _id: Id<"users">;
+  name: string;
+  email?: string;
+  requiresDailyLog?: boolean;
+}
+
+// ReporteesOnlyView - For managers who don't require daily log but have reportees who do
+function ReporteesOnlyView({ reportees }: { reportees: ReporteeUser[] }) {
+  const today = new Date().toISOString().split("T")[0];
+  const [selectedDate, setSelectedDate] = useState(today);
+  const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
+
+  // Get today's logs for all reportees
+  const reporteeIds = reportees.map(r => r._id);
+  const todayLogs = useQuery(
+    api.dailyLogs.getTodayLogsForUsers,
+    { userIds: reporteeIds, date: selectedDate }
+  );
+
+  // Get recent logs for all reportees
+  const recentLogs = useQuery(
+    api.dailyLogs.getLogsForUsers,
+    { userIds: reporteeIds, limit: 30 }
+  );
+
+  const toggleLogExpansion = (logId: string) => {
+    setExpandedLogs(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(logId)) {
+        newSet.delete(logId);
+      } else {
+        newSet.add(logId);
+      }
+      return newSet;
+    });
+  };
+
+  // Group logs by date
+  const logsByDate = React.useMemo(() => {
+    if (!recentLogs) return {};
+    return recentLogs.reduce((acc, log) => {
+      if (!acc[log.date]) {
+        acc[log.date] = [];
+      }
+      acc[log.date].push(log);
+      return acc;
+    }, {} as Record<string, typeof recentLogs>);
+  }, [recentLogs]);
+
+  const sortedDates = Object.keys(logsByDate).sort((a, b) => b.localeCompare(a));
+
+  return (
+    <div className="flex h-screen bg-slate-900">
+      <Sidebar />
+
+      <main className="flex-1 flex flex-col overflow-hidden">
+        <MobileHeader />
+
+        {/* Header */}
+        <header className="flex-shrink-0 bg-slate-900/80 backdrop-blur-sm border-b border-slate-700 px-4 sm:px-8 py-3 sm:py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold text-white">Team Daily Logs</h1>
+              <p className="text-slate-400 text-xs sm:text-sm mt-1">
+                View daily logs from your direct reports
+              </p>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-slate-400">
+              <svg className="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+              {reportees.length} reportee{reportees.length > 1 ? "s" : ""}
+            </div>
+          </div>
+        </header>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+          <div className="max-w-4xl mx-auto space-y-6">
+
+            {/* Today's Status Card */}
+            <div className="bg-gradient-to-r from-cyan-500/10 to-purple-500/10 border border-cyan-500/30 rounded-xl p-4 sm:p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                <h2 className="text-lg font-semibold text-white">Today&apos;s Status</h2>
+                <span className="text-slate-400 text-sm">
+                  ({new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })})
+                </span>
+              </div>
+
+              <div className="grid gap-3">
+                {reportees.map(reportee => {
+                  const todayLog = todayLogs?.find(l => l.userId === reportee._id);
+                  const hasSubmitted = todayLog?.isSubmitted;
+                  const hasDraft = todayLog && !todayLog.isSubmitted;
+
+                  return (
+                    <div key={reportee._id} className="flex items-center justify-between bg-slate-800/50 rounded-lg p-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-400 font-medium">
+                          {reportee.name.split(" ").map(n => n[0]).join("").slice(0, 2)}
+                        </div>
+                        <div>
+                          <p className="text-white font-medium">{reportee.name}</p>
+                          <p className="text-slate-400 text-sm">{reportee.email}</p>
+                        </div>
+                      </div>
+                      <div>
+                        {hasSubmitted ? (
+                          <span className="px-3 py-1 text-xs font-medium rounded-full bg-green-500/20 text-green-400 border border-green-500/30">
+                            Submitted
+                          </span>
+                        ) : hasDraft ? (
+                          <span className="px-3 py-1 text-xs font-medium rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                            Draft in Progress
+                          </span>
+                        ) : (
+                          <span className="px-3 py-1 text-xs font-medium rounded-full bg-slate-500/20 text-slate-400 border border-slate-500/30">
+                            Not Started
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Recent Logs */}
+            <div className="space-y-4">
+              <h2 className="text-lg font-semibold text-white">Recent Logs</h2>
+
+              {sortedDates.length === 0 ? (
+                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-8 text-center">
+                  <svg className="w-12 h-12 text-slate-600 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <p className="text-slate-400">No logs submitted yet</p>
+                  <p className="text-slate-500 text-sm mt-1">Logs from your direct reports will appear here</p>
+                </div>
+              ) : (
+                sortedDates.map(date => (
+                  <div key={date} className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-medium text-slate-400">
+                        {new Date(date + "T12:00:00").toLocaleDateString("en-US", {
+                          weekday: "long",
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </h3>
+                      {date === today && (
+                        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-cyan-500/20 text-cyan-400">
+                          Today
+                        </span>
+                      )}
+                    </div>
+
+                    {logsByDate[date].filter(l => l.isSubmitted).map(log => (
+                      <div key={log._id} className="bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
+                        <div
+                          className="p-4 cursor-pointer hover:bg-slate-800/80 transition-colors"
+                          onClick={() => toggleLogExpansion(log._id)}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-400 text-sm font-medium">
+                                {log.userName.split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
+                              </div>
+                              <div>
+                                <p className="text-white font-medium">{log.userName}</p>
+                                <p className="text-slate-500 text-sm">{log.summary?.slice(0, 60)}{log.summary && log.summary.length > 60 ? "..." : ""}</p>
+                              </div>
+                            </div>
+                            <svg
+                              className={`w-5 h-5 text-slate-400 transition-transform ${expandedLogs.has(log._id) ? "rotate-180" : ""}`}
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </div>
+                        </div>
+
+                        {expandedLogs.has(log._id) && (
+                          <div className="px-4 pb-4 border-t border-slate-700 pt-4 space-y-4">
+                            {log.summary && (
+                              <div>
+                                <h4 className="text-xs font-medium text-slate-400 uppercase mb-1">Summary</h4>
+                                <p className="text-white">{log.summary}</p>
+                              </div>
+                            )}
+                            {log.accomplishments && log.accomplishments.length > 0 && (
+                              <div>
+                                <h4 className="text-xs font-medium text-slate-400 uppercase mb-1">Accomplishments</h4>
+                                <ul className="space-y-1">
+                                  {log.accomplishments.map((acc: string, i: number) => (
+                                    <li key={i} className="flex items-start gap-2">
+                                      <svg className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                      </svg>
+                                      <span className="text-slate-300">{acc}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {log.blockers && (
+                              <div>
+                                <h4 className="text-xs font-medium text-slate-400 uppercase mb-1">Blockers</h4>
+                                <p className="text-slate-300">{log.blockers}</p>
+                              </div>
+                            )}
+                            {log.goalsForTomorrow && (
+                              <div>
+                                <h4 className="text-xs font-medium text-slate-400 uppercase mb-1">Goals for Tomorrow</h4>
+                                <p className="text-slate-300">{log.goalsForTomorrow}</p>
+                              </div>
+                            )}
+                            {log.hoursWorked && (
+                              <div className="text-sm text-slate-400">
+                                Hours worked: <span className="text-white">{log.hoursWorked}h</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+// ManagerWithReporteesView - For managers who require daily log AND have reportees
+function ManagerWithReporteesView({ reportees }: { reportees: ReporteeUser[] }) {
+  const [activeTab, setActiveTab] = useState<"my-log" | "team">("my-log");
+
+  return (
+    <div className="flex h-screen bg-slate-900">
+      <Sidebar />
+
+      <main className="flex-1 flex flex-col overflow-hidden">
+        <MobileHeader />
+
+        {/* Header with Tabs */}
+        <header className="flex-shrink-0 bg-slate-900/80 backdrop-blur-sm border-b border-slate-700 px-4 sm:px-8 py-3 sm:py-4">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold text-white">Daily Log</h1>
+              <p className="text-slate-400 text-xs sm:text-sm mt-1">
+                Submit your log and view your team&apos;s activity
+              </p>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-slate-400">
+              <svg className="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+              {reportees.length} reportee{reportees.length > 1 ? "s" : ""}
+            </div>
+          </div>
+
+          {/* Tab Navigation */}
+          <div className="flex gap-1 bg-slate-800 rounded-lg p-1">
+            <button
+              onClick={() => setActiveTab("my-log")}
+              className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                activeTab === "my-log"
+                  ? "bg-cyan-500 text-white"
+                  : "text-slate-400 hover:text-white hover:bg-slate-700"
+              }`}
+            >
+              My Daily Log
+            </button>
+            <button
+              onClick={() => setActiveTab("team")}
+              className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                activeTab === "team"
+                  ? "bg-cyan-500 text-white"
+                  : "text-slate-400 hover:text-white hover:bg-slate-700"
+              }`}
+            >
+              Team Logs
+            </button>
+          </div>
+        </header>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto">
+          {activeTab === "my-log" ? (
+            <EmployeeDailyLogViewContent />
+          ) : (
+            <ReporteesLogsContent reportees={reportees} />
+          )}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+// Extracted content from EmployeeDailyLogView for reuse in tabs
+function EmployeeDailyLogViewContent() {
+  const { user } = useAuth();
+  const today = new Date().toISOString().split("T")[0];
+
+  const [selectedDate, setSelectedDate] = useState(today);
+  const [summary, setSummary] = useState("");
+  const [accomplishments, setAccomplishments] = useState<string[]>([""]);
+  const [blockers, setBlockers] = useState("");
+  const [goalsForTomorrow, setGoalsForTomorrow] = useState("");
+  const [hoursWorked, setHoursWorked] = useState<string>("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [showPastLogs, setShowPastLogs] = useState(false);
+
+  // Auto-save state
+  const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const isInitialLoad = React.useRef(true);
+  const autoSaveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  // Queries
+  const existingLog = useQuery(
+    api.dailyLogs.getByDate,
+    user?._id ? { userId: user._id, date: selectedDate } : "skip"
+  );
+  const autoActivities = useQuery(
+    api.dailyLogs.getAutoActivities,
+    user?._id ? { userId: user._id, date: selectedDate } : "skip"
+  );
+  const myLogs = useQuery(
+    api.dailyLogs.getMyLogs,
+    user?._id ? { userId: user._id, limit: 14 } : "skip"
+  );
+
+  // Mutations
+  const saveLog = useMutation(api.dailyLogs.saveLog);
+
+  // Load existing log into form when date changes
+  useEffect(() => {
+    isInitialLoad.current = true;
+    if (existingLog) {
+      setSummary(existingLog.summary);
+      setAccomplishments(
+        existingLog.accomplishments.length > 0 ? existingLog.accomplishments : [""]
+      );
+      setBlockers(existingLog.blockers || "");
+      setGoalsForTomorrow(existingLog.goalsForTomorrow || "");
+      setHoursWorked(existingLog.hoursWorked?.toString() || "");
+      if (existingLog.updatedAt) {
+        setLastSaved(new Date(existingLog.updatedAt));
+      }
+    } else {
+      setSummary("");
+      setAccomplishments([""]);
+      setBlockers("");
+      setGoalsForTomorrow("");
+      setHoursWorked("");
+      setLastSaved(null);
+    }
+    setTimeout(() => {
+      isInitialLoad.current = false;
+    }, 500);
+  }, [existingLog, selectedDate]);
+
+  // Auto-save effect
+  useEffect(() => {
+    if (isInitialLoad.current || !user || existingLog?.isSubmitted) return;
+
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+
+    autoSaveTimeoutRef.current = setTimeout(async () => {
+      const filteredAccomplishments = accomplishments.filter(a => a.trim() !== "");
+      if (!summary.trim() && filteredAccomplishments.length === 0) return;
+
+      setAutoSaveStatus("saving");
+      try {
+        await saveLog({
+          userId: user._id,
+          date: selectedDate,
+          summary: summary.trim(),
+          accomplishments: filteredAccomplishments,
+          blockers: blockers.trim() || undefined,
+          goalsForTomorrow: goalsForTomorrow.trim() || undefined,
+          hoursWorked: hoursWorked ? parseFloat(hoursWorked) : undefined,
+          isSubmitted: false,
+        });
+        setAutoSaveStatus("saved");
+        setLastSaved(new Date());
+      } catch {
+        setAutoSaveStatus("error");
+      }
+    }, 2000);
+
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, [summary, accomplishments, blockers, goalsForTomorrow, hoursWorked, user, selectedDate, existingLog?.isSubmitted, saveLog]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+
+    setIsSaving(true);
+    try {
+      const filteredAccomplishments = accomplishments.filter(a => a.trim() !== "");
+
+      await saveLog({
+        userId: user._id,
+        date: selectedDate,
+        summary: summary.trim(),
+        accomplishments: filteredAccomplishments,
+        blockers: blockers.trim() || undefined,
+        goalsForTomorrow: goalsForTomorrow.trim() || undefined,
+        hoursWorked: hoursWorked ? parseFloat(hoursWorked) : undefined,
+        isSubmitted: true,
+      });
+    } catch (error) {
+      console.error("Failed to submit log:", error);
+      alert("Failed to submit log");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const addAccomplishment = () => {
+    setAccomplishments([...accomplishments, ""]);
+  };
+
+  const updateAccomplishment = (index: number, value: string) => {
+    const updated = [...accomplishments];
+    updated[index] = value;
+    setAccomplishments(updated);
+  };
+
+  const removeAccomplishment = (index: number) => {
+    if (accomplishments.length > 1) {
+      setAccomplishments(accomplishments.filter((_, i) => i !== index));
+    }
+  };
+
+  const isLocked = existingLog?.isSubmitted === true;
+
+  return (
+    <div className="p-4 sm:p-6">
+      <div className="max-w-3xl mx-auto">
+        {/* Submitted confirmation */}
+        {isLocked && (
+          <div className="mb-6 p-4 bg-green-500/10 border border-green-500/30 rounded-xl flex items-center gap-3">
+            <svg className="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div>
+              <p className="text-green-400 font-medium">Log submitted for {selectedDate}</p>
+              <p className="text-green-400/70 text-sm">Your daily log has been submitted and is locked.</p>
+            </div>
+          </div>
+        )}
+
+        {/* Date Selector */}
+        <div className="flex items-center gap-3 mb-6">
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            max={today}
+            className="px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-cyan-500"
+          />
+          {selectedDate !== today && (
+            <button
+              onClick={() => setSelectedDate(today)}
+              className="text-cyan-400 text-sm hover:underline"
+            >
+              Go to today
+            </button>
+          )}
+          {autoSaveStatus === "saving" && (
+            <span className="text-amber-400 text-sm flex items-center gap-1">
+              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              Saving...
+            </span>
+          )}
+          {autoSaveStatus === "saved" && lastSaved && (
+            <span className="text-green-400 text-sm">
+              Saved at {lastSaved.toLocaleTimeString()}
+            </span>
+          )}
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Summary */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Summary <span className="text-red-400">*</span>
+            </label>
+            <textarea
+              value={summary}
+              onChange={(e) => setSummary(e.target.value)}
+              placeholder="Brief overview of your day..."
+              rows={3}
+              disabled={isLocked}
+              className="w-full px-4 py-3 bg-slate-800 border border-slate-600 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 disabled:opacity-50"
+              required
+            />
+          </div>
+
+          {/* Accomplishments */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Accomplishments <span className="text-red-400">*</span>
+            </label>
+            <div className="space-y-2">
+              {accomplishments.map((acc, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={acc}
+                    onChange={(e) => updateAccomplishment(index, e.target.value)}
+                    placeholder={`Accomplishment ${index + 1}`}
+                    disabled={isLocked}
+                    className="flex-1 px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 disabled:opacity-50"
+                  />
+                  {accomplishments.length > 1 && !isLocked && (
+                    <button
+                      type="button"
+                      onClick={() => removeAccomplishment(index)}
+                      className="p-2 text-slate-400 hover:text-red-400"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            {!isLocked && (
+              <button
+                type="button"
+                onClick={addAccomplishment}
+                className="mt-2 text-cyan-400 text-sm hover:underline flex items-center gap-1"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Add another
+              </button>
+            )}
+          </div>
+
+          {/* Blockers */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Blockers <span className="text-slate-500">(optional)</span>
+            </label>
+            <textarea
+              value={blockers}
+              onChange={(e) => setBlockers(e.target.value)}
+              placeholder="Any challenges or blockers?"
+              rows={2}
+              disabled={isLocked}
+              className="w-full px-4 py-3 bg-slate-800 border border-slate-600 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 disabled:opacity-50"
+            />
+          </div>
+
+          {/* Goals for Tomorrow */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Goals for Tomorrow <span className="text-slate-500">(optional)</span>
+            </label>
+            <textarea
+              value={goalsForTomorrow}
+              onChange={(e) => setGoalsForTomorrow(e.target.value)}
+              placeholder="What do you plan to work on?"
+              rows={2}
+              disabled={isLocked}
+              className="w-full px-4 py-3 bg-slate-800 border border-slate-600 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 disabled:opacity-50"
+            />
+          </div>
+
+          {/* Hours Worked */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Hours Worked <span className="text-slate-500">(optional)</span>
+            </label>
+            <input
+              type="number"
+              value={hoursWorked}
+              onChange={(e) => setHoursWorked(e.target.value)}
+              placeholder="8"
+              min="0"
+              max="24"
+              step="0.5"
+              disabled={isLocked}
+              className="w-32 px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 disabled:opacity-50"
+            />
+          </div>
+
+          {/* Submit Button */}
+          {!isLocked && (
+            <button
+              type="submit"
+              disabled={isSaving || !summary.trim()}
+              className="w-full px-6 py-3 bg-cyan-500 text-white font-medium rounded-xl hover:bg-cyan-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {isSaving ? (
+                <>
+                  <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Submit Daily Log
+                </>
+              )}
+            </button>
+          )}
+        </form>
+
+        {/* Past Logs Section */}
+        {myLogs && myLogs.length > 0 && (
+          <div className="mt-8 pt-6 border-t border-slate-700">
+            <button
+              onClick={() => setShowPastLogs(!showPastLogs)}
+              className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
+            >
+              <svg
+                className={`w-5 h-5 transition-transform ${showPastLogs ? "rotate-90" : ""}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+              <span className="font-medium">My Past Logs ({myLogs.filter(l => l.isSubmitted).length})</span>
+            </button>
+
+            {showPastLogs && (
+              <div className="mt-4 space-y-3">
+                {myLogs.filter(l => l.isSubmitted && l.date !== selectedDate).map(log => (
+                  <div key={log._id} className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-white font-medium">
+                        {new Date(log.date + "T12:00:00").toLocaleDateString("en-US", {
+                          weekday: "short",
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </span>
+                      {log.hoursWorked && (
+                        <span className="text-slate-400 text-sm">{log.hoursWorked}h</span>
+                      )}
+                    </div>
+                    <p className="text-slate-300 text-sm">{log.summary}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Reportees logs content for the tab
+function ReporteesLogsContent({ reportees }: { reportees: ReporteeUser[] }) {
+  const today = new Date().toISOString().split("T")[0];
+  const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
+
+  const reporteeIds = reportees.map(r => r._id);
+  const todayLogs = useQuery(
+    api.dailyLogs.getTodayLogsForUsers,
+    { userIds: reporteeIds, date: today }
+  );
+  const recentLogs = useQuery(
+    api.dailyLogs.getLogsForUsers,
+    { userIds: reporteeIds, limit: 30 }
+  );
+
+  const toggleLogExpansion = (logId: string) => {
+    setExpandedLogs(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(logId)) {
+        newSet.delete(logId);
+      } else {
+        newSet.add(logId);
+      }
+      return newSet;
+    });
+  };
+
+  const logsByDate = React.useMemo(() => {
+    if (!recentLogs) return {};
+    return recentLogs.reduce((acc, log) => {
+      if (!acc[log.date]) {
+        acc[log.date] = [];
+      }
+      acc[log.date].push(log);
+      return acc;
+    }, {} as Record<string, typeof recentLogs>);
+  }, [recentLogs]);
+
+  const sortedDates = Object.keys(logsByDate).sort((a, b) => b.localeCompare(a));
+
+  return (
+    <div className="p-4 sm:p-6">
+      <div className="max-w-4xl mx-auto space-y-6">
+        {/* Today's Status */}
+        <div className="bg-gradient-to-r from-cyan-500/10 to-purple-500/10 border border-cyan-500/30 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+            <h2 className="text-lg font-semibold text-white">Today&apos;s Status</h2>
+          </div>
+
+          <div className="grid gap-2">
+            {reportees.map(reportee => {
+              const todayLog = todayLogs?.find(l => l.userId === reportee._id);
+              const hasSubmitted = todayLog?.isSubmitted;
+              const hasDraft = todayLog && !todayLog.isSubmitted;
+
+              return (
+                <div key={reportee._id} className="flex items-center justify-between bg-slate-800/50 rounded-lg p-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-400 text-sm font-medium">
+                      {reportee.name.split(" ").map(n => n[0]).join("").slice(0, 2)}
+                    </div>
+                    <span className="text-white">{reportee.name}</span>
+                  </div>
+                  {hasSubmitted ? (
+                    <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-500/20 text-green-400">Submitted</span>
+                  ) : hasDraft ? (
+                    <span className="px-2 py-1 text-xs font-medium rounded-full bg-amber-500/20 text-amber-400">Draft</span>
+                  ) : (
+                    <span className="px-2 py-1 text-xs font-medium rounded-full bg-slate-500/20 text-slate-400">Not Started</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Recent Logs */}
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold text-white">Recent Logs</h2>
+
+          {sortedDates.length === 0 ? (
+            <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-8 text-center">
+              <p className="text-slate-400">No logs from your team yet</p>
+            </div>
+          ) : (
+            sortedDates.map(date => (
+              <div key={date} className="space-y-2">
+                <h3 className="text-sm font-medium text-slate-400 flex items-center gap-2">
+                  {new Date(date + "T12:00:00").toLocaleDateString("en-US", {
+                    weekday: "long",
+                    month: "short",
+                    day: "numeric",
+                  })}
+                  {date === today && (
+                    <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-cyan-500/20 text-cyan-400">Today</span>
+                  )}
+                </h3>
+
+                {logsByDate[date].filter(l => l.isSubmitted).map(log => (
+                  <div key={log._id} className="bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
+                    <div
+                      className="p-4 cursor-pointer hover:bg-slate-800/80 transition-colors"
+                      onClick={() => toggleLogExpansion(log._id)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-400 text-sm font-medium">
+                            {log.userName.split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
+                          </div>
+                          <div>
+                            <p className="text-white font-medium">{log.userName}</p>
+                            <p className="text-slate-500 text-sm truncate max-w-md">{log.summary?.slice(0, 50)}...</p>
+                          </div>
+                        </div>
+                        <svg className={`w-5 h-5 text-slate-400 transition-transform ${expandedLogs.has(log._id) ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+                    </div>
+
+                    {expandedLogs.has(log._id) && (
+                      <div className="px-4 pb-4 border-t border-slate-700 pt-4 space-y-3">
+                        {log.summary && (
+                          <div>
+                            <h4 className="text-xs font-medium text-slate-400 uppercase mb-1">Summary</h4>
+                            <p className="text-white">{log.summary}</p>
+                          </div>
+                        )}
+                        {log.accomplishments && log.accomplishments.length > 0 && (
+                          <div>
+                            <h4 className="text-xs font-medium text-slate-400 uppercase mb-1">Accomplishments</h4>
+                            <ul className="space-y-1">
+                              {log.accomplishments.map((acc: string, i: number) => (
+                                <li key={i} className="flex items-start gap-2">
+                                  <svg className="w-4 h-4 text-green-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                  <span className="text-slate-300">{acc}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {log.blockers && (
+                          <div>
+                            <h4 className="text-xs font-medium text-slate-400 uppercase mb-1">Blockers</h4>
+                            <p className="text-slate-300">{log.blockers}</p>
+                          </div>
+                        )}
+                        {log.hoursWorked && (
+                          <div className="text-sm text-slate-400">
+                            Hours: <span className="text-white">{log.hoursWorked}h</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Main Component - Decides which view to show
 function DailyLogContent() {
   const { user } = useAuth();
 
   // If requiresDailyLog is checked, user fills out their own log (employee view)
   const requiresDailyLog = user?.requiresDailyLog === true;
+
+  // Check if user has reportees who require daily logs
+  const reporteesRequiringLog = useQuery(
+    api.auth.getReporteesRequiringDailyLog,
+    user?._id ? { managerId: user._id } : "skip"
+  );
 
   if (!user) {
     return (
@@ -1617,9 +2766,32 @@ function DailyLogContent() {
     );
   }
 
-  // If user has requiresDailyLog checked, they see the entry form (regardless of role)
-  // Otherwise, they see the admin view to monitor team logs
-  return requiresDailyLog ? <EmployeeDailyLogView /> : <AdminDailyLogView />;
+  // Loading state for reportees query
+  if (reporteesRequiringLog === undefined) {
+    return (
+      <div className="flex h-screen bg-slate-900 items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500"></div>
+      </div>
+    );
+  }
+
+  const hasReporteesRequiringLog = reporteesRequiringLog && reporteesRequiringLog.length > 0;
+
+  // View logic:
+  // 1. User requires daily log AND has reportees who require daily logs -> ManagerWithReporteesView (both)
+  // 2. User requires daily log but no reportees -> EmployeeDailyLogView (just their own)
+  // 3. User doesn't require daily log but has reportees -> ReporteesOnlyView (just see reportee logs)
+  // 4. User doesn't require daily log and no reportees -> AdminDailyLogView (team view)
+
+  if (requiresDailyLog && hasReporteesRequiringLog) {
+    return <ManagerWithReporteesView reportees={reporteesRequiringLog} />;
+  } else if (requiresDailyLog) {
+    return <EmployeeDailyLogView />;
+  } else if (hasReporteesRequiringLog) {
+    return <ReporteesOnlyView reportees={reporteesRequiringLog} />;
+  } else {
+    return <AdminDailyLogView />;
+  }
 }
 
 export default function DailyLogPage() {

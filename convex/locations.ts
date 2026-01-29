@@ -50,10 +50,13 @@ export const getByName = query({
 export const create = mutation({
   args: {
     name: v.string(),
+    locationType: v.optional(v.string()), // "warehouse" | "retail" | "office" | "distribution"
     address: v.optional(v.string()),
     city: v.optional(v.string()),
     state: v.optional(v.string()),
     zipCode: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    departments: v.optional(v.array(v.string())),
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -71,10 +74,13 @@ export const create = mutation({
 
     return await ctx.db.insert("locations", {
       name: args.name,
+      locationType: args.locationType,
       address: args.address,
       city: args.city,
       state: args.state,
       zipCode: args.zipCode,
+      phone: args.phone,
+      departments: args.departments,
       notes: args.notes,
       isActive: true,
       createdAt: now,
@@ -88,10 +94,13 @@ export const update = mutation({
   args: {
     id: v.id("locations"),
     name: v.optional(v.string()),
+    locationType: v.optional(v.string()),
     address: v.optional(v.string()),
     city: v.optional(v.string()),
     state: v.optional(v.string()),
     zipCode: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    departments: v.optional(v.array(v.string())),
     notes: v.optional(v.string()),
     isActive: v.optional(v.boolean()),
     warehouseManagerName: v.optional(v.string()),

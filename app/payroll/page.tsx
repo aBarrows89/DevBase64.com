@@ -708,7 +708,7 @@ function PayrollContent() {
 
 export default function Payroll() {
   return (
-    <Protected>
+    <Protected minTier={4}>
       <PayrollContent />
     </Protected>
   );

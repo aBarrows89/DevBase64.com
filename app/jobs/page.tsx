@@ -15,7 +15,7 @@ const STATUS_OPTIONS = [
   { value: "closed", label: "Closed", color: "bg-slate-500/20 text-slate-400 border-slate-500/30" },
 ];
 
-const DEPARTMENT_OPTIONS = ["Executive", "Operations", "IT", "Sales", "Logistics", "Management", "HR", "Finance"];
+const DEPARTMENT_OPTIONS = ["Executive", "Operations", "IT", "Sales", "Logistics", "Management", "HR", "Finance", "Retail", "Retail Management"];
 const TYPE_OPTIONS = ["Full-time", "Part-time", "Contract", "Temporary"];
 const POSITION_TYPE_OPTIONS = [
   { value: "hourly", label: "Hourly" },
@@ -33,6 +33,7 @@ interface Job {
   _id: Id<"jobs">;
   title: string;
   location: string;
+  locations?: string[]; // Multiple locations
   type: string;
   positionType?: string;
   department: string;
@@ -51,6 +52,7 @@ interface Job {
 interface JobFormData {
   title: string;
   location: string;
+  locations: string[]; // Multiple locations array
   type: string;
   positionType: string;
   department: string;
@@ -61,6 +63,15 @@ interface JobFormData {
   isActive: boolean;
   badgeType: string;
 }
+
+// Helper to get display text for locations
+const getLocationsDisplay = (job: Job): string => {
+  if (job.locations && job.locations.length > 0) {
+    if (job.locations.length === 1) return job.locations[0];
+    return `${job.locations.length} Locations`;
+  }
+  return job.location;
+};
 
 // Helper function to get effective badge type (supports legacy urgentHiring field)
 const getEffectiveBadgeType = (job: Job): string => {
@@ -109,6 +120,7 @@ export default function JobsPage() {
   const [formData, setFormData] = useState<JobFormData>({
     title: "",
     location: "Bensenville, IL",
+    locations: [],
     type: "Full-time",
     positionType: "hourly",
     department: "Operations",
@@ -119,11 +131,13 @@ export default function JobsPage() {
     isActive: true,
     badgeType: "open_position",
   });
+  const [newLocation, setNewLocation] = useState("");
 
   const resetForm = () => {
     setFormData({
       title: "",
       location: "Bensenville, IL",
+      locations: [],
       type: "Full-time",
       positionType: "hourly",
       department: "Operations",
@@ -134,7 +148,20 @@ export default function JobsPage() {
       isActive: true,
       badgeType: "open_position",
     });
+    setNewLocation("");
     setEditingJob(null);
+  };
+
+  const addLocation = () => {
+    const loc = newLocation.trim();
+    if (loc && !formData.locations.includes(loc)) {
+      setFormData({ ...formData, locations: [...formData.locations, loc] });
+      setNewLocation("");
+    }
+  };
+
+  const removeLocation = (loc: string) => {
+    setFormData({ ...formData, locations: formData.locations.filter(l => l !== loc) });
   };
 
   const openAddModal = () => {
@@ -147,6 +174,7 @@ export default function JobsPage() {
     setFormData({
       title: job.title,
       location: job.location,
+      locations: job.locations || [],
       type: job.type,
       positionType: job.positionType || "hourly",
       department: job.department,
@@ -157,6 +185,27 @@ export default function JobsPage() {
       isActive: job.isActive,
       badgeType: getEffectiveBadgeType(job),
     });
+    setNewLocation("");
+    setShowModal(true);
+  };
+
+  const openCopyModal = (job: Job) => {
+    setEditingJob(null); // Not editing, creating a copy
+    setFormData({
+      title: `${job.title} (Copy)`,
+      location: job.location,
+      locations: job.locations || [],
+      type: job.type,
+      positionType: job.positionType || "hourly",
+      department: job.department,
+      description: job.description,
+      benefits: job.benefits.join(", "),
+      keywords: job.keywords.join(", "),
+      status: "open",
+      isActive: true,
+      badgeType: getEffectiveBadgeType(job),
+    });
+    setNewLocation("");
     setShowModal(true);
   };
 
@@ -180,6 +229,12 @@ export default function JobsPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Validate at least one location
+    if (formData.locations.length === 0) {
+      alert("Please add at least one location.");
+      return;
+    }
+
     const benefitsArray = formData.benefits
       .split(",")
       .map((b) => b.trim())
@@ -190,12 +245,16 @@ export default function JobsPage() {
       .filter((k) => k);
 
     try {
+      // Use first location as primary
+      const primaryLocation = formData.locations[0];
+
       if (editingJob) {
         console.log("Updating job:", editingJob._id, formData);
         await updateJob({
           jobId: editingJob._id,
           title: formData.title,
-          location: formData.location,
+          location: primaryLocation,
+          locations: formData.locations.length > 0 ? formData.locations : undefined,
           type: formData.type,
           positionType: formData.positionType,
           department: formData.department,
@@ -213,7 +272,8 @@ export default function JobsPage() {
         console.log("Creating job:", formData);
         await createJob({
           title: formData.title,
-          location: formData.location,
+          location: primaryLocation,
+          locations: formData.locations.length > 0 ? formData.locations : undefined,
           type: formData.type,
           positionType: formData.positionType,
           department: formData.department,
@@ -269,7 +329,7 @@ export default function JobsPage() {
   const departments = [...new Set(jobs?.map((j) => j.department) || [])];
 
   return (
-    <Protected>
+    <Protected minTier={4}>
       <div className={`min-h-screen flex ${isDark ? "bg-slate-900 text-white" : "bg-[#f2f2f7] text-gray-900"}`}>
         <Sidebar />
         <main className="flex-1 overflow-auto">
@@ -368,7 +428,7 @@ export default function JobsPage() {
                       <td className="px-6 py-4">
                         <div>
                           <p className="font-medium">{job.title}</p>
-                          <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>{job.location}</p>
+                          <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`} title={job.locations?.join(", ") || job.location}>{getLocationsDisplay(job)}</p>
                         </div>
                       </td>
                       <td className="px-6 py-4">
@@ -427,6 +487,20 @@ export default function JobsPage() {
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-end gap-2">
                           <button
+                            onClick={() => openCopyModal(job)}
+                            className={`p-2 transition-colors ${isDark ? "text-slate-400 hover:text-green-400" : "text-gray-500 hover:text-green-600"}`}
+                            title="Copy job"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                              />
+                            </svg>
+                          </button>
+                          <button
                             onClick={() => openEditModal(job)}
                             className={`p-2 transition-colors ${isDark ? "text-slate-400 hover:text-cyan-400" : "text-gray-500 hover:text-blue-600"}`}
                             title="Edit job"
@@ -475,9 +549,18 @@ export default function JobsPage() {
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="min-w-0 flex-1">
                       <p className="font-medium truncate">{job.title}</p>
-                      <p className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>{job.location}</p>
+                      <p className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`} title={job.locations?.join(", ") || job.location}>{getLocationsDisplay(job)}</p>
                     </div>
                     <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => openCopyModal(job)}
+                        className={`p-1.5 transition-colors ${isDark ? "text-slate-400 hover:text-green-400" : "text-gray-500 hover:text-green-600"}`}
+                        title="Copy job"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                      </button>
                       <button
                         onClick={() => openEditModal(job)}
                         className={`p-1.5 transition-colors ${isDark ? "text-slate-400 hover:text-cyan-400" : "text-gray-500 hover:text-blue-600"}`}
@@ -576,15 +659,58 @@ export default function JobsPage() {
                     </div>
                     <div>
                       <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-700"}`}>
-                        Location *
+                        Locations *
                       </label>
-                      <input
-                        type="text"
-                        value={formData.location}
-                        onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                        className={`w-full px-4 py-2 rounded-lg focus:outline-none ${isDark ? "bg-slate-700 border border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border border-gray-300 text-gray-900 focus:border-blue-600"}`}
-                        required
-                      />
+                      {/* Location tags */}
+                      {formData.locations.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          {formData.locations.map((loc) => (
+                            <span
+                              key={loc}
+                              className={`inline-flex items-center gap-1 px-2 py-1 text-sm rounded-full ${isDark ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30" : "bg-blue-100 text-blue-700 border border-blue-300"}`}
+                            >
+                              {loc}
+                              <button
+                                type="button"
+                                onClick={() => removeLocation(loc)}
+                                className="hover:text-red-400 ml-1"
+                              >
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {/* Add new location input */}
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={newLocation}
+                          onChange={(e) => setNewLocation(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              addLocation();
+                            }
+                          }}
+                          placeholder="Add location (e.g., Bensenville, IL)"
+                          className={`flex-1 px-4 py-2 rounded-lg focus:outline-none ${isDark ? "bg-slate-700 border border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border border-gray-300 text-gray-900 focus:border-blue-600"}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={addLocation}
+                          className={`px-3 py-2 rounded-lg transition-colors ${isDark ? "bg-slate-600 hover:bg-slate-500 text-white" : "bg-gray-200 hover:bg-gray-300 text-gray-700"}`}
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                        </button>
+                      </div>
+                      <p className={`text-xs mt-1 ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                        Add one or more locations. Press Enter or click + to add.
+                      </p>
                     </div>
                   </div>
 

@@ -16,6 +16,7 @@ interface User {
   isActive: boolean;
   forcePasswordChange: boolean;
   requiresDailyLog?: boolean;
+  reportsTo?: Id<"users">; // Who this user reports to (their manager)
   createdAt: number;
   lastLoginAt?: number;
   managedLocationIds?: Id<"locations">[];
@@ -59,6 +60,7 @@ function UsersContent() {
     role: "",
     isActive: true,
     requiresDailyLog: false,
+    reportsTo: null as Id<"users"> | null,
     managedLocationIds: [] as Id<"locations">[],
     managedDepartments: [] as string[],
   });
@@ -104,6 +106,7 @@ function UsersContent() {
       role: editForm.role,
       isActive: editForm.isActive,
       requiresDailyLog: editForm.requiresDailyLog,
+      reportsTo: editForm.reportsTo,
       managedLocationIds: editForm.role === "warehouse_manager" ? editForm.managedLocationIds : undefined,
       managedDepartments: editForm.role === "department_manager" ? editForm.managedDepartments : undefined,
     });
@@ -169,6 +172,7 @@ function UsersContent() {
       role: user.role,
       isActive: user.isActive,
       requiresDailyLog: user.requiresDailyLog || false,
+      reportsTo: user.reportsTo || null,
       managedLocationIds: user.managedLocationIds || [],
       managedDepartments: user.managedDepartments || [],
     });
@@ -257,6 +261,17 @@ function UsersContent() {
   const getDepartmentNames = (depts?: string[]) => {
     if (!depts || depts.length === 0) return null;
     return depts.join(", ");
+  };
+
+  const getManagerName = (reportsTo?: Id<"users">) => {
+    if (!reportsTo || !users) return null;
+    const manager = users.find(u => u._id === reportsTo);
+    return manager?.name || null;
+  };
+
+  const getReportees = (userId: Id<"users">) => {
+    if (!users) return [];
+    return users.filter(u => u.reportsTo === userId && u.isActive);
   };
 
   return (
@@ -349,6 +364,16 @@ function UsersContent() {
                         {user.role === "department_manager" && (
                           <div className="text-xs text-slate-500 mt-1">
                             {getDepartmentNames(user.managedDepartments as string[] | undefined) || "No departments assigned"}
+                          </div>
+                        )}
+                        {getManagerName(user.reportsTo as Id<"users"> | undefined) && (
+                          <div className="text-xs text-slate-500 mt-1">
+                            Reports to: {getManagerName(user.reportsTo as Id<"users"> | undefined)}
+                          </div>
+                        )}
+                        {getReportees(user._id).length > 0 && (
+                          <div className="text-xs text-cyan-400 mt-1">
+                            {getReportees(user._id).length} reportee{getReportees(user._id).length > 1 ? "s" : ""}
                           </div>
                         )}
                       </div>
@@ -486,17 +511,27 @@ function UsersContent() {
                   )}
                 </div>
                 {user.role === "warehouse_manager" && (
-                  <div className="text-xs text-slate-500 mb-3">
+                  <div className="text-xs text-slate-500 mb-1">
                     Locations: {getLocationNames(user.managedLocationIds as Id<"locations">[] | undefined) || "None assigned"}
                   </div>
                 )}
                 {user.role === "department_manager" && (
-                  <div className="text-xs text-slate-500 mb-3">
+                  <div className="text-xs text-slate-500 mb-1">
                     Departments: {getDepartmentNames(user.managedDepartments as string[] | undefined) || "None assigned"}
                   </div>
                 )}
+                {getManagerName(user.reportsTo as Id<"users"> | undefined) && (
+                  <div className="text-xs text-slate-500 mb-1">
+                    Reports to: {getManagerName(user.reportsTo as Id<"users"> | undefined)}
+                  </div>
+                )}
+                {getReportees(user._id).length > 0 && (
+                  <div className="text-xs text-cyan-400 mb-3">
+                    {getReportees(user._id).length} reportee{getReportees(user._id).length > 1 ? "s" : ""}
+                  </div>
+                )}
 
-                <div className="text-slate-400 text-xs">
+                <div className="text-slate-400 text-xs mt-2">
                   Last login: {user.lastLoginAt
                     ? new Date(user.lastLoginAt).toLocaleDateString("en-US", {
                         month: "short",
@@ -659,6 +694,26 @@ function UsersContent() {
                 </label>
                 <p className="text-xs text-slate-500 mt-1 ml-7">
                   User will be prompted to fill out daily activity logs
+                </p>
+              </div>
+
+              {/* Reports To - Manager Assignment */}
+              <div>
+                <label className="block text-sm font-medium text-slate-400 mb-1">Reports To</label>
+                <select
+                  value={editForm.reportsTo || ""}
+                  onChange={(e) => setEditForm({ ...editForm, reportsTo: e.target.value ? e.target.value as Id<"users"> : null })}
+                  className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-cyan-500"
+                >
+                  <option value="">No Manager</option>
+                  {users?.filter(u => u._id !== selectedUser?._id && u.isActive).map((user) => (
+                    <option key={user._id} value={user._id}>
+                      {user.name} ({getRoleDisplayName(user.role)})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-slate-500 mt-1">
+                  If this user requires daily logs, their manager can view them
                 </p>
               </div>
 
@@ -866,7 +921,7 @@ function UsersContent() {
 
 export default function UsersPage() {
   return (
-    <Protected>
+    <Protected minTier={4}>
       <UsersContent />
     </Protected>
   );
