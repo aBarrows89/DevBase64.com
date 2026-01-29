@@ -30,7 +30,7 @@ export default function ExitSurveyPage() {
   const interviewId = params.id as string;
 
   const interview = useQuery(api.exitInterviews.getById, {
-    interviewId: interviewId as Id<"exitInterviews">,
+    interviewId: interviewId,
   });
   const submitSurvey = useMutation(api.exitInterviews.submitSelfService);
 

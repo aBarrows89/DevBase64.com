@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { Id } from "./_generated/dataModel";
 
 // ============ QUERIES ============
 
@@ -36,9 +37,18 @@ export const list = query({
 
 // Get a single exit interview
 export const getById = query({
-  args: { interviewId: v.id("exitInterviews") },
+  args: { interviewId: v.string() },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.interviewId);
+    // Validate that the ID looks like a valid Convex ID
+    if (!args.interviewId || args.interviewId.length < 10) {
+      return null;
+    }
+    try {
+      const id = args.interviewId as Id<"exitInterviews">;
+      return await ctx.db.get(id);
+    } catch {
+      return null;
+    }
   },
 });
 
