@@ -80,6 +80,21 @@ function EngagementDashboardContent() {
   return (
     <div className={`min-h-screen ${isDark ? "bg-slate-900" : "bg-gray-50"}`}>
       <div className="max-w-7xl mx-auto px-4 py-8">
+        {/* Back Button */}
+        <Link
+          href="/"
+          className={`inline-flex items-center gap-2 mb-6 px-3 py-2 rounded-lg transition-colors ${
+            isDark
+              ? "text-slate-400 hover:text-white hover:bg-slate-800"
+              : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+          }`}
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          Back to Dashboard
+        </Link>
+
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-8">
           <div>
