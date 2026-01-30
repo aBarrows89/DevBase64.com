@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
+import Anthropic from "@anthropic-ai/sdk";
 
 // ============ QUERIES ============
 
@@ -504,5 +505,152 @@ export const createForBulkEmail = internalMutation({
     });
 
     return interviewId;
+  },
+});
+
+// AI-generated summary of exit interview responses
+export const generateAISummary = action({
+  args: {
+    startDate: v.optional(v.string()),
+    endDate: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<{
+    success: boolean;
+    summary?: string;
+    keyThemes?: string[];
+    actionItems?: string[];
+    sentimentOverview?: string;
+    error?: string;
+  }> => {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      return { success: false, error: "AI service not configured" };
+    }
+
+    // Get completed exit interviews
+    let interviews = await ctx.runQuery(internal.exitInterviews.getCompletedInterviews, {});
+
+    // Filter by date range if provided
+    if (args.startDate) {
+      interviews = interviews.filter((i: { terminationDate: string }) => i.terminationDate >= args.startDate!);
+    }
+    if (args.endDate) {
+      interviews = interviews.filter((i: { terminationDate: string }) => i.terminationDate <= args.endDate!);
+    }
+
+    if (interviews.length === 0) {
+      return {
+        success: true,
+        summary: "No completed exit interviews found for the specified period.",
+        keyThemes: [],
+        actionItems: [],
+        sentimentOverview: "N/A"
+      };
+    }
+
+    // Format interviews for AI analysis
+    const interviewData = interviews.map((i: {
+      personnelName: string;
+      department?: string;
+      position?: string;
+      terminationDate: string;
+      responses?: {
+        primaryReason?: string;
+        satisfactionRating?: number;
+        managementRating?: number;
+        workLifeBalanceRating?: number;
+        compensationRating?: number;
+        growthOpportunityRating?: number;
+        wouldReturn?: string;
+        wouldRecommend?: string;
+        whatLikedMost?: string;
+        whatCouldImprove?: string;
+        additionalComments?: string;
+      };
+    }) => ({
+      department: i.department,
+      position: i.position,
+      terminationDate: i.terminationDate,
+      responses: i.responses,
+    }));
+
+    const anthropic = new Anthropic({ apiKey });
+
+    try {
+      const response = await anthropic.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 2000,
+        messages: [
+          {
+            role: "user",
+            content: `You are an HR analytics expert analyzing exit interview data for Import Export Tire Co.
+
+Analyze the following ${interviews.length} exit interview responses and provide:
+
+1. **Executive Summary** (2-3 paragraphs): Overall patterns, trends, and key insights from the exit interviews.
+
+2. **Key Themes** (bullet points): The main recurring themes or issues mentioned by departing employees.
+
+3. **Sentiment Overview**: Overall sentiment (positive/negative/mixed) and what's driving it.
+
+4. **Action Items** (prioritized list): Specific, actionable recommendations for management to improve retention.
+
+5. **Departmental Insights**: Any department-specific patterns or concerns.
+
+Exit Interview Data:
+${JSON.stringify(interviewData, null, 2)}
+
+Rating Scale: 1 = Poor, 5 = Excellent
+Please be specific and reference actual feedback where relevant. Focus on actionable insights.`
+          }
+        ],
+      });
+
+      const content = response.content[0];
+      if (content.type !== "text") {
+        return { success: false, error: "Unexpected AI response format" };
+      }
+
+      // Parse the AI response to extract sections
+      const fullText = content.text;
+
+      // Extract key themes (look for bullet points after "Key Themes")
+      const themesMatch = fullText.match(/Key Themes[:\s]*\n([\s\S]*?)(?=\n\n|\n\d\.|\n\*\*)/i);
+      const keyThemes = themesMatch
+        ? themesMatch[1].split('\n').filter(line => line.trim().startsWith('-') || line.trim().startsWith('•')).map(line => line.replace(/^[-•*]\s*/, '').trim())
+        : [];
+
+      // Extract action items
+      const actionsMatch = fullText.match(/Action Items[:\s]*\n([\s\S]*?)(?=\n\n\*\*|\n\n\d\.|\n\*\*[A-Z]|$)/i);
+      const actionItems = actionsMatch
+        ? actionsMatch[1].split('\n').filter(line => line.trim().startsWith('-') || line.trim().startsWith('•') || /^\d\./.test(line.trim())).map(line => line.replace(/^[-•*\d.]\s*/, '').trim())
+        : [];
+
+      // Extract sentiment
+      const sentimentMatch = fullText.match(/Sentiment Overview[:\s]*\n([\s\S]*?)(?=\n\n|\n\*\*)/i);
+      const sentimentOverview = sentimentMatch ? sentimentMatch[1].trim() : "See full summary";
+
+      return {
+        success: true,
+        summary: fullText,
+        keyThemes: keyThemes.slice(0, 10),
+        actionItems: actionItems.slice(0, 10),
+        sentimentOverview,
+      };
+    } catch (error) {
+      console.error("AI summary generation failed:", error);
+      return { success: false, error: String(error) };
+    }
+  },
+});
+
+// Internal query to get completed interviews for AI analysis
+export const getCompletedInterviews = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.db
+      .query("exitInterviews")
+      .filter((q) => q.eq(q.field("status"), "completed"))
+      .collect();
   },
 });

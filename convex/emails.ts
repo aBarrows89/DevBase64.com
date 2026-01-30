@@ -1460,12 +1460,13 @@ export const testExitInterviewEmail = action({
   args: {
     employeeName: v.string(),
     employeeEmail: v.string(),
+    exitInterviewId: v.optional(v.string()), // Pass a real ID for working links
   },
   handler: async (ctx, args): Promise<{ success: boolean; emailId?: string; error?: string }> => {
     const result = await ctx.runAction(internal.emails.sendExitInterviewEmail, {
       employeeName: args.employeeName,
       employeeEmail: args.employeeEmail,
-      exitInterviewId: "test-" + Date.now(),
+      exitInterviewId: args.exitInterviewId || "test-" + Date.now(),
       terminationDate: new Date().toISOString().split("T")[0],
       position: "Test Position",
       department: "IT",

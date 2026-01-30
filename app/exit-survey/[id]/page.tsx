@@ -157,9 +157,9 @@ export default function ExitSurveyPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Already Submitted</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Thank You for Completing Your Exit Survey</h1>
           <p className="text-gray-600">
-            This exit survey has already been completed. Thank you for your feedback.
+            We appreciate you taking the time to share your feedback. Your input helps us improve the workplace for current and future team members.
           </p>
         </div>
       </div>
