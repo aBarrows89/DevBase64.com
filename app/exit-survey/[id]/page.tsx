@@ -223,7 +223,7 @@ export default function ExitSurveyPage() {
             <select
               value={responses.primaryReason}
               onChange={(e) => setResponses((prev) => ({ ...prev, primaryReason: e.target.value }))}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1C3F60] focus:border-transparent"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1C3F60] focus:border-transparent bg-white text-gray-900"
             >
               <option value="">Select a reason...</option>
               {REASON_OPTIONS.map((reason) => (
@@ -328,7 +328,7 @@ export default function ExitSurveyPage() {
                 value={responses.whatLikedMost}
                 onChange={(e) => setResponses((prev) => ({ ...prev, whatLikedMost: e.target.value }))}
                 rows={3}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1C3F60] focus:border-transparent"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1C3F60] focus:border-transparent bg-white text-gray-900"
                 placeholder="Your response..."
               />
             </div>
@@ -341,7 +341,7 @@ export default function ExitSurveyPage() {
                 value={responses.whatCouldImprove}
                 onChange={(e) => setResponses((prev) => ({ ...prev, whatCouldImprove: e.target.value }))}
                 rows={3}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1C3F60] focus:border-transparent"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1C3F60] focus:border-transparent bg-white text-gray-900"
                 placeholder="Your response..."
               />
             </div>
@@ -354,7 +354,7 @@ export default function ExitSurveyPage() {
                 value={responses.additionalComments}
                 onChange={(e) => setResponses((prev) => ({ ...prev, additionalComments: e.target.value }))}
                 rows={3}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1C3F60] focus:border-transparent"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1C3F60] focus:border-transparent bg-white text-gray-900"
                 placeholder="Your response..."
               />
             </div>
