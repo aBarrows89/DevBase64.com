@@ -544,15 +544,15 @@ function EngagementDashboardContent() {
             </div>
 
             {/* AI Insights Section */}
-            <div className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm`}>
+            <div className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm print:shadow print:border print:break-inside-avoid`}>
               <div className="flex items-center justify-between mb-4">
-                <h3 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                <h3 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"} print:text-gray-900`}>
                   AI-Powered Insights
                 </h3>
                 <button
                   onClick={handleGenerateAIInsights}
                   disabled={aiInsights.loading || (exitAnalytics?.totalCompleted || 0) === 0}
-                  className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
+                  className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 print:hidden ${
                     aiInsights.loading || (exitAnalytics?.totalCompleted || 0) === 0
                       ? "bg-gray-300 text-gray-500 cursor-not-allowed"
                       : isDark
@@ -580,32 +580,32 @@ function EngagementDashboardContent() {
               </div>
 
               {aiInsights.error && (
-                <div className="p-4 bg-red-100 border border-red-300 text-red-700 rounded-lg mb-4">
+                <div className="p-4 bg-red-100 border border-red-300 text-red-700 rounded-lg mb-4 print:hidden">
                   {aiInsights.error}
                 </div>
               )}
 
               {(exitAnalytics?.totalCompleted || 0) === 0 && !aiInsights.summary && (
-                <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"} print:hidden`}>
                   Complete at least one exit interview to generate AI insights.
                 </p>
               )}
 
               {aiInsights.summary && (
-                <div className="space-y-6">
+                <div className="space-y-6 print:space-y-4">
                   {/* Key Themes */}
                   {aiInsights.keyThemes && aiInsights.keyThemes.length > 0 && (
                     <div>
-                      <h4 className={`font-semibold mb-2 ${isDark ? "text-slate-200" : "text-gray-800"}`}>
+                      <h4 className={`font-semibold mb-2 ${isDark ? "text-slate-200" : "text-gray-800"} print:text-gray-900`}>
                         Key Themes
                       </h4>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap gap-2 print:gap-1">
                         {aiInsights.keyThemes.map((theme, idx) => (
                           <span
                             key={idx}
                             className={`px-3 py-1 rounded-full text-sm ${
                               isDark ? "bg-slate-700 text-slate-300" : "bg-gray-100 text-gray-700"
-                            }`}
+                            } print:bg-gray-200 print:text-gray-800`}
                           >
                             {theme}
                           </span>
@@ -617,18 +617,18 @@ function EngagementDashboardContent() {
                   {/* Action Items */}
                   {aiInsights.actionItems && aiInsights.actionItems.length > 0 && (
                     <div>
-                      <h4 className={`font-semibold mb-2 ${isDark ? "text-slate-200" : "text-gray-800"}`}>
+                      <h4 className={`font-semibold mb-2 ${isDark ? "text-slate-200" : "text-gray-800"} print:text-gray-900`}>
                         Recommended Actions
                       </h4>
-                      <ul className="space-y-2">
+                      <ul className="space-y-2 print:space-y-1">
                         {aiInsights.actionItems.map((item, idx) => (
                           <li key={idx} className="flex items-start gap-2">
-                            <span className="text-purple-500 mt-1">
+                            <span className="text-purple-500 mt-1 print:text-gray-600">
                               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                               </svg>
                             </span>
-                            <span className={`text-sm ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                            <span className={`text-sm ${isDark ? "text-slate-300" : "text-gray-700"} print:text-gray-800`}>
                               {item}
                             </span>
                           </li>
@@ -639,15 +639,15 @@ function EngagementDashboardContent() {
 
                   {/* Full Summary */}
                   <div>
-                    <h4 className={`font-semibold mb-2 ${isDark ? "text-slate-200" : "text-gray-800"}`}>
+                    <h4 className={`font-semibold mb-2 ${isDark ? "text-slate-200" : "text-gray-800"} print:text-gray-900`}>
                       Full Analysis
                     </h4>
                     <div
                       className={`prose prose-sm max-w-none ${isDark ? "prose-invert" : ""} ${
                         isDark ? "text-slate-300" : "text-gray-700"
-                      }`}
+                      } print:text-gray-800`}
                     >
-                      <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">
+                      <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed print:text-xs">
                         {aiInsights.summary}
                       </pre>
                     </div>
@@ -656,8 +656,8 @@ function EngagementDashboardContent() {
               )}
             </div>
 
-            {/* Pending Exit Interviews - MOVED TO BOTTOM */}
-            <div className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm print:shadow print:border`}>
+            {/* Pending Exit Interviews - HIDDEN FROM PRINT */}
+            <div className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm print:hidden`}>
               <h3 className={`text-lg font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"} print:text-gray-900`}>
                 Pending Exit Interviews ({pendingExitInterviews?.length || 0})
               </h3>
