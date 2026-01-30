@@ -623,7 +623,13 @@ export const resendSurveyEmails = action({
     let skipped = 0;
 
     for (const assignment of assignments) {
-      if (assignment.personnel?.email) {
+      // Skip terminated employees - they shouldn't receive pulse surveys
+      if (assignment.personnel?.status === "terminated") {
+        skipped++;
+        continue;
+      }
+
+      if (assignment.personnel?.email && assignment.personnel?.status === "active") {
         await ctx.runAction(internal.emails.sendSurveyEmail, {
           employeeName: `${assignment.personnel.firstName} ${assignment.personnel.lastName}`,
           employeeEmail: assignment.personnel.email,
