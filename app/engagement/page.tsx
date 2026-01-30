@@ -461,87 +461,76 @@ function EngagementDashboardContent() {
 
         {/* Exit Interviews Tab */}
         {activeTab === "exit" && (
-          <div className="space-y-6">
+          <div className="space-y-6 print:space-y-4" id="exit-interviews-report">
+            {/* Print Header - Only shows when printing */}
+            <div className="hidden print:block mb-6">
+              <h1 className="text-2xl font-bold text-gray-900">Exit Interview Report</h1>
+              <p className="text-gray-600">IE Central - Generated {new Date().toLocaleDateString()}</p>
+            </div>
+
+            {/* Print Button */}
+            <div className="flex justify-end print:hidden">
+              <button
+                onClick={() => window.print()}
+                className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 ${
+                  isDark
+                    ? "bg-slate-700 hover:bg-slate-600 text-white"
+                    : "bg-gray-100 hover:bg-gray-200 text-gray-700"
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                </svg>
+                Print Report
+              </button>
+            </div>
+
             {/* Exit Interview Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm`}>
-                <div className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>Completed</div>
-                <div className={`text-3xl font-bold mt-1 ${isDark ? "text-white" : "text-gray-900"}`}>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 print:grid-cols-4">
+              <div className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm print:shadow print:border`}>
+                <div className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"} print:text-gray-500`}>Completed</div>
+                <div className={`text-3xl font-bold mt-1 ${isDark ? "text-white" : "text-gray-900"} print:text-gray-900`}>
                   {exitAnalytics?.totalCompleted || 0}
                 </div>
               </div>
-              <div className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm`}>
-                <div className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>Avg Satisfaction</div>
-                <div className={`text-3xl font-bold mt-1 ${getScoreColor(exitAnalytics?.avgSatisfaction ?? null)}`}>
+              <div className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm print:shadow print:border`}>
+                <div className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"} print:text-gray-500`}>Avg Satisfaction</div>
+                <div className={`text-3xl font-bold mt-1 ${getScoreColor(exitAnalytics?.avgSatisfaction ?? null)} print:text-gray-900`}>
                   {exitAnalytics?.avgSatisfaction?.toFixed(1) || "—"}
                 </div>
               </div>
-              <div className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm`}>
-                <div className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>Would Return</div>
-                <div className={`text-3xl font-bold mt-1 text-green-500`}>
+              <div className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm print:shadow print:border`}>
+                <div className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"} print:text-gray-500`}>Would Return</div>
+                <div className={`text-3xl font-bold mt-1 text-green-500 print:text-gray-900`}>
                   {exitAnalytics?.wouldReturn?.yes || 0}
                 </div>
               </div>
-              <div className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm`}>
-                <div className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>Would Recommend</div>
-                <div className={`text-3xl font-bold mt-1 text-green-500`}>
+              <div className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm print:shadow print:border`}>
+                <div className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"} print:text-gray-500`}>Would Recommend</div>
+                <div className={`text-3xl font-bold mt-1 text-green-500 print:text-gray-900`}>
                   {exitAnalytics?.wouldRecommend?.yes || 0}
                 </div>
               </div>
             </div>
 
-            {/* Pending Exit Interviews */}
-            <div className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm`}>
-              <h3 className={`text-lg font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
-                Pending Exit Interviews ({pendingExitInterviews?.length || 0})
-              </h3>
-              {pendingExitInterviews && pendingExitInterviews.length > 0 ? (
-                <div className="space-y-3">
-                  {pendingExitInterviews.map((interview) => (
-                    <div
-                      key={interview._id}
-                      className={`p-4 rounded-lg flex items-center justify-between ${isDark ? "bg-slate-700" : "bg-gray-50"}`}
-                    >
-                      <div>
-                        <span className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
-                          {interview.personnelName}
-                        </span>
-                        <span className={`mx-2 ${isDark ? "text-slate-500" : "text-gray-400"}`}>•</span>
-                        <span className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                          {interview.department} - {interview.position}
-                        </span>
-                      </div>
-                      <div className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                        Term date: {interview.terminationDate}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                  No pending exit interviews
-                </p>
-              )}
-            </div>
-
-            {/* Top Reasons for Leaving */}
-            <div className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm`}>
-              <h3 className={`text-lg font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
+            {/* Top Reasons for Leaving - MOVED TO TOP */}
+            <div className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm print:shadow print:border`}>
+              <h3 className={`text-lg font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"} print:text-gray-900`}>
                 Top Reasons for Leaving
               </h3>
               {exitAnalytics?.topReasons && exitAnalytics.topReasons.length > 0 ? (
                 <div className="space-y-3">
                   {exitAnalytics.topReasons.map((item, idx) => (
                     <div key={item.reason} className="flex items-center gap-4">
-                      <span className={`w-6 text-center font-bold ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                      <span className={`w-6 text-center font-bold ${isDark ? "text-slate-500" : "text-gray-400"} print:text-gray-600`}>
                         {idx + 1}
                       </span>
                       <div className="flex-1">
-                        <div className={`text-sm ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                        <div className={`text-sm ${isDark ? "text-slate-300" : "text-gray-700"} print:text-gray-700`}>
                           {item.reason}
                         </div>
                       </div>
-                      <span className={`font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                      <span className={`font-semibold ${isDark ? "text-white" : "text-gray-900"} print:text-gray-900`}>
                         {item.count}
                       </span>
                     </div>
@@ -664,6 +653,40 @@ function EngagementDashboardContent() {
                     </div>
                   </div>
                 </div>
+              )}
+            </div>
+
+            {/* Pending Exit Interviews - MOVED TO BOTTOM */}
+            <div className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm print:shadow print:border`}>
+              <h3 className={`text-lg font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"} print:text-gray-900`}>
+                Pending Exit Interviews ({pendingExitInterviews?.length || 0})
+              </h3>
+              {pendingExitInterviews && pendingExitInterviews.length > 0 ? (
+                <div className="space-y-3">
+                  {pendingExitInterviews.map((interview) => (
+                    <div
+                      key={interview._id}
+                      className={`p-4 rounded-lg flex items-center justify-between ${isDark ? "bg-slate-700" : "bg-gray-50"} print:bg-gray-50`}
+                    >
+                      <div>
+                        <span className={`font-medium ${isDark ? "text-white" : "text-gray-900"} print:text-gray-900`}>
+                          {interview.personnelName}
+                        </span>
+                        <span className={`mx-2 ${isDark ? "text-slate-500" : "text-gray-400"}`}>•</span>
+                        <span className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"} print:text-gray-500`}>
+                          {interview.department} - {interview.position}
+                        </span>
+                      </div>
+                      <div className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"} print:text-gray-500`}>
+                        Term date: {interview.terminationDate}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                  No pending exit interviews
+                </p>
               )}
             </div>
           </div>

@@ -403,3 +403,110 @@ button {
     appearance: none;
   }
 }
+
+/* =====================================================
+   PRINT STYLES
+   ===================================================== */
+@media print {
+  /* Hide non-essential elements when printing */
+  nav,
+  aside,
+  header,
+  .print\\:hidden,
+  button:not(.print-visible),
+  [data-print-hide="true"] {
+    display: none !important;
+  }
+
+  /* Reset background colors for printing */
+  body,
+  html,
+  .min-h-screen,
+  .bg-slate-900,
+  .bg-gray-50 {
+    background: white !important;
+    color: black !important;
+  }
+
+  /* Card styles for print */
+  .rounded-xl,
+  .rounded-lg {
+    border: 1px solid #e5e7eb !important;
+    box-shadow: none !important;
+    background: white !important;
+  }
+
+  /* Ensure all text is black for print */
+  * {
+    color: black !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Allow colored stats to show */
+  .text-green-500,
+  .text-green-400 {
+    color: #22c55e !important;
+  }
+
+  .text-red-500,
+  .text-red-400 {
+    color: #ef4444 !important;
+  }
+
+  .text-yellow-500,
+  .text-yellow-400 {
+    color: #eab308 !important;
+  }
+
+  /* Page breaks */
+  .page-break-before {
+    page-break-before: always;
+  }
+
+  .page-break-after {
+    page-break-after: always;
+  }
+
+  .avoid-break {
+    page-break-inside: avoid;
+  }
+
+  /* Print margins */
+  @page {
+    margin: 1in;
+    size: letter portrait;
+  }
+
+  /* Ensure grids display properly */
+  .grid {
+    display: grid !important;
+  }
+
+  .grid-cols-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+
+  /* Space between sections */
+  .space-y-6 > * + * {
+    margin-top: 1.5rem !important;
+  }
+
+  /* Typography adjustments for print */
+  h1, h2, h3 {
+    color: black !important;
+    font-weight: bold !important;
+  }
+
+  /* Links shouldn't be underlined in print */
+  a {
+    text-decoration: none !important;
+  }
+
+  /* Show full URLs for links */
+  a[href^="http"]:after {
+    content: " (" attr(href) ")";
+    font-size: 0.8em;
+    color: #666 !important;
+  }
+}
