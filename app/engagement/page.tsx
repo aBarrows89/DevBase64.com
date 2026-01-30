@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import Protected from "@/app/protected";
 import { useAuth } from "@/app/auth-context";
@@ -20,6 +20,14 @@ function EngagementDashboardContent() {
   const [selectedDepartment, setSelectedDepartment] = useState("");
   const [activeTab, setActiveTab] = useState<"overview" | "surveys" | "exit" | "offers">("overview");
   const [showCreateSurvey, setShowCreateSurvey] = useState(false);
+  const [aiInsights, setAiInsights] = useState<{
+    loading: boolean;
+    summary?: string;
+    keyThemes?: string[];
+    actionItems?: string[];
+    sentimentOverview?: string;
+    error?: string;
+  }>({ loading: false });
 
   // Queries
   const engagementMetrics = useQuery(api.surveys.getEngagementMetrics, {
@@ -38,9 +46,34 @@ function EngagementDashboardContent() {
   const recentOffers = useQuery(api.offerLetters.list, {});
   const departments = useQuery(api.personnel.getDepartments);
 
-  // Mutations
+  // Mutations & Actions
   const createDefaultSurvey = useMutation(api.surveys.createDefaultPulseSurvey);
   const sendSurvey = useMutation(api.surveys.sendSurvey);
+  const generateAISummary = useAction(api.exitInterviews.generateAISummary);
+
+  const handleGenerateAIInsights = async () => {
+    setAiInsights({ loading: true });
+    try {
+      const result = await generateAISummary({
+        startDate: dateRange.startDate || undefined,
+        endDate: dateRange.endDate || undefined,
+      });
+      if (result.success) {
+        setAiInsights({
+          loading: false,
+          summary: result.summary,
+          keyThemes: result.keyThemes,
+          actionItems: result.actionItems,
+          sentimentOverview: result.sentimentOverview,
+        });
+      } else {
+        setAiInsights({ loading: false, error: result.error || "Failed to generate insights" });
+      }
+    } catch (error) {
+      console.error("Failed to generate AI insights:", error);
+      setAiInsights({ loading: false, error: "Failed to generate AI insights" });
+    }
+  };
 
   const handleCreateDefaultSurvey = async () => {
     if (!user) return;
@@ -518,6 +551,119 @@ function EngagementDashboardContent() {
                 <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                   No exit interview data yet
                 </p>
+              )}
+            </div>
+
+            {/* AI Insights Section */}
+            <div className={`p-6 rounded-xl ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm`}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  AI-Powered Insights
+                </h3>
+                <button
+                  onClick={handleGenerateAIInsights}
+                  disabled={aiInsights.loading || (exitAnalytics?.totalCompleted || 0) === 0}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
+                    aiInsights.loading || (exitAnalytics?.totalCompleted || 0) === 0
+                      ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                      : isDark
+                      ? "bg-purple-600 hover:bg-purple-700 text-white"
+                      : "bg-purple-600 hover:bg-purple-700 text-white"
+                  }`}
+                >
+                  {aiInsights.loading ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Analyzing...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      Generate AI Summary
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {aiInsights.error && (
+                <div className="p-4 bg-red-100 border border-red-300 text-red-700 rounded-lg mb-4">
+                  {aiInsights.error}
+                </div>
+              )}
+
+              {(exitAnalytics?.totalCompleted || 0) === 0 && !aiInsights.summary && (
+                <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                  Complete at least one exit interview to generate AI insights.
+                </p>
+              )}
+
+              {aiInsights.summary && (
+                <div className="space-y-6">
+                  {/* Key Themes */}
+                  {aiInsights.keyThemes && aiInsights.keyThemes.length > 0 && (
+                    <div>
+                      <h4 className={`font-semibold mb-2 ${isDark ? "text-slate-200" : "text-gray-800"}`}>
+                        Key Themes
+                      </h4>
+                      <div className="flex flex-wrap gap-2">
+                        {aiInsights.keyThemes.map((theme, idx) => (
+                          <span
+                            key={idx}
+                            className={`px-3 py-1 rounded-full text-sm ${
+                              isDark ? "bg-slate-700 text-slate-300" : "bg-gray-100 text-gray-700"
+                            }`}
+                          >
+                            {theme}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Action Items */}
+                  {aiInsights.actionItems && aiInsights.actionItems.length > 0 && (
+                    <div>
+                      <h4 className={`font-semibold mb-2 ${isDark ? "text-slate-200" : "text-gray-800"}`}>
+                        Recommended Actions
+                      </h4>
+                      <ul className="space-y-2">
+                        {aiInsights.actionItems.map((item, idx) => (
+                          <li key={idx} className="flex items-start gap-2">
+                            <span className="text-purple-500 mt-1">
+                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                              </svg>
+                            </span>
+                            <span className={`text-sm ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                              {item}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Full Summary */}
+                  <div>
+                    <h4 className={`font-semibold mb-2 ${isDark ? "text-slate-200" : "text-gray-800"}`}>
+                      Full Analysis
+                    </h4>
+                    <div
+                      className={`prose prose-sm max-w-none ${isDark ? "prose-invert" : ""} ${
+                        isDark ? "text-slate-300" : "text-gray-700"
+                      }`}
+                    >
+                      <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">
+                        {aiInsights.summary}
+                      </pre>
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
           </div>
