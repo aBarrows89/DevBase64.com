@@ -288,6 +288,55 @@ export const getAllUsers = query({
   },
 });
 
+// Get formatted user list for display
+export const getUsersFormatted = query({
+  args: {},
+  handler: async (ctx) => {
+    const users = await ctx.db.query("users").collect();
+    const locations = await ctx.db.query("locations").collect();
+
+    const locationMap = new Map(locations.map(l => [l._id, l.name]));
+
+    const tierMap: Record<string, { tier: number; label: string }> = {
+      super_admin: { tier: 5, label: "T5 - Super Admin" },
+      admin: { tier: 4, label: "T4 - Admin" },
+      warehouse_director: { tier: 3, label: "T3 - Director" },
+      warehouse_manager: { tier: 2, label: "T2 - Warehouse Manager" },
+      office_manager: { tier: 2, label: "T2 - Office Manager" },
+      retail_manager: { tier: 2, label: "T2 - Retail Manager" },
+      retail_store_manager: { tier: 2, label: "T2 - Retail Store Manager" },
+      department_manager: { tier: 1, label: "T1 - Department Manager" },
+      shift_lead: { tier: 1, label: "T1 - Shift Lead" },
+      retail_associate: { tier: 1, label: "T1 - Retail Associate" },
+      member: { tier: 0, label: "T0 - Member" },
+      employee: { tier: 0, label: "T0 - Employee" },
+    };
+
+    return users
+      .sort((a, b) => {
+        const tierA = tierMap[a.role]?.tier ?? -1;
+        const tierB = tierMap[b.role]?.tier ?? -1;
+        if (tierB !== tierA) return tierB - tierA;
+        return a.name.localeCompare(b.name);
+      })
+      .map(user => ({
+        name: user.name,
+        email: user.email || "N/A",
+        role: tierMap[user.role]?.label || user.role,
+        tier: tierMap[user.role]?.tier ?? 0,
+        status: user.isActive ? "Active" : "Inactive",
+        locations: user.managedLocationIds?.map(id => locationMap.get(id) || "Unknown").join(", ") || "",
+        departments: user.managedDepartments?.join(", ") || "",
+        flags: [
+          user.requiresDailyLog ? "Daily Log" : null,
+          user.isFinalTimeApprover ? "Final Time Approver" : null,
+          user.isPayrollProcessor ? "Payroll Processor" : null,
+        ].filter(Boolean).join(", ") || "",
+        lastLogin: user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleDateString() : "Never",
+      }));
+  },
+});
+
 // Seed superuser (bypasses existing user check)
 export const seedSuperuser = mutation({
   args: {
