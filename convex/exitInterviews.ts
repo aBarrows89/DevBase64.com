@@ -329,6 +329,46 @@ export const remove = mutation({
   },
 });
 
+// Reset an exit interview back to pending (admin only)
+export const resetToPending = mutation({
+  args: { interviewId: v.id("exitInterviews") },
+  handler: async (ctx, args) => {
+    const interview = await ctx.db.get(args.interviewId);
+    if (!interview) throw new Error("Exit interview not found");
+
+    await ctx.db.patch(args.interviewId, {
+      status: "pending",
+      responses: undefined,
+      completedAt: undefined,
+      updatedAt: Date.now(),
+    });
+
+    return { success: true, previousStatus: interview.status };
+  },
+});
+
+// Reset ALL exit interviews to pending (admin only - use with caution)
+export const resetAllToPending = mutation({
+  handler: async (ctx) => {
+    const interviews = await ctx.db.query("exitInterviews").collect();
+    let reset = 0;
+
+    for (const interview of interviews) {
+      if (interview.status === "completed") {
+        await ctx.db.patch(interview._id, {
+          status: "pending",
+          responses: undefined,
+          completedAt: undefined,
+          updatedAt: Date.now(),
+        });
+        reset++;
+      }
+    }
+
+    return { reset, total: interviews.length };
+  },
+});
+
 // Standard exit interview reasons (for dropdown)
 export const getReasonOptions = query({
   handler: async () => {
