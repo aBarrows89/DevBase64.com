@@ -910,6 +910,26 @@ export const bulkCompleteTenureCheckIns = mutation({
   },
 });
 
+// Clear all tenure check-ins from all personnel
+export const clearAllTenureCheckIns = mutation({
+  handler: async (ctx) => {
+    const allPersonnel = await ctx.db.query("personnel").collect();
+
+    let cleared = 0;
+    for (const person of allPersonnel) {
+      if (person.tenureCheckIns && person.tenureCheckIns.length > 0) {
+        await ctx.db.patch(person._id, {
+          tenureCheckIns: [],
+          updatedAt: Date.now(),
+        });
+        cleared++;
+      }
+    }
+
+    return { cleared, total: allPersonnel.length };
+  },
+});
+
 // Remove duplicate personnel records (keeps the oldest by createdAt)
 export const removeDuplicates = mutation({
   handler: async (ctx) => {
