@@ -1045,12 +1045,12 @@ function DashboardContent() {
                                 fontSize: "12px",
                               }}
                               labelStyle={{ color: isDark ? "#f1f5f9" : "#111827", fontWeight: 600 }}
-                              formatter={(value: number, name: string) => {
+                              formatter={(value, name) => {
                                 const labels: Record<string, string> = {
                                   avgScore: "Avg Score",
                                   avgHiredScore: "Hired Avg",
                                 };
-                                return [`${value}%`, labels[name] || name];
+                                return [`${value}%`, labels[String(name)] || name];
                               }}
                             />
                             <Line
