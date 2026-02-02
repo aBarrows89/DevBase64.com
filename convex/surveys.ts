@@ -492,6 +492,25 @@ export const submitResponse = mutation({
   },
 });
 
+// Deactivate all survey campaigns
+export const deactivateAllCampaigns = mutation({
+  handler: async (ctx) => {
+    const campaigns = await ctx.db
+      .query("surveyCampaigns")
+      .filter((q) => q.eq(q.field("isActive"), true))
+      .collect();
+
+    for (const campaign of campaigns) {
+      await ctx.db.patch(campaign._id, {
+        isActive: false,
+        updatedAt: Date.now(),
+      });
+    }
+
+    return { deactivated: campaigns.length };
+  },
+});
+
 // Delete a campaign
 export const deleteCampaign = mutation({
   args: { campaignId: v.id("surveyCampaigns") },
