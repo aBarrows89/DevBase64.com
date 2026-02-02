@@ -113,7 +113,7 @@ function UsersContent() {
       isActive: editForm.isActive,
       requiresDailyLog: editForm.requiresDailyLog,
       reportsTo: editForm.reportsTo,
-      managedLocationIds: editForm.role === "warehouse_manager" ? editForm.managedLocationIds : undefined,
+      managedLocationIds: (editForm.role === "warehouse_manager" || editForm.role === "retail_store_manager") ? editForm.managedLocationIds : undefined,
       managedDepartments: editForm.role === "department_manager" ? editForm.managedDepartments : undefined,
       isFinalTimeApprover: editForm.isFinalTimeApprover,
       isPayrollProcessor: editForm.isPayrollProcessor,
@@ -232,6 +232,10 @@ function UsersContent() {
         return "bg-orange-500/20 text-orange-400";
       case "office_manager":
         return "bg-pink-500/20 text-pink-400";
+      case "retail_store_manager":
+        return "bg-amber-500/20 text-amber-400";
+      case "retail_associate":
+        return "bg-teal-500/20 text-teal-400";
       case "member":
         return "bg-cyan-500/20 text-cyan-400";
       default:
@@ -253,6 +257,10 @@ function UsersContent() {
         return "Warehouse Director";
       case "office_manager":
         return "Office Manager";
+      case "retail_store_manager":
+        return "Retail Store Manager";
+      case "retail_associate":
+        return "Retail Associate";
       case "member":
         return "Member";
       default:
@@ -366,7 +374,7 @@ function UsersContent() {
                         <span className={`px-2 py-1 text-xs font-medium rounded-full ${getRoleBadgeColor(user.role)}`}>
                           {getRoleDisplayName(user.role)}
                         </span>
-                        {user.role === "warehouse_manager" && (
+                        {(user.role === "warehouse_manager" || user.role === "retail_store_manager") && (
                           <div className="text-xs text-slate-500 mt-1">
                             {getLocationNames(user.managedLocationIds as Id<"locations">[] | undefined) || "No locations assigned"}
                           </div>
@@ -520,7 +528,7 @@ function UsersContent() {
                     </span>
                   )}
                 </div>
-                {user.role === "warehouse_manager" && (
+                {(user.role === "warehouse_manager" || user.role === "retail_store_manager") && (
                   <div className="text-xs text-slate-500 mb-1">
                     Locations: {getLocationNames(user.managedLocationIds as Id<"locations">[] | undefined) || "None assigned"}
                   </div>
@@ -609,10 +617,12 @@ function UsersContent() {
                   <optgroup label="T2 - Manager">
                     <option value="warehouse_manager">Warehouse Manager</option>
                     <option value="office_manager">Office Manager</option>
+                    <option value="retail_store_manager">Retail Store Manager</option>
                   </optgroup>
                   <optgroup label="T1 - Shift Lead">
                     <option value="department_manager">Department Manager</option>
                     <option value="shift_lead">Shift Lead</option>
+                    <option value="retail_associate">Retail Associate</option>
                   </optgroup>
                   <optgroup label="T0 - Employee">
                     <option value="member">Member</option>
@@ -697,10 +707,12 @@ function UsersContent() {
                   <optgroup label="T2 - Manager">
                     <option value="warehouse_manager">Warehouse Manager</option>
                     <option value="office_manager">Office Manager</option>
+                    <option value="retail_store_manager">Retail Store Manager</option>
                   </optgroup>
                   <optgroup label="T1 - Shift Lead">
                     <option value="department_manager">Department Manager</option>
                     <option value="shift_lead">Shift Lead</option>
+                    <option value="retail_associate">Retail Associate</option>
                   </optgroup>
                   <optgroup label="T0 - Employee">
                     <option value="member">Member</option>
@@ -791,14 +803,14 @@ function UsersContent() {
                 </p>
               </div>
 
-              {/* Location Assignment for Warehouse Managers */}
-              {editForm.role === "warehouse_manager" && (
+              {/* Location Assignment for Warehouse/Retail Store Managers */}
+              {(editForm.role === "warehouse_manager" || editForm.role === "retail_store_manager") && (
                 <div>
                   <label className="block text-sm font-medium text-slate-400 mb-2">
                     Assigned Locations
                   </label>
                   <p className="text-xs text-slate-500 mb-3">
-                    Select which locations this warehouse manager can access
+                    Select which locations this {editForm.role === "retail_store_manager" ? "retail store manager" : "warehouse manager"} can access
                   </p>
                   <div className="space-y-2 max-h-48 overflow-y-auto bg-slate-900/50 rounded-lg p-3 border border-slate-700">
                     {locations?.filter(loc => loc.isActive).map((location) => (
