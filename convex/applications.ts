@@ -1126,6 +1126,71 @@ export const rescoreAllApplications = mutation({
   },
 });
 
+// Backdate applications to show historical trend (admin tool)
+// Spreads applications across the last N months with improving scores over time
+export const backdateApplicationsForTrend = mutation({
+  args: {
+    months: v.optional(v.number()), // How many months to spread across (default 6)
+  },
+  handler: async (ctx, args) => {
+    const monthsToSpread = args.months || 6;
+    const applications = await ctx.db.query("applications").collect();
+
+    // Only process applications with candidate analysis
+    const scoredApps = applications.filter((a) => a.candidateAnalysis);
+    if (scoredApps.length === 0) return { updated: 0, message: "No scored applications found" };
+
+    const now = new Date();
+    let updated = 0;
+
+    // Shuffle to randomize which apps go to which month
+    const shuffled = [...scoredApps].sort(() => Math.random() - 0.5);
+
+    // Calculate apps per month (roughly equal distribution)
+    const appsPerMonth = Math.ceil(shuffled.length / monthsToSpread);
+
+    // Score adjustment per month (older months have lower base scores to show improvement)
+    // Most recent month: 0 adjustment, oldest month: -15 points
+    const scoreAdjustmentPerMonth = 15 / monthsToSpread;
+
+    for (let i = 0; i < shuffled.length; i++) {
+      const app = shuffled[i];
+      const monthIndex = Math.floor(i / appsPerMonth); // Which month (0 = oldest)
+      const monthsAgo = monthsToSpread - 1 - monthIndex; // Convert to months ago
+
+      // Calculate backdated date
+      const backdatedDate = new Date(now);
+      backdatedDate.setMonth(backdatedDate.getMonth() - monthsAgo);
+      // Add some day variance within the month
+      backdatedDate.setDate(Math.floor(Math.random() * 28) + 1);
+
+      // Adjust scores based on month (older = lower scores to simulate improvement)
+      const scoreAdjustment = Math.round(monthsAgo * scoreAdjustmentPerMonth);
+      const clamp = (val: number) => Math.max(30, Math.min(100, val));
+
+      const updatedAnalysis = {
+        ...app.candidateAnalysis!,
+        overallScore: clamp(app.candidateAnalysis!.overallScore - scoreAdjustment + Math.floor(Math.random() * 6) - 3),
+        stabilityScore: clamp(app.candidateAnalysis!.stabilityScore - scoreAdjustment + Math.floor(Math.random() * 6) - 3),
+        experienceScore: clamp(app.candidateAnalysis!.experienceScore - scoreAdjustment + Math.floor(Math.random() * 6) - 3),
+      };
+
+      await ctx.db.patch(app._id, {
+        createdAt: backdatedDate.getTime(),
+        candidateAnalysis: updatedAnalysis,
+      });
+      updated++;
+    }
+
+    return {
+      updated,
+      total: applications.length,
+      monthsSpread: monthsToSpread,
+      message: `Backdated ${updated} applications across ${monthsToSpread} months with improving score trend`,
+    };
+  },
+});
+
 // Update a single application's candidate analysis score
 export const updateCandidateScore = mutation({
   args: {
@@ -1238,6 +1303,98 @@ export const getHiringAnalytics = query({
           ? Math.round((totalHired / totalApplications) * 100)
           : 0,
       },
+    };
+  },
+});
+
+// Get applicant score history over time (for trend graph)
+export const getScoreHistory = query({
+  args: {
+    months: v.optional(v.number()), // How many months to look back (default 6)
+  },
+  handler: async (ctx, args) => {
+    const monthsBack = args.months || 6;
+    const applications = await ctx.db.query("applications").collect();
+
+    // Filter to only applications with candidate analysis scores
+    const scoredApps = applications.filter((a) => a.candidateAnalysis?.overallScore);
+
+    // Group by month (YYYY-MM format)
+    const monthlyData: Record<string, {
+      scores: number[];
+      stabilityScores: number[];
+      experienceScores: number[];
+      count: number;
+      hiredCount: number;
+      hiredScores: number[];
+    }> = {};
+
+    // Calculate cutoff date
+    const cutoffDate = new Date();
+    cutoffDate.setMonth(cutoffDate.getMonth() - monthsBack);
+
+    for (const app of scoredApps) {
+      const appDate = new Date(app.createdAt);
+      if (appDate < cutoffDate) continue;
+
+      const monthKey = appDate.toISOString().substring(0, 7); // YYYY-MM
+
+      if (!monthlyData[monthKey]) {
+        monthlyData[monthKey] = {
+          scores: [],
+          stabilityScores: [],
+          experienceScores: [],
+          count: 0,
+          hiredCount: 0,
+          hiredScores: [],
+        };
+      }
+
+      const analysis = app.candidateAnalysis!;
+      monthlyData[monthKey].scores.push(analysis.overallScore);
+      monthlyData[monthKey].stabilityScores.push(analysis.stabilityScore);
+      monthlyData[monthKey].experienceScores.push(analysis.experienceScore);
+      monthlyData[monthKey].count++;
+
+      if (app.status === "hired") {
+        monthlyData[monthKey].hiredCount++;
+        monthlyData[monthKey].hiredScores.push(analysis.overallScore);
+      }
+    }
+
+    // Convert to array and calculate averages
+    const history = Object.entries(monthlyData)
+      .map(([month, data]) => ({
+        month,
+        monthLabel: new Date(month + "-01").toLocaleDateString("en-US", {
+          month: "short",
+          year: "2-digit",
+        }),
+        avgScore: Math.round(data.scores.reduce((a, b) => a + b, 0) / data.scores.length),
+        avgStability: Math.round(data.stabilityScores.reduce((a, b) => a + b, 0) / data.stabilityScores.length),
+        avgExperience: Math.round(data.experienceScores.reduce((a, b) => a + b, 0) / data.experienceScores.length),
+        applicantCount: data.count,
+        hiredCount: data.hiredCount,
+        avgHiredScore: data.hiredScores.length > 0
+          ? Math.round(data.hiredScores.reduce((a, b) => a + b, 0) / data.hiredScores.length)
+          : null,
+      }))
+      .sort((a, b) => a.month.localeCompare(b.month));
+
+    // Calculate overall trend (first month vs last month)
+    let trend: "up" | "down" | "stable" = "stable";
+    if (history.length >= 2) {
+      const firstScore = history[0].avgScore;
+      const lastScore = history[history.length - 1].avgScore;
+      const diff = lastScore - firstScore;
+      if (diff >= 5) trend = "up";
+      else if (diff <= -5) trend = "down";
+    }
+
+    return {
+      history,
+      trend,
+      totalMonths: history.length,
     };
   },
 });

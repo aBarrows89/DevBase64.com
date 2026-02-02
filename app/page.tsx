@@ -14,6 +14,7 @@ import { SearchButton } from "@/components/GlobalSearch";
 import ActivityFeed from "@/components/ActivityFeed";
 import { Id } from "@/convex/_generated/dataModel";
 import { getQuoteOfTheDay } from "@/lib/tireQuotes";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
 // Combined type for website messages
 interface WebsiteMessage {
@@ -90,6 +91,7 @@ function DashboardContent() {
   const applications = useQuery(api.applications.getRecent, shouldSkipPeopleQueries ? "skip" : undefined);
   const upcomingInterviews = useQuery(api.applications.getUpcomingInterviews, shouldSkipPeopleQueries ? "skip" : undefined);
   const hiringAnalytics = useQuery(api.applications.getHiringAnalytics, shouldSkipPeopleQueries ? "skip" : undefined);
+  const scoreHistory = useQuery(api.applications.getScoreHistory, shouldSkipPeopleQueries ? "skip" : { months: 6 });
   const contactMessages = useQuery(api.contactMessages.getRecent, shouldSkipPeopleQueries ? "skip" : undefined);
   const dealerInquiries = useQuery(api.dealerInquiries.getRecent, shouldSkipPeopleQueries ? "skip" : undefined);
   const pendingTenureCheckIns = useQuery(api.personnel.getPendingTenureCheckIns, shouldSkipPeopleQueries ? "skip" : undefined);
@@ -1001,6 +1003,89 @@ function DashboardContent() {
                       </p>
                     </div>
                   </div>
+
+                  {/* Applicant Score Trend Graph */}
+                  {scoreHistory && scoreHistory.history.length > 0 && (
+                    <div className={`p-3 rounded-lg border ${isDark ? "bg-slate-900/50 border-slate-700" : "bg-gray-50 border-gray-100"}`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className={`text-xs font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                          Applicant Score Trend
+                        </span>
+                        {scoreHistory.trend !== "stable" && (
+                          <span className={`text-xs px-1.5 py-0.5 rounded ${
+                            scoreHistory.trend === "up"
+                              ? "bg-green-500/20 text-green-400"
+                              : "bg-red-500/20 text-red-400"
+                          }`}>
+                            {scoreHistory.trend === "up" ? "↑ Improving" : "↓ Declining"}
+                          </span>
+                        )}
+                      </div>
+                      <div className="h-24">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={scoreHistory.history} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                            <XAxis
+                              dataKey="monthLabel"
+                              tick={{ fontSize: 10, fill: isDark ? "#64748b" : "#9ca3af" }}
+                              axisLine={false}
+                              tickLine={false}
+                            />
+                            <YAxis
+                              domain={[0, 100]}
+                              tick={{ fontSize: 10, fill: isDark ? "#64748b" : "#9ca3af" }}
+                              axisLine={false}
+                              tickLine={false}
+                              width={30}
+                            />
+                            <Tooltip
+                              contentStyle={{
+                                backgroundColor: isDark ? "#1e293b" : "#ffffff",
+                                border: isDark ? "1px solid #334155" : "1px solid #e5e7eb",
+                                borderRadius: "8px",
+                                fontSize: "12px",
+                              }}
+                              labelStyle={{ color: isDark ? "#f1f5f9" : "#111827", fontWeight: 600 }}
+                              formatter={(value: number, name: string) => {
+                                const labels: Record<string, string> = {
+                                  avgScore: "Avg Score",
+                                  avgHiredScore: "Hired Avg",
+                                };
+                                return [`${value}%`, labels[name] || name];
+                              }}
+                            />
+                            <Line
+                              type="monotone"
+                              dataKey="avgScore"
+                              stroke={isDark ? "#22d3ee" : "#0ea5e9"}
+                              strokeWidth={2}
+                              dot={{ fill: isDark ? "#22d3ee" : "#0ea5e9", strokeWidth: 0, r: 3 }}
+                              activeDot={{ r: 5 }}
+                            />
+                            <Line
+                              type="monotone"
+                              dataKey="avgHiredScore"
+                              stroke={isDark ? "#4ade80" : "#22c55e"}
+                              strokeWidth={2}
+                              strokeDasharray="4 2"
+                              dot={{ fill: isDark ? "#4ade80" : "#22c55e", strokeWidth: 0, r: 3 }}
+                              activeDot={{ r: 5 }}
+                              connectNulls
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div className="flex items-center justify-center gap-4 mt-2">
+                        <div className="flex items-center gap-1">
+                          <div className={`w-3 h-0.5 ${isDark ? "bg-cyan-400" : "bg-sky-500"}`}></div>
+                          <span className={`text-[10px] ${isDark ? "text-slate-500" : "text-gray-400"}`}>All Applicants</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <div className={`w-3 h-0.5 ${isDark ? "bg-green-400" : "bg-green-500"}`} style={{ borderTop: "2px dashed" }}></div>
+                          <span className={`text-[10px] ${isDark ? "text-slate-500" : "text-gray-400"}`}>Hired</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Conversion Rates - Compact */}
                   <div className={`p-3 rounded-lg border ${isDark ? "bg-slate-900/50 border-slate-700" : "bg-gray-50 border-gray-100"}`}>
