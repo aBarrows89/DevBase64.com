@@ -7,7 +7,7 @@ export default defineSchema({
     email: v.optional(v.string()),
     passwordHash: v.optional(v.string()),
     name: v.string(),
-    role: v.string(), // "super_admin" | "admin" | "warehouse_director" | "warehouse_manager" | "department_manager" | "payroll_manager" | "employee" | "member"
+    role: v.string(), // "super_admin" | "admin" | "warehouse_director" | "warehouse_manager" | "office_manager" | "retail_manager" | "retail_store_manager" | "department_manager" | "shift_lead" | "retail_associate" | "payroll_manager" | "employee" | "member"
     isActive: v.boolean(),
     forcePasswordChange: v.optional(v.boolean()),
     // Role-specific fields

@@ -3,8 +3,8 @@
  *
  * Tier Levels:
  * T0 - Employee (member)
- * T1 - Shift Lead (department_manager, shift_lead)
- * T2 - Warehouse/Store/Office/Retail Manager (warehouse_manager, office_manager, retail_manager)
+ * T1 - Shift Lead / Retail Associate (department_manager, shift_lead, retail_associate)
+ * T2 - Warehouse/Store/Office/Retail Manager (warehouse_manager, office_manager, retail_manager, retail_store_manager)
  * T3 - Director (warehouse_director)
  * T4 - Admin (admin)
  * T5 - Super Admin (super_admin)
@@ -39,9 +39,11 @@ export function getTier(role: string): Tier {
     case "warehouse_manager":
     case "office_manager":
     case "retail_manager":
+    case "retail_store_manager":
       return 2;
     case "department_manager":
     case "shift_lead":
+    case "retail_associate":
       return 1;
     case "member":
     case "employee":
@@ -175,6 +177,7 @@ export interface MenuPermissions {
 
 export function getMenuPermissions(user: PermissionUser): MenuPermissions {
   const tier = getTier(user.role);
+  const isRetailAssociate = user.role === "retail_associate";
 
   return {
     // Administrative - T4+
@@ -213,8 +216,8 @@ export function getMenuPermissions(user: PermissionUser): MenuPermissions {
     messages: true,
     announcements: true, // View for all, create T5 only
 
-    // Doc Hub - T2+
-    docHub: tier >= 2,
+    // Doc Hub - T2+ or retail_associate
+    docHub: tier >= 2 || isRetailAssociate,
 
     // Scheduling
     shiftPlanning: tier >= 2, // T2+
