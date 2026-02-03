@@ -90,6 +90,7 @@ function DashboardContent() {
   const projects = useQuery(api.projects.getAll, shouldSkipQueries ? "skip" : (user?._id ? { userId: user._id } : {}));
   const applications = useQuery(api.applications.getRecent, shouldSkipPeopleQueries ? "skip" : undefined);
   const upcomingInterviews = useQuery(api.applications.getUpcomingInterviews, shouldSkipPeopleQueries ? "skip" : undefined);
+  const recentInterviews = useQuery(api.applications.getRecentInterviews, shouldSkipPeopleQueries ? "skip" : undefined);
   const hiringAnalytics = useQuery(api.applications.getHiringAnalytics, shouldSkipPeopleQueries ? "skip" : undefined);
   const scoreHistory = useQuery(api.applications.getScoreHistory, shouldSkipPeopleQueries ? "skip" : { months: 6 });
   const contactMessages = useQuery(api.contactMessages.getRecent, shouldSkipPeopleQueries ? "skip" : undefined);
@@ -1102,6 +1103,74 @@ function DashboardContent() {
                       <span className={`text-sm font-bold ${isDark ? "text-cyan-400" : "text-blue-600"}`}>{hiringAnalytics.conversionRates.overallHireRate}%</span>
                     </div>
                   </div>
+
+                  {/* Recent Interviews (Last 2 Weeks) - Show prominently */}
+                  {recentInterviews && recentInterviews.length > 0 && (
+                    <div className={`pt-3 border-t ${isDark ? "border-slate-700" : "border-gray-200"}`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className={`text-xs font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Recent Interviews (Last 2 Weeks)</p>
+                        <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${isDark ? "bg-green-500/20 text-green-400" : "bg-green-100 text-green-600"}`}>
+                          {recentInterviews.length} total
+                        </span>
+                      </div>
+                      <div className="space-y-2">
+                        {recentInterviews.slice(0, 5).map((interview) => (
+                          <Link
+                            key={interview._id}
+                            href={`/applications/${interview._id}`}
+                            className={`flex items-center justify-between p-2 rounded-lg transition-colors ${isDark ? "hover:bg-slate-700/50 bg-slate-800/30" : "hover:bg-gray-100 bg-gray-50"}`}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p className={`text-sm font-medium truncate ${isDark ? "text-white" : "text-gray-900"}`}>
+                                {interview.firstName} {interview.lastName}
+                              </p>
+                              <p className={`text-xs truncate ${isDark ? "text-slate-500" : "text-gray-500"}`}>
+                                {interview.appliedJobTitle}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-3 ml-2 flex-shrink-0">
+                              {interview.candidateScore && (
+                                <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${
+                                  interview.candidateScore >= 70
+                                    ? isDark ? "bg-green-500/20 text-green-400" : "bg-green-100 text-green-600"
+                                    : interview.candidateScore >= 50
+                                    ? isDark ? "bg-amber-500/20 text-amber-400" : "bg-amber-100 text-amber-600"
+                                    : isDark ? "bg-red-500/20 text-red-400" : "bg-red-100 text-red-600"
+                                }`}>
+                                  {interview.candidateScore}%
+                                </span>
+                              )}
+                              <div className="text-right">
+                                <p className={`text-xs font-medium ${isDark ? "text-cyan-400" : "text-blue-600"}`}>
+                                  {new Date(interview.interviewDate).toLocaleDateString("en-US", {
+                                    month: "short",
+                                    day: "numeric",
+                                  })}
+                                </p>
+                                <p className={`text-[10px] capitalize ${
+                                  interview.status === "hired"
+                                    ? isDark ? "text-green-400" : "text-green-600"
+                                    : interview.status === "rejected"
+                                    ? isDark ? "text-red-400" : "text-red-600"
+                                    : isDark ? "text-slate-500" : "text-gray-500"
+                                }`}>
+                                  {interview.status}
+                                </p>
+                              </div>
+                            </div>
+                          </Link>
+                        ))}
+                        {recentInterviews.length > 5 && (
+                          <Link
+                            href="/applications?status=interviewed"
+                            className={`block text-center text-xs py-1 ${isDark ? "text-cyan-400 hover:text-cyan-300" : "text-blue-600 hover:text-blue-700"}`}
+                          >
+                            View all {recentInterviews.length} recent interviews
+                          </Link>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Upcoming Interviews Section */}
                   {upcomingInterviews && upcomingInterviews.length > 0 && (

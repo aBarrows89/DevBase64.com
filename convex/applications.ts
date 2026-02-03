@@ -1126,68 +1126,32 @@ export const rescoreAllApplications = mutation({
   },
 });
 
-// Backdate applications to show historical trend (admin tool)
-// Spreads applications across the last N months with improving scores over time
-export const backdateApplicationsForTrend = mutation({
-  args: {
-    months: v.optional(v.number()), // How many months to spread across (default 6)
-  },
-  handler: async (ctx, args) => {
-    const monthsToSpread = args.months || 6;
+// Restore application dates to their original creation time
+// Use this to undo any date modifications
+export const restoreOriginalDates = mutation({
+  handler: async (ctx) => {
     const applications = await ctx.db.query("applications").collect();
+    let restored = 0;
 
-    // Only process applications with candidate analysis
-    const scoredApps = applications.filter((a) => a.candidateAnalysis);
-    if (scoredApps.length === 0) return { updated: 0, message: "No scored applications found" };
-
-    const now = new Date();
-    let updated = 0;
-
-    // Shuffle to randomize which apps go to which month
-    const shuffled = [...scoredApps].sort(() => Math.random() - 0.5);
-
-    // Calculate apps per month (roughly equal distribution)
-    const appsPerMonth = Math.ceil(shuffled.length / monthsToSpread);
-
-    // Score adjustment per month (older months have lower base scores to show improvement)
-    // Most recent month: 0 adjustment, oldest month: -15 points
-    const scoreAdjustmentPerMonth = 15 / monthsToSpread;
-
-    for (let i = 0; i < shuffled.length; i++) {
-      const app = shuffled[i];
-      const monthIndex = Math.floor(i / appsPerMonth); // Which month (0 = oldest)
-      const monthsAgo = monthsToSpread - 1 - monthIndex; // Convert to months ago
-
-      // Calculate backdated date
-      const backdatedDate = new Date(now);
-      backdatedDate.setMonth(backdatedDate.getMonth() - monthsAgo);
-      // Add some day variance within the month
-      backdatedDate.setDate(Math.floor(Math.random() * 28) + 1);
-
-      // Adjust scores based on month (older = lower scores to simulate improvement)
-      const scoreAdjustment = Math.round(monthsAgo * scoreAdjustmentPerMonth);
-      const clamp = (val: number) => Math.max(30, Math.min(100, val));
-
-      const updatedAnalysis = {
-        ...app.candidateAnalysis!,
-        overallScore: clamp(app.candidateAnalysis!.overallScore - scoreAdjustment + Math.floor(Math.random() * 6) - 3),
-        stabilityScore: clamp(app.candidateAnalysis!.stabilityScore - scoreAdjustment + Math.floor(Math.random() * 6) - 3),
-        experienceScore: clamp(app.candidateAnalysis!.experienceScore - scoreAdjustment + Math.floor(Math.random() * 6) - 3),
-      };
-
-      await ctx.db.patch(app._id, {
-        createdAt: backdatedDate.getTime(),
-        candidateAnalysis: updatedAnalysis,
-      });
-      updated++;
+    for (const app of applications) {
+      // _creationTime is the actual Convex creation timestamp (preserved)
+      if (app.createdAt !== app._creationTime) {
+        await ctx.db.patch(app._id, {
+          createdAt: app._creationTime,
+        });
+        restored++;
+      }
     }
 
-    return {
-      updated,
-      total: applications.length,
-      monthsSpread: monthsToSpread,
-      message: `Backdated ${updated} applications across ${monthsToSpread} months with improving score trend`,
-    };
+    return { restored, total: applications.length };
+  },
+});
+
+// Get all application IDs for batch processing
+export const getAllIds = query({
+  handler: async (ctx) => {
+    const applications = await ctx.db.query("applications").collect();
+    return applications.map(app => app._id);
   },
 });
 
@@ -1454,6 +1418,97 @@ export const getRecentlyInterviewed = query({
       .slice(0, 10); // Return most recent 10
 
     return interviewedApps;
+  },
+});
+
+// Get interviews from the last 2 weeks (scheduled or completed)
+export const getRecentInterviews = query({
+  args: {},
+  handler: async (ctx) => {
+    const applications = await ctx.db.query("applications").collect();
+    const now = Date.now();
+    const twoWeeksAgo = now - 14 * 24 * 60 * 60 * 1000;
+
+    // Get applications with scheduled interviews in the last 2 weeks
+    // OR with interview rounds conducted in the last 2 weeks
+    const recentInterviews = applications
+      .filter((app) => {
+        // Check if has scheduled interview in last 2 weeks
+        if (app.scheduledInterviewDate) {
+          const interviewDate = new Date(app.scheduledInterviewDate).getTime();
+          if (interviewDate >= twoWeeksAgo && interviewDate <= now) {
+            return true;
+          }
+        }
+        // Check if has interview rounds conducted in last 2 weeks
+        if (app.interviewRounds && app.interviewRounds.length > 0) {
+          const latestRound = app.interviewRounds[app.interviewRounds.length - 1];
+          if (latestRound.conductedAt >= twoWeeksAgo) {
+            return true;
+          }
+        }
+        return false;
+      })
+      .map((app) => {
+        const rounds = app.interviewRounds || [];
+        const latestRound = rounds.length > 0 ? rounds[rounds.length - 1] : null;
+
+        // Determine interview date (scheduled or conducted)
+        let interviewDate: number;
+        if (latestRound?.conductedAt) {
+          interviewDate = latestRound.conductedAt;
+        } else if (app.scheduledInterviewDate && app.scheduledInterviewTime) {
+          interviewDate = new Date(`${app.scheduledInterviewDate}T${app.scheduledInterviewTime}`).getTime();
+        } else if (app.scheduledInterviewDate) {
+          interviewDate = new Date(app.scheduledInterviewDate).getTime();
+        } else {
+          interviewDate = app.updatedAt;
+        }
+
+        // Calculate overall interview score if available
+        let interviewScore = null;
+        if (latestRound?.aiEvaluation?.overallScore) {
+          interviewScore = latestRound.aiEvaluation.overallScore;
+        } else if (latestRound?.preliminaryEvaluation) {
+          const prelim = latestRound.preliminaryEvaluation;
+          const scores = [
+            prelim.appearance,
+            prelim.manner,
+            prelim.conversation,
+            prelim.intelligence,
+            prelim.sociability,
+            prelim.overallHealthOpinion,
+          ].filter((s) => s !== undefined);
+          if (scores.length > 0) {
+            interviewScore = Math.round(
+              (scores.reduce((a, b) => a + b, 0) / scores.length) * 25
+            );
+          }
+        }
+
+        return {
+          _id: app._id,
+          firstName: app.firstName,
+          lastName: app.lastName,
+          email: app.email,
+          phone: app.phone,
+          appliedJobTitle: app.appliedJobTitle,
+          status: app.status,
+          interviewDate,
+          scheduledDate: app.scheduledInterviewDate,
+          scheduledTime: app.scheduledInterviewTime,
+          location: app.scheduledInterviewLocation,
+          interviewerName: latestRound?.interviewerName || null,
+          roundNumber: latestRound?.round || null,
+          totalRounds: rounds.length,
+          interviewScore,
+          recommendation: latestRound?.aiEvaluation?.recommendation || null,
+          candidateScore: app.candidateAnalysis?.overallScore || null,
+        };
+      })
+      .sort((a, b) => b.interviewDate - a.interviewDate);
+
+    return recentInterviews;
   },
 });
 
