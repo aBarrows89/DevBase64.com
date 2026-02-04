@@ -13,7 +13,6 @@ import { api } from "@/convex/_generated/api";
 import { SearchButton } from "@/components/GlobalSearch";
 import ActivityFeed from "@/components/ActivityFeed";
 import { Id } from "@/convex/_generated/dataModel";
-import { getQuoteOfTheDay } from "@/lib/tireQuotes";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
 // Combined type for website messages
@@ -318,60 +317,6 @@ function DashboardContent() {
         </header>
 
         <div className="p-4 sm:p-8 space-y-6 sm:space-y-8">
-          {/* Quote of the Day */}
-          {(() => {
-            const todayQuote = getQuoteOfTheDay();
-            return (
-              <div className={`rounded-xl p-4 border ${
-                todayQuote.type === "holiday"
-                  ? isDark ? "bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-amber-500/30" : "bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200"
-                  : todayQuote.type === "funny"
-                    ? isDark ? "bg-gradient-to-r from-purple-500/10 to-pink-500/10 border-purple-500/30" : "bg-gradient-to-r from-purple-50 to-pink-50 border-purple-200"
-                    : isDark ? "bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border-cyan-500/30" : "bg-gradient-to-r from-cyan-50 to-blue-50 border-cyan-200"
-              }`}>
-                <div className="flex items-start gap-3">
-                  <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
-                    todayQuote.type === "holiday"
-                      ? "bg-amber-500/20"
-                      : todayQuote.type === "funny"
-                        ? "bg-purple-500/20"
-                        : "bg-cyan-500/20"
-                  }`}>
-                    {todayQuote.type === "holiday" ? (
-                      <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-                      </svg>
-                    ) : todayQuote.type === "funny" ? (
-                      <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    ) : (
-                      <svg className="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                      </svg>
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <p className={`text-xs font-semibold uppercase tracking-wide mb-1 ${
-                      todayQuote.type === "holiday"
-                        ? isDark ? "text-amber-400" : "text-amber-600"
-                        : todayQuote.type === "funny"
-                          ? isDark ? "text-purple-400" : "text-purple-600"
-                          : isDark ? "text-cyan-400" : "text-cyan-600"
-                    }`}>
-                      Tire Quote of the Day
-                    </p>
-                    <p className={`text-lg font-medium italic ${
-                      isDark ? "text-white" : "text-gray-800"
-                    }`}>
-                      &ldquo;{todayQuote.quote}&rdquo;
-                    </p>
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
-
           {/* Broadcast Messages */}
           {broadcastMessages && broadcastMessages.length > 0 && (
             <div className="space-y-3">
