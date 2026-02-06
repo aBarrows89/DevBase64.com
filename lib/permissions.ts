@@ -343,12 +343,14 @@ export interface EquipmentPermissions {
 
 export function getEquipmentPermissions(user: PermissionUser): EquipmentPermissions {
   const tier = getTier(user.role);
+  const isWarehouseManager = user.role === "warehouse_manager";
+
   return {
     viewAllLocations: tier >= 3, // Director+
     viewOwnLocation: tier >= 2, // T2+ (view only for T2-T3)
-    create: tier >= 4, // T4+
-    edit: tier >= 4, // T4+
-    assign: tier >= 4, // T4+
+    create: tier >= 4 || isWarehouseManager, // T4+ or warehouse_manager
+    edit: tier >= 4 || isWarehouseManager, // T4+ or warehouse_manager
+    assign: tier >= 4 || isWarehouseManager, // T4+ or warehouse_manager
     viewAgreements: tier >= 4, // T4+
     createAgreements: tier >= 4, // T4+
     manageQRCodes: tier >= 4, // T4+
