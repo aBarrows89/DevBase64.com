@@ -21,9 +21,7 @@ function EquipmentContent() {
   const isDark = theme === "dark";
   const { user } = useAuth();
 
-  // Warehouse manager has view-only access to equipment
-  const isWarehouseManager = user?.role === "warehouse_manager";
-  const canEditEquipment = !isWarehouseManager;
+  const canEditEquipment = user?.role === "super_admin" || user?.role === "admin" || user?.role === "warehouse_director" || user?.role === "warehouse_manager";
 
   const [activeTab, setActiveTab] = useState<EquipmentType>("scanners");
   const [selectedLocation, setSelectedLocation] = useState<Id<"locations"> | "all">("all");
