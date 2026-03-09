@@ -25,4 +25,11 @@ crons.weekly(
   internal.dailyLogs.sendWeeklyDigestEmails
 );
 
+// Clean up dealer rebate uploads older than 12 months - runs monthly on the 1st
+crons.monthly(
+  "cleanup-old-dealer-rebate-uploads",
+  { day: 1, hourUTC: 6, minuteUTC: 0 },
+  internal.dealerRebates.deleteOldUploads
+);
+
 export default crons;

@@ -2277,4 +2277,44 @@ export default defineSchema({
     createdAt: v.number(),
     expiresAt: v.number(), // Auto-expire stale sessions
   }).index("by_ticket", ["ticket"]),
+
+  // ============ DEALER REBATES ============
+  dealerRebateDealers: defineTable({
+    jmk: v.string(), // JMK account number (e.g. "125", "r20", "" for standalone Fanatic dealers)
+    name: v.string(), // Dealer business name
+    fanaticId: v.optional(v.number()), // Falken Fanatic dealer ID
+    dealerNumber: v.optional(v.string()), // Milestar Momentum dealer number
+    programs: v.array(v.string()), // ["falken"] | ["milestar"] | ["falken","milestar"]
+    primSec: v.optional(v.number()), // 1=Primary, 2=Secondary (Falken only)
+    isActive: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_jmk", ["jmk"])
+    .index("by_fanatic_id", ["fanaticId"])
+    .index("by_dealer_number", ["dealerNumber"])
+    .index("by_active", ["isActive"]),
+
+  dealerRebateUploads: defineTable({
+    uploadDate: v.number(),
+    fileName: v.string(),
+    program: v.string(), // "falken" | "milestar"
+    totalInputRows: v.number(), // Total CSV rows parsed
+    filteredRows: v.number(), // Rows after T-prefix filter
+    matchedRows: v.number(), // Rows that matched enrolled dealers
+    dealersMatched: v.number(), // Unique dealers matched
+    resultData: v.string(), // JSON stringified output rows
+    dealerBreakdown: v.array(v.object({
+      jmk: v.string(),
+      name: v.string(),
+      fanaticId: v.optional(v.number()),
+      dealerNumber: v.optional(v.string()),
+      rowCount: v.number(),
+    })),
+    uploadedBy: v.id("users"),
+    createdAt: v.number(),
+  })
+    .index("by_date", ["uploadDate"])
+    .index("by_program", ["program"])
+    .index("by_uploaded_by", ["uploadedBy"]),
 });

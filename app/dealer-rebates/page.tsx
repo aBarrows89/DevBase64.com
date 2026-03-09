@@ -1,133 +1,56 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useMemo } from "react";
 import Protected from "../protected";
 import Sidebar from "@/components/Sidebar";
 import { useTheme } from "../theme-context";
-
-// ─── ENROLLED DEALER LISTS ────────────────────────────────────────────────────
-
-const FALKEN_DEALERS = [
-  { jmk: "125", name: "Dumbauld's Tire Service Inc.", fanaticId: 31489 },
-  { jmk: "257", name: "Phil's Tire & Auto Repair", fanaticId: 18502 },
-  { jmk: "482", name: "Bruce Brothers Tire", fanaticId: 17861 },
-  { jmk: "499", name: "Camarote Service, LLC", fanaticId: 30534 },
-  { jmk: "704", name: "Don's Auto Service", fanaticId: 29179 },
-  { jmk: "763", name: "McCullough Tire", fanaticId: 30538 },
-  { jmk: "1075", name: "Bubnash Service", fanaticId: 28699 },
-  { jmk: "1110", name: "Parts Plus", fanaticId: 31462 },
-  { jmk: "1110", name: "Parts Plus", fanaticId: 31461 },
-  { jmk: "1153", name: "All About Auto", fanaticId: 30537 },
-  { jmk: "1270", name: "Barnes Garage Inc", fanaticId: 19090 },
-  { jmk: "1318", name: "R Tire Shop", fanaticId: 38387 },
-  { jmk: "1341", name: "Auto Land Hyundai", fanaticId: 18501 },
-  { jmk: "1382", name: "Himes Bros Tires", fanaticId: 20540 },
-  { jmk: "1580", name: "Peaslee's Service Center LLC", fanaticId: 37972 },
-  { jmk: "1713", name: "Collins Tire and Auto Sales", fanaticId: 31229 },
-  { jmk: "1898", name: "JACL, Inc.", fanaticId: 30527 },
-  { jmk: "1929", name: "Denny's Tire Service, LLC", fanaticId: 30560 },
-  { jmk: "1946", name: "Copelli's Auto Service", fanaticId: 29149 },
-  { jmk: "2235", name: "Cliff's Airway Auto LLC", fanaticId: 37581 },
-  { jmk: "2260", name: "Randy Redinger & Sons Llc", fanaticId: 18789 },
-  { jmk: "2578", name: "Mike's Auto Repair & Sales, Inc", fanaticId: 36347 },
-  { jmk: "2759", name: "Driftwood Auto Sales", fanaticId: 31048 },
-  { jmk: "2784", name: "Wheel Connection", fanaticId: 18465 },
-  { jmk: "3058", name: "Birch Street Garage", fanaticId: 18374 },
-  { jmk: "3214", name: "Hetrick's Service LLC", fanaticId: 38719 },
-  { jmk: "3335", name: "Auto Tech Plus", fanaticId: 28692 },
-  { jmk: "3389", name: "Clark Motorworks, LLC", fanaticId: 30533 },
-  { jmk: "3390", name: "Interstate Tire & Auto LLC", fanaticId: 36324 },
-  { jmk: "3406", name: "Dubois Auto Repair", fanaticId: 28274 },
-  { jmk: "3598", name: "The Tire Man's Garage", fanaticId: 30810 },
-  { jmk: "3655", name: "Hite's Garage", fanaticId: 21366 },
-  { jmk: "3682", name: "Tate's Auto Repair", fanaticId: 37985 },
-  { jmk: "3730", name: "Auto Specialties of Beaver County", fanaticId: 39319 },
-  { jmk: "3736", name: "Tire Agent Corp", fanaticId: 20280 },
-  { jmk: "3737", name: "Limitless Customs", fanaticId: 28936 },
-  { jmk: "3755", name: "Offroad Concepts LLC", fanaticId: 36883 },
-  { jmk: "3909", name: "G & D Tire & Auto Repair", fanaticId: 38857 },
-  { jmk: "3925", name: "Train Station Auto Inc.", fanaticId: 37579 },
-  { jmk: "3942", name: "K and M Treads, LLC", fanaticId: 35048 },
-  { jmk: "3978", name: "Pecks Auto Repair", fanaticId: 35307 },
-  { jmk: "3989", name: "Wilson Tire & Wheel", fanaticId: 35297 },
-  { jmk: "4017", name: "Woodheads Truck Repair Service, LLC", fanaticId: 35051 },
-  { jmk: "4060", name: "ATO Incorporated", fanaticId: 38021 },
-  { jmk: "4074", name: "Jimmy's Auto Center LLC", fanaticId: 35720 },
-  { jmk: "4124", name: "High Strung Motorsports Inc", fanaticId: 38754 },
-  { jmk: "4137", name: "Griff's Tire Supply, LLC", fanaticId: 42182 },
-  { jmk: "4163", name: "Action Auto Works LLC", fanaticId: 38003 },
-  { jmk: "4258", name: "Deans Auto Repair and Towing", fanaticId: 28621 },
-  { jmk: "4335", name: "Chris' Tire Service Inc.", fanaticId: 31225 },
-  { jmk: "4335", name: "Chris' Tire Service Inc.", fanaticId: 31224 },
-  { jmk: "4364", name: "Van's Tire of Medina Rd", fanaticId: 31341 },
-  { jmk: "r20", name: "Essey Tire Center", fanaticId: 17566 },
-  { jmk: "r25", name: "Command Trax, LLC", fanaticId: 18807 },
-];
-
-const MILESTAR_DEALERS = [
-  { jmk: "1412", name: "Auto Tech Auto Service Center", dealerNumber: "21051" },
-  { jmk: "1946", name: "Copelli's Auto Service", dealerNumber: "21718" },
-  { jmk: "3390", name: "Interstate Tire & Auto LLC", dealerNumber: "21841" },
-  { jmk: "3406", name: "Dubois Auto Repair", dealerNumber: "20994" },
-  { jmk: "3598", name: "Joe Hice LLC", dealerNumber: "21006" },
-  { jmk: "3677", name: "H & H Offroad LLC", dealerNumber: "21004" },
-  { jmk: "3859", name: "Sockaci Garage", dealerNumber: "22552" },
-  { jmk: "3942", name: "K & M Treads LLC", dealerNumber: "21839" },
-  { jmk: "3959", name: "AJ's Wide Range Diesel + Auto Repairs Corp", dealerNumber: "21005" },
-  { jmk: "3960", name: "Glessner's Auto LLC", dealerNumber: "23439" },
-  { jmk: "4074", name: "Jimmy's Auto Center LLC", dealerNumber: "21717" },
-  { jmk: "4137", name: "Griffs Tire Supply LLC", dealerNumber: "21547" },
-  { jmk: "4286", name: "Chris and Bob's Auto Shop LLC", dealerNumber: "23018" },
-  { jmk: "r20", name: "TRD Tire, LLC", dealerNumber: "21008" },
-  { jmk: "r25", name: "Command Trax, LLC", dealerNumber: "21007" },
-  { jmk: "1898", name: "R N R", dealerNumber: "23724" },
-];
+import { useAuth } from "../auth-context";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { Id } from "@/convex/_generated/dataModel";
 
 // ─── IE TIRES STATIC FIELDS ───────────────────────────────────────────────────
 const IE_FALKEN = { distributorAccount: "20118", address: "400 Unity St.  STE. 100", city: "Latrobe", state: "PA", zip: "15650" };
 const IE_MILESTAR = { parentDistributor: "119662", distributorCenter: "119662:0" };
 
-// ─── ART24T COLUMN MAPPINGS ──────────────────────────────────────────────────
-const ART24T_COLS = {
-  accountId: "A/R ACCT ID",
-  invoice: "AlphaNumeric Invoice id",
-  sku: "Item id",
-  date: "Trans date",
-  qty: "Qty delivered",
-  unitPrice: "Unit AMT$",
+// ─── ART24T POSITIONAL COLUMN INDICES (zero-based) ─────────────────────────────
+const COL = {
+  JMK: 0,
+  INVOICE: 2,
+  DATE: 4,       // YYMMDD format
+  PRODUCT_TYPE: 6,
+  SKU: 9,
+  QTY: 13,
+  PRICE: 17,
 };
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
-function parseCSV(text: string): Record<string, string>[] {
-  const lines = text.replace(/^\uFEFF/, "").trim().split(/\r?\n/);
-  if (lines.length < 2) return [];
-  const parseRow = (line: string) => {
-    const fields: string[] = [];
-    let cur = "", inQ = false;
-    for (let i = 0; i < line.length; i++) {
-      const c = line[i];
-      if (c === '"') { inQ = !inQ; }
-      else if (c === ',' && !inQ) { fields.push(cur); cur = ""; }
-      else { cur += c; }
-    }
-    fields.push(cur);
-    return fields;
-  };
-  const headers = parseRow(lines[0]);
-  return lines.slice(1).filter(l => l.trim()).map(line => {
-    const vals = parseRow(line);
-    const obj: Record<string, string> = {};
-    headers.forEach((h, i) => obj[h] = (vals[i] ?? "").trim());
-    return obj;
-  });
+function parseCSVRow(line: string): string[] {
+  const fields: string[] = [];
+  let cur = "", inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') { inQ = !inQ; }
+    else if (c === ',' && !inQ) { fields.push(cur); cur = ""; }
+    else { cur += c; }
+  }
+  fields.push(cur);
+  return fields;
+}
+
+function parsePositionalCSV(text: string): string[][] {
+  // Remove BOM and null bytes
+  const cleaned = text.replace(/^\uFEFF/, "").replace(/\0/g, "");
+  const lines = cleaned.trim().split(/\r?\n/);
+  // Skip first row (header/null-byte row) and empty lines
+  return lines.slice(1).filter(l => l.trim()).map(parseCSVRow);
 }
 
 function normalizeAcct(raw: string): string {
   const s = raw.trim();
   if (s.includes('-')) return s.split('-').pop()!.toLowerCase();
-  const stripped = s.replace(/^\s+/, '').replace(/^0+/, '') || '0';
-  return stripped;
+  return (s.replace(/^\s+/, '').replace(/^0+/, '') || '0').toLowerCase();
 }
 
 function toFalkenDate(yymmdd: string): string {
@@ -138,7 +61,7 @@ function toFalkenDate(yymmdd: string): string {
   return `${mo}/${dy}/${yr}`;
 }
 
-function cleanSku(raw: string): string { return raw.replace(/\[+$/, ""); }
+function cleanSku(raw: string): string { return raw.replace(/\[+$/, "").trim(); }
 
 function toCSV(headers: string[], rows: Record<string, string | number>[]): string {
   const esc = (v: string | number) => { const s = String(v ?? ""); return s.includes(",") ? `"${s}"` : s; };
@@ -158,13 +81,8 @@ function todayStamp(): string {
   return `${d.getMonth()+1}${String(d.getDate()).padStart(2,"0")}${d.getFullYear()}`;
 }
 
-function validateART24T(rows: Record<string, string>[]): string | null {
-  if (!rows.length) return "File is empty.";
-  const required = Object.values(ART24T_COLS);
-  const headers = Object.keys(rows[0]);
-  const missing = required.filter(h => !headers.includes(h));
-  if (missing.length) return `Missing required columns: ${missing.join(", ")}`;
-  return null;
+function formatDate(ts: number): string {
+  return new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
@@ -182,6 +100,7 @@ interface FalkenRow {
   Quantity: string;
   Price_Per_Tire: string;
   _dealer: string;
+  _jmk: string;
 }
 
 interface MilestarRow {
@@ -194,129 +113,45 @@ interface MilestarRow {
   Quantity: string;
   SellPricePerTire: string;
   _dealer: string;
+  _jmk: string;
 }
 
-interface Results {
+interface ProcessResults {
   falkenOut: FalkenRow[];
   milestarOut: MilestarRow[];
   falkenDealersSeen: Set<string>;
   milestarDealersSeen: Set<string>;
+  totalInputRows: number;
+  filteredRows: number;
 }
 
-// ─── MAIN PAGE ────────────────────────────────────────────────────────────────
+type Dealer = {
+  _id: Id<"dealerRebateDealers">;
+  jmk: string;
+  name: string;
+  fanaticId?: number;
+  dealerNumber?: string;
+  programs: string[];
+  primSec?: number;
+  isActive: boolean;
+  createdAt: number;
+  updatedAt: number;
+};
 
-const STEPS = ["Upload ART24T", "Select Programs", "Review & Export"];
+// ─── TABS ─────────────────────────────────────────────────────────────────────
+const TABS = ["Upload & Process", "Dealer Management", "Upload History"] as const;
+type TabType = typeof TABS[number];
+
+const UPLOAD_STEPS = ["Upload ART24T", "Select Programs", "Review & Export"];
+
+// ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 
 export default function DealerRebatesPage() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
+  const { user } = useAuth();
 
-  const [step, setStep] = useState(0);
-  const [rawRows, setRawRows] = useState<Record<string, string>[]>([]);
-  const [fileName, setFileName] = useState("");
-  const [fileError, setFileError] = useState("");
-  const [programs, setPrograms] = useState({ falken: true, milestar: true });
-  const [results, setResults] = useState<Results | null>(null);
-  const [dragOver, setDragOver] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  const handleFile = useCallback((file: File | null) => {
-    if (!file) return;
-    setFileError("");
-    setFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const rows = parseCSV(e.target?.result as string);
-      const err = validateART24T(rows);
-      if (err) { setFileError(err); return; }
-      setRawRows(rows);
-      setStep(1);
-    };
-    reader.readAsText(file);
-  }, []);
-
-  const processData = () => {
-    const falkenMap: Record<string, typeof FALKEN_DEALERS> = {};
-    FALKEN_DEALERS.forEach(d => {
-      if (!falkenMap[d.jmk]) falkenMap[d.jmk] = [];
-      falkenMap[d.jmk].push(d);
-    });
-    const milestarMap: Record<string, typeof MILESTAR_DEALERS[0]> = {};
-    MILESTAR_DEALERS.forEach(d => { milestarMap[d.jmk] = d; });
-
-    const falkenOut: FalkenRow[] = [], milestarOut: MilestarRow[] = [];
-    const falkenDealersSeen = new Set<string>(), milestarDealersSeen = new Set<string>();
-
-    rawRows.forEach(row => {
-      const jmk = normalizeAcct(row[ART24T_COLS.accountId]);
-      const invoice = row[ART24T_COLS.invoice];
-      const sku = cleanSku(row[ART24T_COLS.sku]);
-      const dateRaw = row[ART24T_COLS.date];
-      const qty = row[ART24T_COLS.qty];
-      const price = row[ART24T_COLS.unitPrice];
-
-      if (programs.falken && falkenMap[jmk]) {
-        falkenMap[jmk].forEach(dealer => {
-          falkenOut.push({
-            Falken_Distributor_Account_Number: IE_FALKEN.distributorAccount,
-            FANATIC_Dealer_Account_Number: dealer.fanaticId,
-            Distributor_Center_Address: IE_FALKEN.address,
-            Distributor_Center_City: IE_FALKEN.city,
-            Distributor_Center_State: IE_FALKEN.state,
-            Distributor_Center_Postal_Code: IE_FALKEN.zip,
-            Invoice_Number: invoice,
-            SKU: sku,
-            Date: toFalkenDate(dateRaw),
-            Quantity: qty,
-            Price_Per_Tire: price,
-            _dealer: dealer.name,
-          });
-          falkenDealersSeen.add(jmk);
-        });
-      }
-
-      if (programs.milestar && milestarMap[jmk]) {
-        const dealer = milestarMap[jmk];
-        milestarOut.push({
-          ParentDistributorNumber: IE_MILESTAR.parentDistributor,
-          DistributorCenterNumber: IE_MILESTAR.distributorCenter,
-          DealerNumber: dealer.dealerNumber,
-          InvoiceNumber: invoice,
-          InvoiceDate: dateRaw,
-          ProductCode: sku,
-          Quantity: qty,
-          SellPricePerTire: price,
-          _dealer: dealer.name,
-        });
-        milestarDealersSeen.add(jmk);
-      }
-    });
-
-    setResults({ falkenOut, milestarOut, falkenDealersSeen, milestarDealersSeen });
-    setStep(2);
-  };
-
-  const exportFalken = () => {
-    if (!results) return;
-    const headers = ["Falken_Distributor_Account_Number","FANATIC_Dealer_Account_Number","Distributor_Center_Address","Distributor_Center_City","Distributor_Center_State","Distributor_Center_Postal_Code","Invoice_Number","SKU","Date","Quantity","Price_Per_Tire"];
-    const clean = results.falkenOut.map(r => { const o = {...r} as Record<string, string | number>; delete o._dealer; return o; });
-    downloadCSV(`Falken_Fanatic_${todayStamp()}.csv`, toCSV(headers, clean));
-  };
-
-  const exportMilestar = () => {
-    if (!results) return;
-    const headers = ["ParentDistributorNumber","DistributorCenterNumber","DealerNumber","InvoiceNumber","InvoiceDate","ProductCode","Quantity","SellPricePerTire"];
-    const clean = results.milestarOut.map(r => { const o = {...r} as Record<string, string | number>; delete o._dealer; return o; });
-    downloadCSV(`Milestar_Momentum_${todayStamp()}.csv`, toCSV(headers, clean));
-  };
-
-  const resetAll = () => {
-    setStep(0);
-    setRawRows([]);
-    setResults(null);
-    setFileName("");
-    setFileError("");
-  };
+  const [activeTab, setActiveTab] = useState<TabType>("Upload & Process");
 
   return (
     <Protected>
@@ -336,304 +171,1026 @@ export default function DealerRebatesPage() {
                   Dealer Rebate Tool
                 </h1>
                 <p className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                  Associate Dealer Program - ART24T to CSV Upload Generator
+                  Associate Dealer Program &mdash; ART24T to CSV Upload Generator
                 </p>
               </div>
-              <div className={`ml-auto px-3 py-1 rounded-md text-xs font-mono ${isDark ? "bg-slate-800 text-slate-400 border border-slate-700" : "bg-gray-100 text-gray-500 border border-gray-200"}`}>
-                ART24T &rarr; CSV
-              </div>
+            </div>
+            {/* Tabs */}
+            <div className="flex gap-1 mt-4">
+              {TABS.map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    activeTab === tab
+                      ? isDark ? "bg-orange-500/20 text-orange-400 border border-orange-500/40" : "bg-orange-100 text-orange-700 border border-orange-300"
+                      : isDark ? "text-slate-400 hover:text-slate-300 hover:bg-slate-800" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
             </div>
           </header>
 
-          <div className="max-w-4xl mx-auto px-6 py-6">
-            {/* Step Indicator */}
-            <div className="flex items-center gap-2 mb-8">
-              {STEPS.map((label, i) => (
-                <div key={i} className="flex items-center gap-2 flex-1">
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-mono font-bold flex-shrink-0 transition-all ${
-                    step > i
-                      ? "bg-green-500/20 text-green-400 border-2 border-green-500/40"
-                      : step === i
-                        ? isDark ? "bg-orange-500/20 text-orange-400 border-2 border-orange-500/40" : "bg-orange-100 text-orange-600 border-2 border-orange-300"
-                        : isDark ? "bg-slate-800 text-slate-500 border-2 border-slate-700" : "bg-gray-100 text-gray-400 border-2 border-gray-200"
-                  }`}>
-                    {step > i ? "\u2713" : i + 1}
-                  </div>
-                  <span className={`text-xs font-semibold uppercase tracking-wide ${
-                    step === i
-                      ? isDark ? "text-white" : "text-gray-900"
-                      : isDark ? "text-slate-500" : "text-gray-400"
-                  }`}>
-                    {label}
-                  </span>
-                  {i < STEPS.length - 1 && (
-                    <div className={`flex-1 h-px ${isDark ? "bg-slate-700" : "bg-gray-200"}`} />
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {/* Step 0: Upload */}
-            {step === 0 && (
-              <div className={`rounded-xl border p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
-                <h2 className={`text-sm font-bold uppercase tracking-wider mb-4 ${isDark ? "text-orange-400" : "text-orange-600"}`}>
-                  Upload ART24T Report
-                </h2>
-                <div
-                  className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all ${
-                    dragOver
-                      ? isDark ? "border-orange-500 bg-orange-500/10" : "border-orange-400 bg-orange-50"
-                      : isDark ? "border-slate-600 hover:border-slate-500 bg-slate-800/50" : "border-gray-300 hover:border-gray-400 bg-gray-50"
-                  }`}
-                  onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-                  onDragLeave={() => setDragOver(false)}
-                  onDrop={e => { e.preventDefault(); setDragOver(false); handleFile(e.dataTransfer.files[0]); }}
-                  onClick={() => fileRef.current?.click()}
-                >
-                  <div className="text-4xl mb-3">
-                    <svg className={`w-12 h-12 mx-auto ${isDark ? "text-slate-500" : "text-gray-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                    </svg>
-                  </div>
-                  <p className={`font-semibold mb-1 ${isDark ? "text-white" : "text-gray-900"}`}>
-                    Drop ART24T CSV here, or click to browse
-                  </p>
-                  <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                    Export the ART24T from your system as CSV before uploading
-                  </p>
-                </div>
-                <input type="file" accept=".csv" ref={fileRef} className="hidden" onChange={e => handleFile(e.target.files?.[0] ?? null)} />
-                {fileError && (
-                  <div className={`mt-4 p-3 rounded-lg text-sm ${isDark ? "bg-red-500/10 text-red-400 border border-red-500/20" : "bg-red-50 text-red-600 border border-red-200"}`}>
-                    {fileError}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Step 1: Select Programs */}
-            {step === 1 && (
-              <div>
-                <div className={`rounded-xl border p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
-                  <h2 className={`text-sm font-bold uppercase tracking-wider mb-4 ${isDark ? "text-orange-400" : "text-orange-600"}`}>
-                    Select Programs to Generate
-                  </h2>
-                  <div className={`mb-5 p-3 rounded-lg text-sm flex items-center gap-2 ${isDark ? "bg-green-500/10 text-green-400 border border-green-500/20" : "bg-green-50 text-green-700 border border-green-200"}`}>
-                    <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    Loaded <strong className="mx-1">{fileName}</strong> &mdash; {rawRows.length} transaction rows ready to process.
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    {[
-                      { key: "falken" as const, label: "Falken Fanatic", color: isDark ? "text-amber-400" : "text-amber-600", borderColor: "border-amber-500", bgColor: isDark ? "bg-amber-500/10" : "bg-amber-50", count: FALKEN_DEALERS.length, fmt: "11-column CSV" },
-                      { key: "milestar" as const, label: "Milestar Momentum", color: isDark ? "text-blue-400" : "text-blue-600", borderColor: "border-blue-500", bgColor: isDark ? "bg-blue-500/10" : "bg-blue-50", count: MILESTAR_DEALERS.length, fmt: "8-column CSV" },
-                    ].map(p => (
-                      <div
-                        key={p.key}
-                        className={`rounded-xl border-2 p-5 cursor-pointer transition-all ${
-                          programs[p.key]
-                            ? `${p.borderColor} ${p.bgColor}`
-                            : isDark ? "border-slate-700 bg-slate-800/30 hover:border-slate-600" : "border-gray-200 bg-gray-50 hover:border-gray-300"
-                        }`}
-                        onClick={() => setPrograms({ ...programs, [p.key]: !programs[p.key] })}
-                      >
-                        <div className="flex items-center gap-3 mb-2">
-                          <div className={`w-5 h-5 rounded flex items-center justify-center text-xs font-bold ${
-                            programs[p.key]
-                              ? "bg-orange-500 text-white"
-                              : isDark ? "border-2 border-slate-600" : "border-2 border-gray-300"
-                          }`}>
-                            {programs[p.key] && "\u2713"}
-                          </div>
-                          <span className={`font-bold ${p.color}`}>{p.label}</span>
-                        </div>
-                        <p className={`text-xs ml-8 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                          {p.count} enrolled dealers &middot; {p.fmt}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="flex gap-3 mt-5">
-                  <button
-                    onClick={() => { setStep(0); setRawRows([]); setFileName(""); }}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${isDark ? "bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700" : "bg-white text-gray-600 hover:bg-gray-50 border border-gray-200"}`}
-                  >
-                    &larr; Back
-                  </button>
-                  <button
-                    disabled={!programs.falken && !programs.milestar}
-                    onClick={processData}
-                    className={`px-5 py-2 rounded-lg text-sm font-bold transition-colors ${
-                      programs.falken || programs.milestar
-                        ? "bg-orange-500 hover:bg-orange-600 text-white"
-                        : isDark ? "bg-slate-700 text-slate-500 cursor-not-allowed" : "bg-gray-200 text-gray-400 cursor-not-allowed"
-                    }`}
-                  >
-                    Process & Review &rarr;
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Step 2: Review & Export */}
-            {step === 2 && results && (
-              <div>
-                {/* Stats */}
-                <div className="grid grid-cols-3 gap-4 mb-6">
-                  <div className={`rounded-xl border p-4 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
-                    <div className={`text-3xl font-mono font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{rawRows.length}</div>
-                    <div className={`text-xs mt-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>ART24T Rows</div>
-                  </div>
-                  {programs.falken && (
-                    <div className={`rounded-xl border p-4 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
-                      <div className="text-3xl font-mono font-bold text-green-400">{results.falkenOut.length}</div>
-                      <div className={`text-xs mt-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>Falken Rows &middot; {results.falkenDealersSeen.size} dealers</div>
-                    </div>
-                  )}
-                  {programs.milestar && (
-                    <div className={`rounded-xl border p-4 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
-                      <div className="text-3xl font-mono font-bold text-blue-400">{results.milestarOut.length}</div>
-                      <div className={`text-xs mt-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>Milestar Rows &middot; {results.milestarDealersSeen.size} dealers</div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Falken Export */}
-                {programs.falken && (
-                  <div className={`rounded-xl border overflow-hidden mb-4 ${isDark ? "border-slate-700" : "border-gray-200 shadow-sm"}`}>
-                    <div className={`px-5 py-3 flex items-center justify-between border-b-2 ${isDark ? "bg-amber-500/10 border-amber-500/40" : "bg-amber-50 border-amber-300"}`}>
-                      <div>
-                        <div className={`font-bold ${isDark ? "text-amber-400" : "text-amber-700"}`}>Falken Fanatic</div>
-                        <div className={`text-xs ${isDark ? "text-amber-600" : "text-amber-500"}`}>{results.falkenOut.length} rows &middot; Distributor 20118 &middot; Latrobe PA &middot; M/D/YYYY dates</div>
-                      </div>
-                      {results.falkenOut.length > 0 ? (
-                        <button onClick={exportFalken} className="px-4 py-1.5 rounded-lg text-sm font-bold bg-green-600 hover:bg-green-700 text-white transition-colors">
-                          Download Falken CSV
-                        </button>
-                      ) : (
-                        <span className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>No matching dealers</span>
-                      )}
-                    </div>
-                    <div className={`p-4 ${isDark ? "bg-slate-800/50" : "bg-white"}`}>
-                      {results.falkenOut.length > 0 ? (
-                        <>
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-xs">
-                              <thead>
-                                <tr className={isDark ? "text-slate-400" : "text-gray-500"}>
-                                  <th className="text-left py-2 px-2 font-medium">Dealer</th>
-                                  <th className="text-left py-2 px-2 font-medium">Fanatic ID</th>
-                                  <th className="text-left py-2 px-2 font-medium">Invoice</th>
-                                  <th className="text-left py-2 px-2 font-medium">SKU</th>
-                                  <th className="text-left py-2 px-2 font-medium">Date</th>
-                                  <th className="text-left py-2 px-2 font-medium">Qty</th>
-                                  <th className="text-left py-2 px-2 font-medium">$/Tire</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {results.falkenOut.slice(0, 8).map((r, i) => (
-                                  <tr key={i} className={`border-t ${isDark ? "border-slate-700/50 hover:bg-slate-700/30" : "border-gray-100 hover:bg-gray-50"}`}>
-                                    <td className={`py-1.5 px-2 ${isDark ? "text-white" : "text-gray-900"}`}>{r._dealer}</td>
-                                    <td className={`py-1.5 px-2 font-mono ${isDark ? "text-slate-300" : "text-gray-600"}`}>{r.FANATIC_Dealer_Account_Number}</td>
-                                    <td className={`py-1.5 px-2 font-mono ${isDark ? "text-slate-300" : "text-gray-600"}`}>{r.Invoice_Number}</td>
-                                    <td className={`py-1.5 px-2 font-mono ${isDark ? "text-slate-300" : "text-gray-600"}`}>{r.SKU}</td>
-                                    <td className={`py-1.5 px-2 font-mono ${isDark ? "text-slate-300" : "text-gray-600"}`}>{r.Date}</td>
-                                    <td className={`py-1.5 px-2 font-mono ${isDark ? "text-slate-300" : "text-gray-600"}`}>{r.Quantity}</td>
-                                    <td className={`py-1.5 px-2 font-mono ${isDark ? "text-slate-300" : "text-gray-600"}`}>{r.Price_Per_Tire}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                          {results.falkenOut.length > 8 && (
-                            <p className={`text-xs mt-2 font-mono ${isDark ? "text-slate-500" : "text-gray-400"}`}>+ {results.falkenOut.length - 8} more rows in download</p>
-                          )}
-                        </>
-                      ) : (
-                        <div className={`p-3 rounded-lg text-sm ${isDark ? "bg-amber-500/10 text-amber-300 border border-amber-500/20" : "bg-amber-50 text-amber-700 border border-amber-200"}`}>
-                          No Falken Fanatic dealers matched in this ART24T. Verify the date range includes their transactions.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Milestar Export */}
-                {programs.milestar && (
-                  <div className={`rounded-xl border overflow-hidden mb-4 ${isDark ? "border-slate-700" : "border-gray-200 shadow-sm"}`}>
-                    <div className={`px-5 py-3 flex items-center justify-between border-b-2 ${isDark ? "bg-blue-500/10 border-blue-500/40" : "bg-blue-50 border-blue-300"}`}>
-                      <div>
-                        <div className={`font-bold ${isDark ? "text-blue-400" : "text-blue-700"}`}>Milestar Momentum</div>
-                        <div className={`text-xs ${isDark ? "text-blue-600" : "text-blue-500"}`}>{results.milestarOut.length} rows &middot; Parent 119662 &middot; YYMMDD dates</div>
-                      </div>
-                      {results.milestarOut.length > 0 ? (
-                        <button onClick={exportMilestar} className="px-4 py-1.5 rounded-lg text-sm font-bold bg-blue-600 hover:bg-blue-700 text-white transition-colors">
-                          Download Milestar CSV
-                        </button>
-                      ) : (
-                        <span className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>No matching dealers</span>
-                      )}
-                    </div>
-                    <div className={`p-4 ${isDark ? "bg-slate-800/50" : "bg-white"}`}>
-                      {results.milestarOut.length > 0 ? (
-                        <>
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-xs">
-                              <thead>
-                                <tr className={isDark ? "text-slate-400" : "text-gray-500"}>
-                                  <th className="text-left py-2 px-2 font-medium">Dealer</th>
-                                  <th className="text-left py-2 px-2 font-medium">Dealer #</th>
-                                  <th className="text-left py-2 px-2 font-medium">Invoice</th>
-                                  <th className="text-left py-2 px-2 font-medium">SKU</th>
-                                  <th className="text-left py-2 px-2 font-medium">Date</th>
-                                  <th className="text-left py-2 px-2 font-medium">Qty</th>
-                                  <th className="text-left py-2 px-2 font-medium">$/Tire</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {results.milestarOut.slice(0, 8).map((r, i) => (
-                                  <tr key={i} className={`border-t ${isDark ? "border-slate-700/50 hover:bg-slate-700/30" : "border-gray-100 hover:bg-gray-50"}`}>
-                                    <td className={`py-1.5 px-2 ${isDark ? "text-white" : "text-gray-900"}`}>{r._dealer}</td>
-                                    <td className={`py-1.5 px-2 font-mono ${isDark ? "text-slate-300" : "text-gray-600"}`}>{r.DealerNumber}</td>
-                                    <td className={`py-1.5 px-2 font-mono ${isDark ? "text-slate-300" : "text-gray-600"}`}>{r.InvoiceNumber}</td>
-                                    <td className={`py-1.5 px-2 font-mono ${isDark ? "text-slate-300" : "text-gray-600"}`}>{r.ProductCode}</td>
-                                    <td className={`py-1.5 px-2 font-mono ${isDark ? "text-slate-300" : "text-gray-600"}`}>{r.InvoiceDate}</td>
-                                    <td className={`py-1.5 px-2 font-mono ${isDark ? "text-slate-300" : "text-gray-600"}`}>{r.Quantity}</td>
-                                    <td className={`py-1.5 px-2 font-mono ${isDark ? "text-slate-300" : "text-gray-600"}`}>{r.SellPricePerTire}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                          {results.milestarOut.length > 8 && (
-                            <p className={`text-xs mt-2 font-mono ${isDark ? "text-slate-500" : "text-gray-400"}`}>+ {results.milestarOut.length - 8} more rows in download</p>
-                          )}
-                        </>
-                      ) : (
-                        <div className={`p-3 rounded-lg text-sm ${isDark ? "bg-blue-500/10 text-blue-300 border border-blue-500/20" : "bg-blue-50 text-blue-700 border border-blue-200"}`}>
-                          No Milestar Momentum dealers matched in this ART24T.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Actions */}
-                <div className="flex items-center gap-3 mt-5">
-                  <button
-                    onClick={resetAll}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${isDark ? "bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700" : "bg-white text-gray-600 hover:bg-gray-50 border border-gray-200"}`}
-                  >
-                    Start New Upload
-                  </button>
-                </div>
-              </div>
-            )}
+          <div className="max-w-5xl mx-auto px-6 py-6">
+            {activeTab === "Upload & Process" && <UploadTab isDark={isDark} userId={user?._id} />}
+            {activeTab === "Dealer Management" && <DealerManagementTab isDark={isDark} />}
+            {activeTab === "Upload History" && <UploadHistoryTab isDark={isDark} />}
           </div>
         </main>
       </div>
     </Protected>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TAB 1: UPLOAD & PROCESS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function UploadTab({ isDark, userId }: { isDark: boolean; userId?: Id<"users"> }) {
+  const dealers = useQuery(api.dealerRebates.listDealers, { activeOnly: true });
+  const saveUpload = useMutation(api.dealerRebates.saveUpload);
+
+  const [step, setStep] = useState(0);
+  const [rawRows, setRawRows] = useState<string[][]>([]);
+  const [filteredRows, setFilteredRows] = useState<string[][]>([]);
+  const [fileName, setFileName] = useState("");
+  const [fileError, setFileError] = useState("");
+  const [programs, setPrograms] = useState({ falken: true, milestar: true });
+  const [results, setResults] = useState<ProcessResults | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState<{ falken: boolean; milestar: boolean }>({ falken: false, milestar: false });
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const falkenDealers = useMemo(() => dealers?.filter(d => d.programs.includes("falken")) ?? [], [dealers]);
+  const milestarDealers = useMemo(() => dealers?.filter(d => d.programs.includes("milestar")) ?? [], [dealers]);
+
+  const handleFile = useCallback((file: File | null) => {
+    if (!file) return;
+    setFileError("");
+    setFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      const allRows = parsePositionalCSV(text);
+      if (allRows.length === 0) { setFileError("File is empty or could not be parsed."); return; }
+
+      // Filter only product types starting with "T"
+      const tRows = allRows.filter(cols => {
+        const productType = (cols[COL.PRODUCT_TYPE] ?? "").trim();
+        return productType.toUpperCase().startsWith("T");
+      });
+
+      setRawRows(allRows);
+      setFilteredRows(tRows);
+      setStep(1);
+    };
+    reader.readAsText(file);
+  }, []);
+
+  const processData = () => {
+    if (!dealers) return;
+
+    // Build lookup maps from Convex dealers
+    const falkenByJmk: Record<string, Dealer[]> = {};
+    falkenDealers.forEach(d => {
+      const key = d.jmk.toLowerCase();
+      if (!falkenByJmk[key]) falkenByJmk[key] = [];
+      falkenByJmk[key].push(d);
+    });
+    const milestarByJmk: Record<string, Dealer> = {};
+    milestarDealers.forEach(d => {
+      milestarByJmk[d.jmk.toLowerCase()] = d;
+    });
+
+    const falkenOut: FalkenRow[] = [];
+    const milestarOut: MilestarRow[] = [];
+    const falkenDealersSeen = new Set<string>();
+    const milestarDealersSeen = new Set<string>();
+
+    filteredRows.forEach(cols => {
+      const jmk = normalizeAcct(cols[COL.JMK] ?? "");
+      const invoice = (cols[COL.INVOICE] ?? "").trim();
+      const dateRaw = (cols[COL.DATE] ?? "").trim();
+      const sku = cleanSku(cols[COL.SKU] ?? "");
+      const qty = (cols[COL.QTY] ?? "").trim();
+      const price = (cols[COL.PRICE] ?? "").trim();
+
+      if (programs.falken && falkenByJmk[jmk]) {
+        falkenByJmk[jmk].forEach(dealer => {
+          if (!dealer.fanaticId) return;
+          falkenOut.push({
+            Falken_Distributor_Account_Number: IE_FALKEN.distributorAccount,
+            FANATIC_Dealer_Account_Number: dealer.fanaticId,
+            Distributor_Center_Address: IE_FALKEN.address,
+            Distributor_Center_City: IE_FALKEN.city,
+            Distributor_Center_State: IE_FALKEN.state,
+            Distributor_Center_Postal_Code: IE_FALKEN.zip,
+            Invoice_Number: invoice,
+            SKU: sku,
+            Date: toFalkenDate(dateRaw),
+            Quantity: qty,
+            Price_Per_Tire: price,
+            _dealer: dealer.name,
+            _jmk: dealer.jmk,
+          });
+          falkenDealersSeen.add(jmk);
+        });
+      }
+
+      if (programs.milestar && milestarByJmk[jmk]) {
+        const dealer = milestarByJmk[jmk];
+        if (dealer.dealerNumber) {
+          milestarOut.push({
+            ParentDistributorNumber: IE_MILESTAR.parentDistributor,
+            DistributorCenterNumber: IE_MILESTAR.distributorCenter,
+            DealerNumber: dealer.dealerNumber,
+            InvoiceNumber: invoice,
+            InvoiceDate: dateRaw,
+            ProductCode: sku,
+            Quantity: qty,
+            SellPricePerTire: price,
+            _dealer: dealer.name,
+            _jmk: dealer.jmk,
+          });
+          milestarDealersSeen.add(jmk);
+        }
+      }
+    });
+
+    setResults({ falkenOut, milestarOut, falkenDealersSeen, milestarDealersSeen, totalInputRows: rawRows.length, filteredRows: filteredRows.length });
+    setStep(2);
+  };
+
+  const exportFalken = async () => {
+    if (!results) return;
+    const headers = ["Falken_Distributor_Account_Number","FANATIC_Dealer_Account_Number","Distributor_Center_Address","Distributor_Center_City","Distributor_Center_State","Distributor_Center_Postal_Code","Invoice_Number","SKU","Date","Quantity","Price_Per_Tire"];
+    const clean = results.falkenOut.map(r => {
+      const o = {...r} as Record<string, string | number>;
+      delete o._dealer;
+      delete o._jmk;
+      return o;
+    });
+    const csvContent = toCSV(headers, clean);
+    downloadCSV(`Falken_Fanatic_${todayStamp()}.csv`, csvContent);
+
+    // Save to upload history
+    if (userId && !saved.falken) {
+      setSaving(true);
+      const breakdown: Record<string, { name: string; fanaticId?: number; count: number }> = {};
+      results.falkenOut.forEach(r => {
+        const key = `${r._jmk}-${r.FANATIC_Dealer_Account_Number}`;
+        if (!breakdown[key]) breakdown[key] = { name: r._dealer, fanaticId: r.FANATIC_Dealer_Account_Number, count: 0 };
+        breakdown[key].count++;
+      });
+      await saveUpload({
+        fileName,
+        program: "falken",
+        totalInputRows: results.totalInputRows,
+        filteredRows: results.filteredRows,
+        matchedRows: results.falkenOut.length,
+        dealersMatched: results.falkenDealersSeen.size,
+        resultData: csvContent,
+        dealerBreakdown: Object.entries(breakdown).map(([key, v]) => ({
+          jmk: key.split("-")[0],
+          name: v.name,
+          fanaticId: v.fanaticId,
+          rowCount: v.count,
+        })),
+        uploadedBy: userId,
+      });
+      setSaved(p => ({ ...p, falken: true }));
+      setSaving(false);
+    }
+  };
+
+  const exportMilestar = async () => {
+    if (!results) return;
+    const headers = ["ParentDistributorNumber","DistributorCenterNumber","DealerNumber","InvoiceNumber","InvoiceDate","ProductCode","Quantity","SellPricePerTire"];
+    const clean = results.milestarOut.map(r => {
+      const o = {...r} as Record<string, string | number>;
+      delete o._dealer;
+      delete o._jmk;
+      return o;
+    });
+    const csvContent = toCSV(headers, clean);
+    downloadCSV(`Milestar_Momentum_${todayStamp()}.csv`, csvContent);
+
+    // Save to upload history
+    if (userId && !saved.milestar) {
+      setSaving(true);
+      const breakdown: Record<string, { name: string; dealerNumber?: string; count: number }> = {};
+      results.milestarOut.forEach(r => {
+        const key = `${r._jmk}-${r.DealerNumber}`;
+        if (!breakdown[key]) breakdown[key] = { name: r._dealer, dealerNumber: r.DealerNumber, count: 0 };
+        breakdown[key].count++;
+      });
+      await saveUpload({
+        fileName,
+        program: "milestar",
+        totalInputRows: results.totalInputRows,
+        filteredRows: results.filteredRows,
+        matchedRows: results.milestarOut.length,
+        dealersMatched: results.milestarDealersSeen.size,
+        resultData: csvContent,
+        dealerBreakdown: Object.entries(breakdown).map(([, v]) => ({
+          jmk: "",
+          name: v.name,
+          dealerNumber: v.dealerNumber,
+          rowCount: v.count,
+        })),
+        uploadedBy: userId,
+      });
+      setSaved(p => ({ ...p, milestar: true }));
+      setSaving(false);
+    }
+  };
+
+  const resetAll = () => {
+    setStep(0);
+    setRawRows([]);
+    setFilteredRows([]);
+    setResults(null);
+    setFileName("");
+    setFileError("");
+    setSaved({ falken: false, milestar: false });
+  };
+
+  if (!dealers) {
+    return <div className={`text-center py-12 ${isDark ? "text-slate-400" : "text-gray-500"}`}>Loading dealers...</div>;
+  }
+
+  return (
+    <div>
+      {/* Step Indicator */}
+      <div className="flex items-center gap-2 mb-8">
+        {UPLOAD_STEPS.map((label, i) => (
+          <div key={i} className="flex items-center gap-2 flex-1">
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-mono font-bold flex-shrink-0 transition-all ${
+              step > i
+                ? "bg-green-500/20 text-green-400 border-2 border-green-500/40"
+                : step === i
+                  ? isDark ? "bg-orange-500/20 text-orange-400 border-2 border-orange-500/40" : "bg-orange-100 text-orange-600 border-2 border-orange-300"
+                  : isDark ? "bg-slate-800 text-slate-500 border-2 border-slate-700" : "bg-gray-100 text-gray-400 border-2 border-gray-200"
+            }`}>
+              {step > i ? "\u2713" : i + 1}
+            </div>
+            <span className={`text-xs font-semibold uppercase tracking-wide ${
+              step === i
+                ? isDark ? "text-white" : "text-gray-900"
+                : isDark ? "text-slate-500" : "text-gray-400"
+            }`}>
+              {label}
+            </span>
+            {i < UPLOAD_STEPS.length - 1 && (
+              <div className={`flex-1 h-px ${isDark ? "bg-slate-700" : "bg-gray-200"}`} />
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Step 0: Upload */}
+      {step === 0 && (
+        <div className={`rounded-xl border p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
+          <h2 className={`text-sm font-bold uppercase tracking-wider mb-4 ${isDark ? "text-orange-400" : "text-orange-600"}`}>
+            Upload ART24T Report
+          </h2>
+          <div
+            className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all ${
+              dragOver
+                ? isDark ? "border-orange-500 bg-orange-500/10" : "border-orange-400 bg-orange-50"
+                : isDark ? "border-slate-600 hover:border-slate-500 bg-slate-800/50" : "border-gray-300 hover:border-gray-400 bg-gray-50"
+            }`}
+            onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={e => { e.preventDefault(); setDragOver(false); handleFile(e.dataTransfer.files[0]); }}
+            onClick={() => fileRef.current?.click()}
+          >
+            <svg className={`w-12 h-12 mx-auto mb-3 ${isDark ? "text-slate-500" : "text-gray-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            <p className={`font-semibold mb-1 ${isDark ? "text-white" : "text-gray-900"}`}>
+              Drop ART24T CSV here, or click to browse
+            </p>
+            <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+              Only product types starting with &quot;T&quot; will be processed
+            </p>
+          </div>
+          <input type="file" accept=".csv" ref={fileRef} className="hidden" onChange={e => handleFile(e.target.files?.[0] ?? null)} />
+          {fileError && (
+            <div className={`mt-4 p-3 rounded-lg text-sm ${isDark ? "bg-red-500/10 text-red-400 border border-red-500/20" : "bg-red-50 text-red-600 border border-red-200"}`}>
+              {fileError}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Step 1: Select Programs */}
+      {step === 1 && (
+        <div>
+          <div className={`rounded-xl border p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
+            <h2 className={`text-sm font-bold uppercase tracking-wider mb-4 ${isDark ? "text-orange-400" : "text-orange-600"}`}>
+              Select Programs to Generate
+            </h2>
+            <div className={`mb-5 p-3 rounded-lg text-sm flex items-center gap-2 ${isDark ? "bg-green-500/10 text-green-400 border border-green-500/20" : "bg-green-50 text-green-700 border border-green-200"}`}>
+              <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              Loaded <strong className="mx-1">{fileName}</strong> &mdash; {rawRows.length} total rows, {filteredRows.length} &quot;T&quot; product rows ready.
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              {[
+                { key: "falken" as const, label: "Falken Fanatic", color: isDark ? "text-amber-400" : "text-amber-600", borderColor: "border-amber-500", bgColor: isDark ? "bg-amber-500/10" : "bg-amber-50", count: falkenDealers.length, fmt: "11-column CSV" },
+                { key: "milestar" as const, label: "Milestar Momentum", color: isDark ? "text-blue-400" : "text-blue-600", borderColor: "border-blue-500", bgColor: isDark ? "bg-blue-500/10" : "bg-blue-50", count: milestarDealers.length, fmt: "8-column CSV" },
+              ].map(p => (
+                <div
+                  key={p.key}
+                  className={`rounded-xl border-2 p-5 cursor-pointer transition-all ${
+                    programs[p.key]
+                      ? `${p.borderColor} ${p.bgColor}`
+                      : isDark ? "border-slate-700 bg-slate-800/30 hover:border-slate-600" : "border-gray-200 bg-gray-50 hover:border-gray-300"
+                  }`}
+                  onClick={() => setPrograms({ ...programs, [p.key]: !programs[p.key] })}
+                >
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className={`w-5 h-5 rounded flex items-center justify-center text-xs font-bold ${
+                      programs[p.key]
+                        ? "bg-orange-500 text-white"
+                        : isDark ? "border-2 border-slate-600" : "border-2 border-gray-300"
+                    }`}>
+                      {programs[p.key] && "\u2713"}
+                    </div>
+                    <span className={`font-bold ${p.color}`}>{p.label}</span>
+                  </div>
+                  <p className={`text-xs ml-8 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    {p.count} enrolled dealers &middot; {p.fmt}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="flex gap-3 mt-5">
+            <button
+              onClick={() => { setStep(0); setRawRows([]); setFilteredRows([]); setFileName(""); }}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${isDark ? "bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700" : "bg-white text-gray-600 hover:bg-gray-50 border border-gray-200"}`}
+            >
+              &larr; Back
+            </button>
+            <button
+              disabled={!programs.falken && !programs.milestar}
+              onClick={processData}
+              className={`px-5 py-2 rounded-lg text-sm font-bold transition-colors ${
+                programs.falken || programs.milestar
+                  ? "bg-orange-500 hover:bg-orange-600 text-white"
+                  : isDark ? "bg-slate-700 text-slate-500 cursor-not-allowed" : "bg-gray-200 text-gray-400 cursor-not-allowed"
+              }`}
+            >
+              Process & Review &rarr;
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Step 2: Review & Export */}
+      {step === 2 && results && (
+        <div>
+          {/* Stats */}
+          <div className="grid grid-cols-4 gap-4 mb-6">
+            <div className={`rounded-xl border p-4 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
+              <div className={`text-3xl font-mono font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{results.totalInputRows}</div>
+              <div className={`text-xs mt-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>Total Rows</div>
+            </div>
+            <div className={`rounded-xl border p-4 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
+              <div className={`text-3xl font-mono font-bold ${isDark ? "text-orange-400" : "text-orange-600"}`}>{results.filteredRows}</div>
+              <div className={`text-xs mt-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>T-Type Rows</div>
+            </div>
+            {programs.falken && (
+              <div className={`rounded-xl border p-4 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
+                <div className="text-3xl font-mono font-bold text-green-400">{results.falkenOut.length}</div>
+                <div className={`text-xs mt-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>Falken &middot; {results.falkenDealersSeen.size} dealers</div>
+              </div>
+            )}
+            {programs.milestar && (
+              <div className={`rounded-xl border p-4 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
+                <div className="text-3xl font-mono font-bold text-blue-400">{results.milestarOut.length}</div>
+                <div className={`text-xs mt-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>Milestar &middot; {results.milestarDealersSeen.size} dealers</div>
+              </div>
+            )}
+          </div>
+
+          {/* Falken Export */}
+          {programs.falken && (
+            <div className={`rounded-xl border overflow-hidden mb-4 ${isDark ? "border-slate-700" : "border-gray-200 shadow-sm"}`}>
+              <div className={`px-5 py-3 flex items-center justify-between border-b-2 ${isDark ? "bg-amber-500/10 border-amber-500/40" : "bg-amber-50 border-amber-300"}`}>
+                <div>
+                  <div className={`font-bold ${isDark ? "text-amber-400" : "text-amber-700"}`}>Falken Fanatic</div>
+                  <div className={`text-xs ${isDark ? "text-amber-600" : "text-amber-500"}`}>{results.falkenOut.length} rows &middot; Distributor 20118 &middot; M/D/YYYY dates</div>
+                </div>
+                {results.falkenOut.length > 0 ? (
+                  <button onClick={exportFalken} disabled={saving} className="px-4 py-1.5 rounded-lg text-sm font-bold bg-green-600 hover:bg-green-700 text-white transition-colors disabled:opacity-50">
+                    {saved.falken ? "Re-download" : "Download Falken CSV"}
+                  </button>
+                ) : (
+                  <span className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>No matching dealers</span>
+                )}
+              </div>
+              <div className={`p-4 ${isDark ? "bg-slate-800/50" : "bg-white"}`}>
+                {results.falkenOut.length > 0 ? (
+                  <>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className={isDark ? "text-slate-400" : "text-gray-500"}>
+                            <th className="text-left py-2 px-2 font-medium">Dealer</th>
+                            <th className="text-left py-2 px-2 font-medium">Fanatic ID</th>
+                            <th className="text-left py-2 px-2 font-medium">Invoice</th>
+                            <th className="text-left py-2 px-2 font-medium">SKU</th>
+                            <th className="text-left py-2 px-2 font-medium">Date</th>
+                            <th className="text-left py-2 px-2 font-medium">Qty</th>
+                            <th className="text-left py-2 px-2 font-medium">$/Tire</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {results.falkenOut.slice(0, 8).map((r, i) => (
+                            <tr key={i} className={`border-t ${isDark ? "border-slate-700/50 hover:bg-slate-700/30" : "border-gray-100 hover:bg-gray-50"}`}>
+                              <td className={`py-1.5 px-2 ${isDark ? "text-white" : "text-gray-900"}`}>{r._dealer}</td>
+                              <td className={`py-1.5 px-2 font-mono ${isDark ? "text-slate-300" : "text-gray-600"}`}>{r.FANATIC_Dealer_Account_Number}</td>
+                              <td className={`py-1.5 px-2 font-mono ${isDark ? "text-slate-300" : "text-gray-600"}`}>{r.Invoice_Number}</td>
+                              <td className={`py-1.5 px-2 font-mono ${isDark ? "text-slate-300" : "text-gray-600"}`}>{r.SKU}</td>
+                              <td className={`py-1.5 px-2 font-mono ${isDark ? "text-slate-300" : "text-gray-600"}`}>{r.Date}</td>
+                              <td className={`py-1.5 px-2 font-mono ${isDark ? "text-slate-300" : "text-gray-600"}`}>{r.Quantity}</td>
+                              <td className={`py-1.5 px-2 font-mono ${isDark ? "text-slate-300" : "text-gray-600"}`}>{r.Price_Per_Tire}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {results.falkenOut.length > 8 && (
+                      <p className={`text-xs mt-2 font-mono ${isDark ? "text-slate-500" : "text-gray-400"}`}>+ {results.falkenOut.length - 8} more rows in download</p>
+                    )}
+                  </>
+                ) : (
+                  <div className={`p-3 rounded-lg text-sm ${isDark ? "bg-amber-500/10 text-amber-300 border border-amber-500/20" : "bg-amber-50 text-amber-700 border border-amber-200"}`}>
+                    No Falken Fanatic dealers matched in this ART24T.
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Milestar Export */}
+          {programs.milestar && (
+            <div className={`rounded-xl border overflow-hidden mb-4 ${isDark ? "border-slate-700" : "border-gray-200 shadow-sm"}`}>
+              <div className={`px-5 py-3 flex items-center justify-between border-b-2 ${isDark ? "bg-blue-500/10 border-blue-500/40" : "bg-blue-50 border-blue-300"}`}>
+                <div>
+                  <div className={`font-bold ${isDark ? "text-blue-400" : "text-blue-700"}`}>Milestar Momentum</div>
+                  <div className={`text-xs ${isDark ? "text-blue-600" : "text-blue-500"}`}>{results.milestarOut.length} rows &middot; Parent 119662 &middot; YYMMDD dates</div>
+                </div>
+                {results.milestarOut.length > 0 ? (
+                  <button onClick={exportMilestar} disabled={saving} className="px-4 py-1.5 rounded-lg text-sm font-bold bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-50">
+                    {saved.milestar ? "Re-download" : "Download Milestar CSV"}
+                  </button>
+                ) : (
+                  <span className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>No matching dealers</span>
+                )}
+              </div>
+              <div className={`p-4 ${isDark ? "bg-slate-800/50" : "bg-white"}`}>
+                {results.milestarOut.length > 0 ? (
+                  <>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className={isDark ? "text-slate-400" : "text-gray-500"}>
+                            <th className="text-left py-2 px-2 font-medium">Dealer</th>
+                            <th className="text-left py-2 px-2 font-medium">Dealer #</th>
+                            <th className="text-left py-2 px-2 font-medium">Invoice</th>
+                            <th className="text-left py-2 px-2 font-medium">SKU</th>
+                            <th className="text-left py-2 px-2 font-medium">Date</th>
+                            <th className="text-left py-2 px-2 font-medium">Qty</th>
+                            <th className="text-left py-2 px-2 font-medium">$/Tire</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {results.milestarOut.slice(0, 8).map((r, i) => (
+                            <tr key={i} className={`border-t ${isDark ? "border-slate-700/50 hover:bg-slate-700/30" : "border-gray-100 hover:bg-gray-50"}`}>
+                              <td className={`py-1.5 px-2 ${isDark ? "text-white" : "text-gray-900"}`}>{r._dealer}</td>
+                              <td className={`py-1.5 px-2 font-mono ${isDark ? "text-slate-300" : "text-gray-600"}`}>{r.DealerNumber}</td>
+                              <td className={`py-1.5 px-2 font-mono ${isDark ? "text-slate-300" : "text-gray-600"}`}>{r.InvoiceNumber}</td>
+                              <td className={`py-1.5 px-2 font-mono ${isDark ? "text-slate-300" : "text-gray-600"}`}>{r.ProductCode}</td>
+                              <td className={`py-1.5 px-2 font-mono ${isDark ? "text-slate-300" : "text-gray-600"}`}>{r.InvoiceDate}</td>
+                              <td className={`py-1.5 px-2 font-mono ${isDark ? "text-slate-300" : "text-gray-600"}`}>{r.Quantity}</td>
+                              <td className={`py-1.5 px-2 font-mono ${isDark ? "text-slate-300" : "text-gray-600"}`}>{r.SellPricePerTire}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {results.milestarOut.length > 8 && (
+                      <p className={`text-xs mt-2 font-mono ${isDark ? "text-slate-500" : "text-gray-400"}`}>+ {results.milestarOut.length - 8} more rows in download</p>
+                    )}
+                  </>
+                ) : (
+                  <div className={`p-3 rounded-lg text-sm ${isDark ? "bg-blue-500/10 text-blue-300 border border-blue-500/20" : "bg-blue-50 text-blue-700 border border-blue-200"}`}>
+                    No Milestar Momentum dealers matched in this ART24T.
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex items-center gap-3 mt-5">
+            <button
+              onClick={resetAll}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${isDark ? "bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700" : "bg-white text-gray-600 hover:bg-gray-50 border border-gray-200"}`}
+            >
+              Start New Upload
+            </button>
+            {(saved.falken || saved.milestar) && (
+              <span className={`text-xs ${isDark ? "text-green-400" : "text-green-600"}`}>
+                Saved to upload history
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TAB 2: DEALER MANAGEMENT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function DealerManagementTab({ isDark }: { isDark: boolean }) {
+  const dealers = useQuery(api.dealerRebates.listDealers, { activeOnly: false });
+  const createDealer = useMutation(api.dealerRebates.createDealer);
+  const updateDealer = useMutation(api.dealerRebates.updateDealer);
+  const deleteDealer = useMutation(api.dealerRebates.deleteDealer);
+
+  const [search, setSearch] = useState("");
+  const [programFilter, setProgramFilter] = useState<string>("all");
+  const [showInactive, setShowInactive] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [editingDealer, setEditingDealer] = useState<Dealer | null>(null);
+
+  // Form state
+  const [formJmk, setFormJmk] = useState("");
+  const [formName, setFormName] = useState("");
+  const [formFanaticId, setFormFanaticId] = useState("");
+  const [formDealerNumber, setFormDealerNumber] = useState("");
+  const [formPrograms, setFormPrograms] = useState<string[]>(["falken"]);
+  const [formPrimSec, setFormPrimSec] = useState("");
+  const [formSaving, setFormSaving] = useState(false);
+
+  const filteredDealers = useMemo(() => {
+    if (!dealers) return [];
+    let list = dealers;
+    if (!showInactive) list = list.filter(d => d.isActive);
+    if (programFilter !== "all") list = list.filter(d => d.programs.includes(programFilter));
+    if (search) {
+      const s = search.toLowerCase();
+      list = list.filter(d =>
+        d.name.toLowerCase().includes(s) ||
+        d.jmk.toLowerCase().includes(s) ||
+        (d.fanaticId && String(d.fanaticId).includes(s)) ||
+        (d.dealerNumber && d.dealerNumber.includes(s))
+      );
+    }
+    return list;
+  }, [dealers, search, programFilter, showInactive]);
+
+  const resetForm = () => {
+    setFormJmk("");
+    setFormName("");
+    setFormFanaticId("");
+    setFormDealerNumber("");
+    setFormPrograms(["falken"]);
+    setFormPrimSec("");
+  };
+
+  const openEdit = (d: Dealer) => {
+    setEditingDealer(d);
+    setFormJmk(d.jmk);
+    setFormName(d.name);
+    setFormFanaticId(d.fanaticId ? String(d.fanaticId) : "");
+    setFormDealerNumber(d.dealerNumber ?? "");
+    setFormPrograms([...d.programs]);
+    setFormPrimSec(d.primSec ? String(d.primSec) : "");
+    setShowAddModal(true);
+  };
+
+  const handleSave = async () => {
+    if (!formName.trim()) return;
+    setFormSaving(true);
+    try {
+      const data = {
+        jmk: formJmk.trim(),
+        name: formName.trim(),
+        fanaticId: formFanaticId ? Number(formFanaticId) : undefined,
+        dealerNumber: formDealerNumber.trim() || undefined,
+        programs: formPrograms,
+        primSec: formPrimSec ? Number(formPrimSec) : undefined,
+      };
+
+      if (editingDealer) {
+        await updateDealer({ id: editingDealer._id, ...data });
+      } else {
+        await createDealer(data);
+      }
+      setShowAddModal(false);
+      setEditingDealer(null);
+      resetForm();
+    } finally {
+      setFormSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: Id<"dealerRebateDealers">) => {
+    await deleteDealer({ id });
+  };
+
+  const handleReactivate = async (d: Dealer) => {
+    await updateDealer({ id: d._id, isActive: true });
+  };
+
+  if (!dealers) {
+    return <div className={`text-center py-12 ${isDark ? "text-slate-400" : "text-gray-500"}`}>Loading dealers...</div>;
+  }
+
+  return (
+    <div>
+      {/* Controls */}
+      <div className="flex flex-wrap items-center gap-3 mb-6">
+        <input
+          type="text"
+          placeholder="Search by name, JMK, Fanatic ID, or dealer #..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className={`flex-1 min-w-[250px] px-3 py-2 rounded-lg text-sm border ${isDark ? "bg-slate-800 border-slate-700 text-white placeholder-slate-500" : "bg-white border-gray-200 text-gray-900 placeholder-gray-400"}`}
+        />
+        <select
+          value={programFilter}
+          onChange={e => setProgramFilter(e.target.value)}
+          className={`px-3 py-2 rounded-lg text-sm border ${isDark ? "bg-slate-800 border-slate-700 text-white" : "bg-white border-gray-200 text-gray-900"}`}
+        >
+          <option value="all">All Programs</option>
+          <option value="falken">Falken</option>
+          <option value="milestar">Milestar</option>
+        </select>
+        <label className={`flex items-center gap-2 text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+          <input type="checkbox" checked={showInactive} onChange={e => setShowInactive(e.target.checked)} />
+          Show inactive
+        </label>
+        <button
+          onClick={() => { setEditingDealer(null); resetForm(); setShowAddModal(true); }}
+          className="px-4 py-2 rounded-lg text-sm font-bold bg-orange-500 hover:bg-orange-600 text-white transition-colors"
+        >
+          + Add Dealer
+        </button>
+      </div>
+
+      {/* Stats */}
+      <div className="flex gap-4 mb-4">
+        <span className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+          {filteredDealers.length} dealer{filteredDealers.length !== 1 ? "s" : ""} shown
+        </span>
+        <span className={`text-xs ${isDark ? "text-amber-400/70" : "text-amber-600"}`}>
+          {dealers.filter(d => d.isActive && d.programs.includes("falken")).length} Falken
+        </span>
+        <span className={`text-xs ${isDark ? "text-blue-400/70" : "text-blue-600"}`}>
+          {dealers.filter(d => d.isActive && d.programs.includes("milestar")).length} Milestar
+        </span>
+      </div>
+
+      {/* Dealer Table */}
+      <div className={`rounded-xl border overflow-hidden ${isDark ? "border-slate-700" : "border-gray-200 shadow-sm"}`}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className={isDark ? "bg-slate-800/80 text-slate-400" : "bg-gray-50 text-gray-500"}>
+                <th className="text-left py-3 px-4 font-medium">Name</th>
+                <th className="text-left py-3 px-4 font-medium">JMK</th>
+                <th className="text-left py-3 px-4 font-medium">Fanatic ID</th>
+                <th className="text-left py-3 px-4 font-medium">Dealer #</th>
+                <th className="text-left py-3 px-4 font-medium">Programs</th>
+                <th className="text-left py-3 px-4 font-medium">Status</th>
+                <th className="text-right py-3 px-4 font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredDealers.map(d => (
+                <tr key={d._id} className={`border-t ${isDark ? "border-slate-700/50 hover:bg-slate-800/50" : "border-gray-100 hover:bg-gray-50"} ${!d.isActive ? "opacity-50" : ""}`}>
+                  <td className={`py-2.5 px-4 font-medium ${isDark ? "text-white" : "text-gray-900"}`}>{d.name}</td>
+                  <td className={`py-2.5 px-4 font-mono text-xs ${isDark ? "text-slate-300" : "text-gray-600"}`}>{d.jmk || "—"}</td>
+                  <td className={`py-2.5 px-4 font-mono text-xs ${isDark ? "text-slate-300" : "text-gray-600"}`}>{d.fanaticId ?? "—"}</td>
+                  <td className={`py-2.5 px-4 font-mono text-xs ${isDark ? "text-slate-300" : "text-gray-600"}`}>{d.dealerNumber ?? "—"}</td>
+                  <td className="py-2.5 px-4">
+                    <div className="flex gap-1">
+                      {d.programs.includes("falken") && (
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${isDark ? "bg-amber-500/20 text-amber-400" : "bg-amber-100 text-amber-700"}`}>Falken</span>
+                      )}
+                      {d.programs.includes("milestar") && (
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${isDark ? "bg-blue-500/20 text-blue-400" : "bg-blue-100 text-blue-700"}`}>Milestar</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="py-2.5 px-4">
+                    {d.isActive ? (
+                      <span className="text-green-500 text-xs font-medium">Active</span>
+                    ) : (
+                      <span className="text-red-400 text-xs font-medium">Inactive</span>
+                    )}
+                  </td>
+                  <td className="py-2.5 px-4 text-right">
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={() => openEdit(d)}
+                        className={`px-2 py-1 rounded text-xs font-medium transition-colors ${isDark ? "text-slate-400 hover:text-white hover:bg-slate-700" : "text-gray-400 hover:text-gray-700 hover:bg-gray-100"}`}
+                      >
+                        Edit
+                      </button>
+                      {d.isActive ? (
+                        <button
+                          onClick={() => handleDelete(d._id)}
+                          className="px-2 py-1 rounded text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
+                        >
+                          Deactivate
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleReactivate(d)}
+                          className="px-2 py-1 rounded text-xs font-medium text-green-400 hover:text-green-300 hover:bg-green-500/10 transition-colors"
+                        >
+                          Reactivate
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {filteredDealers.length === 0 && (
+                <tr>
+                  <td colSpan={7} className={`py-8 text-center text-sm ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                    No dealers found
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Add/Edit Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => { setShowAddModal(false); setEditingDealer(null); }}>
+          <div className={`w-full max-w-md rounded-xl border p-6 ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200 shadow-xl"}`} onClick={e => e.stopPropagation()}>
+            <h3 className={`text-lg font-bold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
+              {editingDealer ? "Edit Dealer" : "Add New Dealer"}
+            </h3>
+            <div className="space-y-3">
+              <div>
+                <label className={`text-xs font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Dealer Name *</label>
+                <input
+                  type="text"
+                  value={formName}
+                  onChange={e => setFormName(e.target.value)}
+                  className={`w-full mt-1 px-3 py-2 rounded-lg text-sm border ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-white border-gray-300 text-gray-900"}`}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={`text-xs font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>JMK Account #</label>
+                  <input
+                    type="text"
+                    value={formJmk}
+                    onChange={e => setFormJmk(e.target.value)}
+                    className={`w-full mt-1 px-3 py-2 rounded-lg text-sm border ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-white border-gray-300 text-gray-900"}`}
+                  />
+                </div>
+                <div>
+                  <label className={`text-xs font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Prim/Sec</label>
+                  <select
+                    value={formPrimSec}
+                    onChange={e => setFormPrimSec(e.target.value)}
+                    className={`w-full mt-1 px-3 py-2 rounded-lg text-sm border ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-white border-gray-300 text-gray-900"}`}
+                  >
+                    <option value="">—</option>
+                    <option value="1">1 (Primary)</option>
+                    <option value="2">2 (Secondary)</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={`text-xs font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Fanatic ID</label>
+                  <input
+                    type="number"
+                    value={formFanaticId}
+                    onChange={e => setFormFanaticId(e.target.value)}
+                    className={`w-full mt-1 px-3 py-2 rounded-lg text-sm border ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-white border-gray-300 text-gray-900"}`}
+                  />
+                </div>
+                <div>
+                  <label className={`text-xs font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Milestar Dealer #</label>
+                  <input
+                    type="text"
+                    value={formDealerNumber}
+                    onChange={e => setFormDealerNumber(e.target.value)}
+                    className={`w-full mt-1 px-3 py-2 rounded-lg text-sm border ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-white border-gray-300 text-gray-900"}`}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className={`text-xs font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Programs</label>
+                <div className="flex gap-3 mt-1">
+                  {["falken", "milestar"].map(p => (
+                    <label key={p} className={`flex items-center gap-2 text-sm ${isDark ? "text-white" : "text-gray-900"}`}>
+                      <input
+                        type="checkbox"
+                        checked={formPrograms.includes(p)}
+                        onChange={e => {
+                          if (e.target.checked) setFormPrograms([...formPrograms, p]);
+                          else setFormPrograms(formPrograms.filter(x => x !== p));
+                        }}
+                      />
+                      {p === "falken" ? "Falken Fanatic" : "Milestar Momentum"}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => { setShowAddModal(false); setEditingDealer(null); }}
+                className={`px-4 py-2 rounded-lg text-sm font-medium ${isDark ? "text-slate-300 hover:bg-slate-700" : "text-gray-600 hover:bg-gray-100"}`}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={!formName.trim() || formPrograms.length === 0 || formSaving}
+                className="px-5 py-2 rounded-lg text-sm font-bold bg-orange-500 hover:bg-orange-600 text-white transition-colors disabled:opacity-50"
+              >
+                {formSaving ? "Saving..." : editingDealer ? "Update Dealer" : "Add Dealer"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TAB 3: UPLOAD HISTORY
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function UploadHistoryTab({ isDark }: { isDark: boolean }) {
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [programFilter, setProgramFilter] = useState<string>("all");
+
+  // Debounce search
+  const searchTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const handleSearch = (val: string) => {
+    setSearch(val);
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    searchTimeout.current = setTimeout(() => setDebouncedSearch(val), 300);
+  };
+
+  const uploads = useQuery(api.dealerRebates.getUploads, programFilter !== "all" ? { program: programFilter } : {});
+  const searchResults = useQuery(
+    api.dealerRebates.searchUploadsByDealer,
+    debouncedSearch.length >= 2 ? { searchTerm: debouncedSearch } : "skip"
+  );
+  const [selectedUploadId, setSelectedUploadId] = useState<Id<"dealerRebateUploads"> | null>(null);
+  const selectedUpload = useQuery(
+    api.dealerRebates.getUploadById,
+    selectedUploadId ? { id: selectedUploadId } : "skip"
+  );
+
+  const displayUploads = debouncedSearch.length >= 2 ? searchResults : uploads;
+
+  const reExport = () => {
+    if (!selectedUpload?.resultData) return;
+    const program = selectedUpload.program === "falken" ? "Falken_Fanatic" : "Milestar_Momentum";
+    const date = new Date(selectedUpload.uploadDate);
+    const stamp = `${date.getMonth()+1}${String(date.getDate()).padStart(2,"0")}${date.getFullYear()}`;
+    downloadCSV(`${program}_${stamp}_reexport.csv`, selectedUpload.resultData);
+  };
+
+  return (
+    <div>
+      {/* Controls */}
+      <div className="flex flex-wrap items-center gap-3 mb-6">
+        <input
+          type="text"
+          placeholder="Search by fanatic ID, JMK, dealer name, or dealer #..."
+          value={search}
+          onChange={e => handleSearch(e.target.value)}
+          className={`flex-1 min-w-[250px] px-3 py-2 rounded-lg text-sm border ${isDark ? "bg-slate-800 border-slate-700 text-white placeholder-slate-500" : "bg-white border-gray-200 text-gray-900 placeholder-gray-400"}`}
+        />
+        <select
+          value={programFilter}
+          onChange={e => setProgramFilter(e.target.value)}
+          className={`px-3 py-2 rounded-lg text-sm border ${isDark ? "bg-slate-800 border-slate-700 text-white" : "bg-white border-gray-200 text-gray-900"}`}
+        >
+          <option value="all">All Programs</option>
+          <option value="falken">Falken</option>
+          <option value="milestar">Milestar</option>
+        </select>
+      </div>
+
+      {/* Upload List */}
+      {!displayUploads ? (
+        <div className={`text-center py-12 ${isDark ? "text-slate-400" : "text-gray-500"}`}>Loading...</div>
+      ) : displayUploads.length === 0 ? (
+        <div className={`text-center py-12 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+          {debouncedSearch ? "No uploads found matching your search" : "No upload history yet"}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {displayUploads.map((u) => (
+            <div
+              key={u._id}
+              className={`rounded-xl border p-4 cursor-pointer transition-all ${
+                selectedUploadId === u._id
+                  ? isDark ? "border-orange-500/40 bg-orange-500/10" : "border-orange-300 bg-orange-50"
+                  : isDark ? "border-slate-700 bg-slate-800/50 hover:border-slate-600" : "border-gray-200 bg-white hover:border-gray-300 shadow-sm"
+              }`}
+              onClick={() => setSelectedUploadId(selectedUploadId === u._id ? null : u._id)}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                    u.program === "falken"
+                      ? isDark ? "bg-amber-500/20 text-amber-400" : "bg-amber-100 text-amber-700"
+                      : isDark ? "bg-blue-500/20 text-blue-400" : "bg-blue-100 text-blue-700"
+                  }`}>
+                    {u.program}
+                  </span>
+                  <span className={`text-sm font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                    {u.fileName}
+                  </span>
+                </div>
+                <span className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                  {formatDate("uploadDate" in u ? (u as { uploadDate: number }).uploadDate : (u as { createdAt: number }).createdAt)}
+                </span>
+              </div>
+              <div className={`flex gap-4 mt-2 text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                <span>{u.matchedRows} rows</span>
+                <span>{u.dealersMatched} dealers</span>
+              </div>
+
+              {/* Expanded detail */}
+              {selectedUploadId === u._id && (
+                <div className={`mt-4 pt-4 border-t ${isDark ? "border-slate-700" : "border-gray-200"}`}>
+                  {"dealerBreakdown" in u && u.dealerBreakdown && (
+                    <div className="mb-3">
+                      <div className={`text-xs font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-600"}`}>Dealer Breakdown:</div>
+                      <div className="grid grid-cols-2 gap-1">
+                        {u.dealerBreakdown.map((d, i) => (
+                          <div key={i} className={`flex justify-between text-xs py-1 px-2 rounded ${isDark ? "bg-slate-700/50" : "bg-gray-50"}`}>
+                            <span className={isDark ? "text-white" : "text-gray-900"}>{d.name}</span>
+                            <span className={`font-mono ${isDark ? "text-slate-400" : "text-gray-500"}`}>{d.rowCount} rows</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {"matchedDealers" in u && u.matchedDealers && (
+                    <div className="mb-3">
+                      <div className={`text-xs font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-600"}`}>Matching Dealers:</div>
+                      <div className="grid grid-cols-2 gap-1">
+                        {u.matchedDealers.map((d, i) => (
+                          <div key={i} className={`flex justify-between text-xs py-1 px-2 rounded ${isDark ? "bg-slate-700/50" : "bg-gray-50"}`}>
+                            <span className={isDark ? "text-white" : "text-gray-900"}>{d.name}</span>
+                            <span className={`font-mono ${isDark ? "text-slate-400" : "text-gray-500"}`}>{d.rowCount} rows</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {selectedUpload?.resultData && (
+                    <button
+                      onClick={e => { e.stopPropagation(); reExport(); }}
+                      className="px-4 py-1.5 rounded-lg text-sm font-bold bg-green-600 hover:bg-green-700 text-white transition-colors"
+                    >
+                      Re-export CSV
+                    </button>
+                  )}
+                  {selectedUpload && !selectedUpload.resultData && (
+                    <span className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>Loading export data...</span>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

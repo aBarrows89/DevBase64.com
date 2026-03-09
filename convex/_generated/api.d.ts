@@ -26,6 +26,7 @@ import type * as crons from "../crons.js";
 import type * as dailyLogs from "../dailyLogs.js";
 import type * as dashboardSettings from "../dashboardSettings.js";
 import type * as dealerInquiries from "../dealerInquiries.js";
+import type * as dealerRebates from "../dealerRebates.js";
 import type * as deletedRecords from "../deletedRecords.js";
 import type * as documentFolders from "../documentFolders.js";
 import type * as documents from "../documents.js";
@@ -94,6 +95,7 @@ declare const fullApi: ApiFromModules<{
   dailyLogs: typeof dailyLogs;
   dashboardSettings: typeof dashboardSettings;
   dealerInquiries: typeof dealerInquiries;
+  dealerRebates: typeof dealerRebates;
   deletedRecords: typeof deletedRecords;
   documentFolders: typeof documentFolders;
   documents: typeof documents;
