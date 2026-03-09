@@ -80,26 +80,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const performLogout = useCallback(() => {
     setUserId(null);
-    sessionStorage.removeItem("ie_central_user_id");
+    localStorage.removeItem("ie_central_user_id");
     hasLoadedUserData.current = false;
     setInitialLoadComplete(true);
   }, []);
 
-  // Load saved session on mount - using sessionStorage (clears on browser close)
+  // Load saved session on mount - using localStorage (persists across browser restarts)
   useEffect(() => {
-    // Clear any old localStorage data (migration to sessionStorage)
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("ie_central_user_id");
-    }
-
-    const savedUserId = sessionStorage.getItem("ie_central_user_id");
+    const savedUserId = localStorage.getItem("ie_central_user_id") || sessionStorage.getItem("ie_central_user_id");
     if (savedUserId) {
-      // Basic validation - Convex user IDs should be a specific format
-      // Clear invalid IDs that might be from other tables/projects
+      // Migrate from sessionStorage to localStorage if needed
+      if (!localStorage.getItem("ie_central_user_id")) {
+        localStorage.setItem("ie_central_user_id", savedUserId);
+      }
+      localStorage.removeItem("ie_central_user_id");
+
       if (savedUserId.length > 0) {
         setUserId(savedUserId);
       } else {
-        sessionStorage.removeItem("ie_central_user_id");
+        localStorage.removeItem("ie_central_user_id");
         setInitialLoadComplete(true);
       }
     } else {
@@ -114,7 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // If still loading after 5 seconds, the session is likely invalid
         if (userData === undefined && !hasLoadedUserData.current) {
           console.warn("Session validation timed out, clearing invalid session...");
-          sessionStorage.removeItem("ie_central_user_id");
+          localStorage.removeItem("ie_central_user_id");
           setUserId(null);
           setInitialLoadComplete(true);
         }
@@ -136,10 +135,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Query returned null - only clear if we've never successfully loaded
       // This prevents logout during navigation/resubscription when queries temporarily return null
       if (!hasLoadedUserData.current) {
-        // User ID in sessionStorage doesn't match any user in database
+        // User ID doesn't match any user in database
         // This can happen if the ID is from a different table/project
         console.warn("Invalid user session detected, clearing...");
-        sessionStorage.removeItem("ie_central_user_id");
+        localStorage.removeItem("ie_central_user_id");
         setUserId(null);
       }
       setInitialLoadComplete(true);
@@ -154,8 +153,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const result = await loginMutation({ email, password });
       if (result.success && result.userId) {
         setUserId(result.userId);
-        // Use sessionStorage - clears when browser/tab closes (force login on every visit)
-        sessionStorage.setItem("ie_central_user_id", result.userId);
+        localStorage.setItem("ie_central_user_id", result.userId);
         return {
           success: true,
           forcePasswordChange: result.forcePasswordChange,
