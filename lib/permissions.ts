@@ -177,6 +177,10 @@ export interface MenuPermissions {
 
   // Time Management
   timeCorrections: boolean;
+
+  // Tools
+  dealerRebates: boolean;
+  tireTrackAdmin: boolean;
 }
 
 export function getMenuPermissions(user: PermissionUser): MenuPermissions {
@@ -263,6 +267,10 @@ export function getMenuPermissions(user: PermissionUser): MenuPermissions {
 
     // Time Management - T2+
     timeCorrections: tier >= 2,
+
+    // Tools - T2+
+    dealerRebates: tier >= 2,
+    tireTrackAdmin: tier >= 2,
   };
 }
 
@@ -593,6 +601,10 @@ export const ALL_PERMISSIONS: PermissionDefinition[] = [
   { key: "menu.techWizard", label: "Tech Wizard", description: "AI tech support wizard", category: "it" },
   { key: "menu.websiteMessages", label: "Website Messages", description: "View website contact form messages", category: "it" },
 
+  // Tools
+  { key: "menu.dealerRebates", label: "Dealer Rebates", description: "Access dealer rebate upload tool", category: "documents" },
+  { key: "menu.tireTrackAdmin", label: "TireTrack Admin", description: "Access TireTrack admin panel", category: "documents" },
+
   // Dashboard Widgets
   { key: "dashboard.activeProjects", label: "Active Projects Widget", description: "Show active projects on dashboard", category: "reports" },
   { key: "dashboard.recentApplications", label: "Recent Applications Widget", description: "Show recent applications on dashboard", category: "reports" },
@@ -744,6 +756,7 @@ export function canAccessRoute(user: PermissionUser, route: string): boolean {
     "/tech-wizard": "menu.techWizard",
     "/website-messages": "menu.websiteMessages",
     "/time-off": "menu.timeCorrections",
+    "/dealer-rebates": "menu.dealerRebates",
   };
 
   // Check exact match first
