@@ -4,6 +4,8 @@ import { api } from "@/convex/_generated/api";
 import { extractText } from "unpdf";
 import crypto from "crypto";
 
+export const maxDuration = 60;
+
 // Create Convex client lazily to avoid build-time errors
 function getConvexClient() {
   const url = process.env.NEXT_PUBLIC_CONVEX_URL;

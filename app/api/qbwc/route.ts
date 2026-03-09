@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "@/convex/_generated/api";
 
+export const maxDuration = 120;
+
 // Create Convex client lazily to avoid build-time errors
 function getConvexClient() {
   const url = process.env.NEXT_PUBLIC_CONVEX_URL;
@@ -11,17 +13,14 @@ function getConvexClient() {
   return new ConvexHttpClient(url);
 }
 
-// Session storage (in production, use Redis or database)
-const sessions: Map<string, {
-  username: string;
-  companyFile: string;
-  requestCount: number;
-  lastRequest: string | null;
-}> = new Map();
-
 // Generate unique session ticket
 function generateTicket(): string {
   return `QBWC-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+}
+
+// Helper to get session from Convex (replaces in-memory Map)
+async function getSession(ticket: string) {
+  return await getConvexClient().query(api.quickbooks.getQbwcSession, { ticket });
 }
 
 // Parse SOAP request to extract method and parameters
@@ -139,13 +138,11 @@ async function handleAuthenticate(username: string, password: string): Promise<s
       return ["", "nvu"]; // Not valid user
     }
 
-    // Generate session ticket
+    // Generate session ticket and persist to Convex
     const ticket = generateTicket();
-    sessions.set(ticket, {
+    await getConvexClient().mutation(api.quickbooks.createQbwcSession, {
+      ticket,
       username,
-      companyFile: "",
-      requestCount: 0,
-      lastRequest: null,
     });
 
     // Update connection status
@@ -179,14 +176,17 @@ async function handleSendRequestXML(
   qbXMLMajorVers: string,
   qbXMLMinorVers: string
 ): Promise<string> {
-  const session = sessions.get(ticket);
+  const session = await getSession(ticket);
   if (!session) {
     return ""; // Invalid session, end communication
   }
 
   // Store company file name on first request
   if (!session.companyFile && strCompanyFileName) {
-    session.companyFile = strCompanyFileName;
+    await getConvexClient().mutation(api.quickbooks.updateQbwcSession, {
+      ticket,
+      companyFile: strCompanyFileName,
+    });
     await getConvexClient().mutation(api.quickbooks.updateConnectionStatus, {
       status: "connected",
       qbVersion: `${qbXMLMajorVers}.${qbXMLMinorVers}`,
@@ -202,8 +202,11 @@ async function handleSendRequestXML(
       const connection = await getConvexClient().query(api.quickbooks.getConnection);
 
       if (connection?.syncEmployees && session.requestCount === 0) {
-        session.requestCount++;
-        session.lastRequest = "employee_query";
+        await getConvexClient().mutation(api.quickbooks.updateQbwcSession, {
+          ticket,
+          requestCount: session.requestCount + 1,
+          lastRequest: "employee_query",
+        });
         return await getConvexClient().query(api.quickbooks.generateEmployeeQueryXml);
       }
 
@@ -219,8 +222,11 @@ async function handleSendRequestXML(
       status: "processing",
     });
 
-    session.requestCount++;
-    session.lastRequest = item._id;
+    await getConvexClient().mutation(api.quickbooks.updateQbwcSession, {
+      ticket,
+      requestCount: session.requestCount + 1,
+      lastRequest: item._id,
+    });
 
     // Generate appropriate QBXML based on type
     if (item.type === "time_entry" && item.referenceType === "qbPendingTimeExport") {
@@ -244,7 +250,7 @@ async function handleReceiveResponseXML(
   hresult: string,
   message: string
 ): Promise<string> {
-  const session = sessions.get(ticket);
+  const session = await getSession(ticket);
   if (!session) {
     return "-1"; // Invalid session
   }
@@ -357,7 +363,7 @@ async function handleGetLastError(ticket: string): Promise<string> {
 
 // Handle closeConnection
 async function handleCloseConnection(ticket: string): Promise<string> {
-  const session = sessions.get(ticket);
+  const session = await getSession(ticket);
   if (session) {
     await getConvexClient().mutation(api.quickbooks.createSyncLog, {
       sessionId: ticket,
@@ -372,7 +378,8 @@ async function handleCloseConnection(ticket: string): Promise<string> {
       status: "disconnected",
     });
 
-    sessions.delete(ticket);
+    // Clean up session from Convex
+    await getConvexClient().mutation(api.quickbooks.deleteQbwcSession, { ticket });
   }
   return "OK";
 }

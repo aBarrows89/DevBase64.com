@@ -2,6 +2,72 @@ import { v } from "convex/values";
 import { mutation, query, action } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
 
+// ============ QBWC SESSION MANAGEMENT ============
+// Persistent session storage for serverless environments (AWS Amplify)
+
+export const createQbwcSession = mutation({
+  args: {
+    ticket: v.string(),
+    username: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    return await ctx.db.insert("qbwcSessions", {
+      ticket: args.ticket,
+      username: args.username,
+      companyFile: "",
+      requestCount: 0,
+      lastRequest: null,
+      createdAt: now,
+      expiresAt: now + 30 * 60 * 1000, // 30 minute expiry
+    });
+  },
+});
+
+export const getQbwcSession = query({
+  args: { ticket: v.string() },
+  handler: async (ctx, args) => {
+    const session = await ctx.db
+      .query("qbwcSessions")
+      .withIndex("by_ticket", (q) => q.eq("ticket", args.ticket))
+      .first();
+    if (!session || session.expiresAt < Date.now()) return null;
+    return session;
+  },
+});
+
+export const updateQbwcSession = mutation({
+  args: {
+    ticket: v.string(),
+    companyFile: v.optional(v.string()),
+    requestCount: v.optional(v.number()),
+    lastRequest: v.optional(v.union(v.string(), v.null())),
+  },
+  handler: async (ctx, args) => {
+    const session = await ctx.db
+      .query("qbwcSessions")
+      .withIndex("by_ticket", (q) => q.eq("ticket", args.ticket))
+      .first();
+    if (!session) return;
+    const updates: Record<string, unknown> = {};
+    if (args.companyFile !== undefined) updates.companyFile = args.companyFile;
+    if (args.requestCount !== undefined) updates.requestCount = args.requestCount;
+    if (args.lastRequest !== undefined) updates.lastRequest = args.lastRequest;
+    await ctx.db.patch(session._id, updates);
+  },
+});
+
+export const deleteQbwcSession = mutation({
+  args: { ticket: v.string() },
+  handler: async (ctx, args) => {
+    const session = await ctx.db
+      .query("qbwcSessions")
+      .withIndex("by_ticket", (q) => q.eq("ticket", args.ticket))
+      .first();
+    if (session) await ctx.db.delete(session._id);
+  },
+});
+
 // ============ CONNECTION MANAGEMENT ============
 
 // Get the current QuickBooks connection

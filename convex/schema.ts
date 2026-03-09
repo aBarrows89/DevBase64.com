@@ -2263,4 +2263,15 @@ export default defineSchema({
     isActive: v.boolean(),
     createdAt: v.number(),
   }).index("by_indeed_job", ["indeedJobId"]),
+
+  // QBWC session storage (needed for serverless environments like AWS Amplify)
+  qbwcSessions: defineTable({
+    ticket: v.string(), // Unique session ticket
+    username: v.string(),
+    companyFile: v.string(),
+    requestCount: v.number(),
+    lastRequest: v.union(v.string(), v.null()),
+    createdAt: v.number(),
+    expiresAt: v.number(), // Auto-expire stale sessions
+  }).index("by_ticket", ["ticket"]),
 });
