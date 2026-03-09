@@ -84,6 +84,8 @@ function UsersContent() {
 
   // Track which permission categories are expanded
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  // Permission search filter
+  const [permissionSearch, setPermissionSearch] = useState("");
 
   const toggleCategory = (cat: string) => {
     setExpandedCategories(prev => {
@@ -279,6 +281,7 @@ function UsersContent() {
       permissionOverrides: user.permissionOverrides ? { ...user.permissionOverrides } : {},
     });
     setExpandedCategories(new Set());
+    setPermissionSearch("");
     setShowEditModal(true);
   };
 
@@ -909,11 +912,25 @@ function UsersContent() {
                   Role sets defaults. Click checkboxes to override individual permissions.
                 </p>
 
+                {/* Permission search */}
+                <div className="mb-2">
+                  <input
+                    type="text"
+                    value={permissionSearch}
+                    onChange={(e) => setPermissionSearch(e.target.value)}
+                    placeholder="Search permissions..."
+                    className="w-full px-3 py-1.5 text-sm bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+
                 <div className="space-y-1 max-h-64 overflow-y-auto bg-slate-900/30 rounded-lg border border-slate-700">
                   {PERMISSION_CATEGORIES.map((cat) => {
-                    const catPerms = ALL_PERMISSIONS.filter(p => p.category === cat.key);
+                    const searchLower = permissionSearch.toLowerCase();
+                    const catPerms = ALL_PERMISSIONS.filter(p => p.category === cat.key && (
+                      !permissionSearch || p.label.toLowerCase().includes(searchLower) || p.description.toLowerCase().includes(searchLower)
+                    ));
                     if (catPerms.length === 0) return null;
-                    const isExpanded = expandedCategories.has(cat.key);
+                    const isExpanded = expandedCategories.has(cat.key) || !!permissionSearch;
                     const overrideCount = getCategoryOverrideCount(cat.key);
                     const grantedCount = catPerms.filter(p => getEffectivePermission(p.key).value).length;
 
