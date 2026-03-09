@@ -17,6 +17,7 @@ interface NavItem {
   icon: string;
   requiresPermission?: "viewPersonnel" | "viewShifts" | "manageTimeOff" | "departmentPortal";
   techOnly?: boolean; // Special access for tech team emails
+  external?: boolean; // Opens in new tab
 }
 
 interface NavGroup {
@@ -106,6 +107,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/daily-log", label: "Daily Log", icon: "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" },
       { href: "/reports", label: "Reports", icon: "M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
       { href: "/dealer-rebates", label: "Dealer Rebates", icon: "M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" },
+      { href: "https://tiretrack-admin.vercel.app", label: "TireTrack Admin", icon: "M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z", external: true },
     ],
   },
   {
@@ -778,22 +780,18 @@ export default function Sidebar() {
                 {isOpen && (
                   <div className="ml-4 mt-1 space-y-1">
                     {filteredItems.map((item) => {
-                      const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
-                      return (
-                        <Link
-                          key={item.href}
-                          href={item.href}
-                          onClick={handleNavClick}
-                          className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all text-sm ${
-                            isActive
-                              ? isDark
-                                ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
-                                : "bg-blue-50 text-blue-600 border border-blue-200"
-                              : isDark
-                                ? "text-slate-400 hover:bg-slate-700/50 hover:text-white"
-                                : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-                          }`}
-                        >
+                      const isActive = !item.external && (pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href)));
+                      const linkClass = `flex items-center gap-3 px-3 py-2 rounded-lg transition-all text-sm ${
+                        isActive
+                          ? isDark
+                            ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
+                            : "bg-blue-50 text-blue-600 border border-blue-200"
+                          : isDark
+                            ? "text-slate-400 hover:bg-slate-700/50 hover:text-white"
+                            : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                      }`;
+                      const iconAndLabel = (
+                        <>
                           <svg
                             className="w-4 h-4 flex-shrink-0"
                             fill="none"
@@ -808,6 +806,32 @@ export default function Sidebar() {
                             />
                           </svg>
                           <span className="truncate">{item.label}</span>
+                          {item.external && (
+                            <svg className="w-3 h-3 ml-auto flex-shrink-0 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                          )}
+                        </>
+                      );
+                      return item.external ? (
+                        <a
+                          key={item.href}
+                          href={item.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={handleNavClick}
+                          className={linkClass}
+                        >
+                          {iconAndLabel}
+                        </a>
+                      ) : (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          onClick={handleNavClick}
+                          className={linkClass}
+                        >
+                          {iconAndLabel}
                         </Link>
                       );
                     })}
