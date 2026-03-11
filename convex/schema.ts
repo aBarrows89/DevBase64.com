@@ -1790,13 +1790,20 @@ export default defineSchema({
     operatingSystem: v.optional(v.string()), // "Windows 11" | "Windows 10" | "macOS" | "Linux"
     ipAddress: v.optional(v.string()),
     macAddress: v.optional(v.string()),
-    // Chrome Remote Desktop
+    ethernetPort: v.optional(v.string()), // Ethernet port if applicable
+    // Passwords
+    adminPassword: v.optional(v.string()), // Admin password for the computer
+    userPassword: v.optional(v.string()), // User password for the computer
+    // Chrome Remote Desktop / Remote Access
     chromeRemoteId: v.optional(v.string()), // Chrome Remote Desktop access code/ID
     remoteAccessEnabled: v.boolean(),
+    remoteAccessCode: v.optional(v.string()), // Authentication code required on receiving side
+    remoteAccessNotes: v.optional(v.string()), // Additional remote connection info
     // Assignment
     assignedTo: v.optional(v.id("personnel")),
     department: v.optional(v.string()),
-    location: v.optional(v.string()),
+    location: v.optional(v.string()), // Legacy string location
+    locationId: v.optional(v.id("locations")), // Reference to locations table
     // Status
     status: v.string(), // "active" | "in_repair" | "retired" | "storage"
     lastSeenOnline: v.optional(v.number()),
@@ -1810,7 +1817,8 @@ export default defineSchema({
     .index("by_type", ["type"])
     .index("by_status", ["status"])
     .index("by_assigned", ["assignedTo"])
-    .index("by_department", ["department"]),
+    .index("by_department", ["department"])
+    .index("by_locationId", ["locationId"]),
 
   // ============ QUICKBOOKS DESKTOP INTEGRATION ============
   // QuickBooks connection configuration

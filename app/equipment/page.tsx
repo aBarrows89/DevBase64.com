@@ -210,6 +210,28 @@ function EquipmentContent() {
   const [editingVehicleId, setEditingVehicleId] = useState<Id<"vehicles"> | null>(null);
   const [showNewVehicle, setShowNewVehicle] = useState(false);
 
+  // Computer form state
+  const [computerFormData, setComputerFormData] = useState({
+    name: "", // Identifier
+    type: "computer" as string, // computer | laptop
+    locationId: "" as string,
+    adminPassword: "",
+    userPassword: "",
+    ethernetPort: "",
+    ipAddress: "",
+    remoteAccessEnabled: false,
+    remoteAccessCode: "",
+    remoteAccessNotes: "",
+    chromeRemoteId: "",
+    serialNumber: "",
+    manufacturer: "",
+    model: "",
+    operatingSystem: "",
+    notes: "",
+  });
+  const [editingComputerId, setEditingComputerId] = useState<Id<"equipment"> | null>(null);
+  const [showNewComputer, setShowNewComputer] = useState(false);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -319,6 +341,114 @@ function EquipmentContent() {
       conditionNotes: "",
       status: "available",
     });
+  };
+
+  const resetComputerForm = () => {
+    setComputerFormData({
+      name: "",
+      type: "computer",
+      locationId: "",
+      adminPassword: "",
+      userPassword: "",
+      ethernetPort: "",
+      ipAddress: "",
+      remoteAccessEnabled: false,
+      remoteAccessCode: "",
+      remoteAccessNotes: "",
+      chromeRemoteId: "",
+      serialNumber: "",
+      manufacturer: "",
+      model: "",
+      operatingSystem: "",
+      notes: "",
+    });
+  };
+
+  const handleComputerSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+
+    if (!computerFormData.name.trim()) {
+      setError("Please enter an identifier");
+      return;
+    }
+
+    try {
+      if (editingComputerId) {
+        await updateComputer({
+          computerId: editingComputerId,
+          name: computerFormData.name.trim(),
+          type: computerFormData.type,
+          locationId: computerFormData.locationId ? computerFormData.locationId as Id<"locations"> : undefined,
+          adminPassword: computerFormData.adminPassword || undefined,
+          userPassword: computerFormData.userPassword || undefined,
+          ethernetPort: computerFormData.ethernetPort || undefined,
+          ipAddress: computerFormData.ipAddress || undefined,
+          remoteAccessEnabled: computerFormData.remoteAccessEnabled,
+          remoteAccessCode: computerFormData.remoteAccessCode || undefined,
+          remoteAccessNotes: computerFormData.remoteAccessNotes || undefined,
+          chromeRemoteId: computerFormData.chromeRemoteId || undefined,
+          serialNumber: computerFormData.serialNumber || undefined,
+          manufacturer: computerFormData.manufacturer || undefined,
+          model: computerFormData.model || undefined,
+          operatingSystem: computerFormData.operatingSystem || undefined,
+          notes: computerFormData.notes || undefined,
+        });
+      } else {
+        if (!user?._id) {
+          setError("User not found");
+          return;
+        }
+        await createComputer({
+          name: computerFormData.name.trim(),
+          type: computerFormData.type,
+          locationId: computerFormData.locationId ? computerFormData.locationId as Id<"locations"> : undefined,
+          adminPassword: computerFormData.adminPassword || undefined,
+          userPassword: computerFormData.userPassword || undefined,
+          ethernetPort: computerFormData.ethernetPort || undefined,
+          ipAddress: computerFormData.ipAddress || undefined,
+          remoteAccessEnabled: computerFormData.remoteAccessEnabled,
+          remoteAccessCode: computerFormData.remoteAccessCode || undefined,
+          remoteAccessNotes: computerFormData.remoteAccessNotes || undefined,
+          chromeRemoteId: computerFormData.chromeRemoteId || undefined,
+          serialNumber: computerFormData.serialNumber || undefined,
+          manufacturer: computerFormData.manufacturer || undefined,
+          model: computerFormData.model || undefined,
+          operatingSystem: computerFormData.operatingSystem || undefined,
+          notes: computerFormData.notes || undefined,
+          userId: user._id,
+        });
+      }
+
+      setShowNewComputer(false);
+      setEditingComputerId(null);
+      resetComputerForm();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    }
+  };
+
+  const handleEditComputer = (computer: NonNullable<typeof computers>[0]) => {
+    setEditingComputerId(computer._id);
+    setComputerFormData({
+      name: computer.name,
+      type: computer.type,
+      locationId: computer.locationId || "",
+      adminPassword: computer.adminPassword || "",
+      userPassword: computer.userPassword || "",
+      ethernetPort: computer.ethernetPort || "",
+      ipAddress: computer.ipAddress || "",
+      remoteAccessEnabled: computer.remoteAccessEnabled,
+      remoteAccessCode: computer.remoteAccessCode || "",
+      remoteAccessNotes: computer.remoteAccessNotes || "",
+      chromeRemoteId: computer.chromeRemoteId || "",
+      serialNumber: computer.serialNumber || "",
+      manufacturer: computer.manufacturer || "",
+      model: computer.model || "",
+      operatingSystem: computer.operatingSystem || "",
+      notes: computer.notes || "",
+    });
+    setShowNewComputer(true);
   };
 
   const handleEdit = (item: NonNullable<typeof scanners>[0] | NonNullable<typeof pickers>[0]) => {
@@ -681,6 +811,10 @@ By signing below, the Employee acknowledges that they have read, understand, and
                         registrationExpirationDate: "", registrationState: "", purchaseDate: "",
                         purchasePrice: "", purchasedFrom: "", notes: "",
                       });
+                    } else if (activeTab === "computers") {
+                      setShowNewComputer(true);
+                      setEditingComputerId(null);
+                      resetComputerForm();
                     } else {
                       setShowNewEquipment(true);
                       setEditingId(null);
@@ -875,9 +1009,8 @@ By signing below, the Employee acknowledges that they have read, understand, and
                         <tr className={isDark ? "border-b border-slate-700" : "border-b border-gray-200"}>
                           <th className="px-4 py-3 text-left font-medium">Name</th>
                           <th className="px-4 py-3 text-left font-medium">Type</th>
-                          <th className="px-4 py-3 text-left font-medium">OS</th>
-                          <th className="px-4 py-3 text-left font-medium">Assigned To</th>
-                          <th className="px-4 py-3 text-left font-medium">Department</th>
+                          <th className="px-4 py-3 text-left font-medium">Location</th>
+                          <th className="px-4 py-3 text-left font-medium">IP Address</th>
                           <th className="px-4 py-3 text-left font-medium">Remote</th>
                           <th className="px-4 py-3 text-left font-medium">Status</th>
                           <th className="px-4 py-3 text-left font-medium">Actions</th>
@@ -890,9 +1023,8 @@ By signing below, the Employee acknowledges that they have read, understand, and
                               {comp.name}
                             </td>
                             <td className="px-4 py-3 capitalize">{comp.type}</td>
-                            <td className="px-4 py-3">{comp.operatingSystem || "-"}</td>
-                            <td className="px-4 py-3">{comp.assignedToName || "-"}</td>
-                            <td className="px-4 py-3">{comp.department || "-"}</td>
+                            <td className="px-4 py-3">{comp.locationName || "-"}</td>
+                            <td className="px-4 py-3">{comp.ipAddress || "-"}</td>
                             <td className="px-4 py-3">
                               {comp.remoteAccessEnabled ? (
                                 <span className={`px-2 py-1 text-xs rounded-full ${isDark ? "bg-green-500/20 text-green-400" : "bg-green-100 text-green-700"}`}>
@@ -917,6 +1049,12 @@ By signing below, the Employee acknowledges that they have read, understand, and
                             </td>
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => handleEditComputer(comp)}
+                                  className={`px-2 py-1 text-xs rounded ${isDark ? "bg-slate-700 text-slate-300 hover:bg-slate-600" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+                                >
+                                  Edit
+                                </button>
                                 {comp.chromeRemoteUrl && (
                                   <a
                                     href={comp.chromeRemoteUrl}
@@ -2593,6 +2731,276 @@ By signing below, the Employee acknowledges that they have read, understand, and
                     className={`px-4 py-2 font-medium rounded-lg transition-colors ${isDark ? "bg-cyan-500 text-white hover:bg-cyan-600" : "bg-blue-600 text-white hover:bg-blue-700"}`}
                   >
                     {editingVehicleId ? "Save Changes" : "Add Vehicle"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Computer Form Modal */}
+        {showNewComputer && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className={`border rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200"}`}>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className={`text-xl font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  {editingComputerId ? "Edit Computer" : "Add New Computer"}
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowNewComputer(false);
+                    setEditingComputerId(null);
+                    resetComputerForm();
+                  }}
+                  className={`p-1 rounded-lg transition-colors ${isDark ? "hover:bg-slate-700" : "hover:bg-gray-100"}`}
+                >
+                  <svg className={`w-5 h-5 ${isDark ? "text-slate-400" : "text-gray-500"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <form onSubmit={handleComputerSubmit} className="space-y-6">
+                {error && (
+                  <div className="p-3 rounded-lg bg-red-500/20 text-red-400 text-sm border border-red-500/30">
+                    {error}
+                  </div>
+                )}
+
+                {/* Basic Information */}
+                <div>
+                  <h3 className={`text-sm font-semibold mb-3 ${isDark ? "text-white" : "text-gray-900"}`}>Basic Information</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>Identifier *</label>
+                      <input
+                        type="text"
+                        value={computerFormData.name}
+                        onChange={(e) => setComputerFormData({ ...computerFormData, name: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                        placeholder="e.g., OFFICE-PC-01, FRONT-DESK"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>Type</label>
+                      <select
+                        value={computerFormData.type}
+                        onChange={(e) => setComputerFormData({ ...computerFormData, type: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                      >
+                        <option value="computer">Desktop Computer</option>
+                        <option value="laptop">Laptop</option>
+                      </select>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>Location</label>
+                      <select
+                        value={computerFormData.locationId}
+                        onChange={(e) => setComputerFormData({ ...computerFormData, locationId: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                      >
+                        <option value="">Select location...</option>
+                        {locations?.map((loc) => (
+                          <option key={loc._id} value={loc._id}>{loc.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Passwords */}
+                <div>
+                  <h3 className={`text-sm font-semibold mb-3 ${isDark ? "text-white" : "text-gray-900"}`}>Passwords</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>Admin Password</label>
+                      <input
+                        type="text"
+                        value={computerFormData.adminPassword}
+                        onChange={(e) => setComputerFormData({ ...computerFormData, adminPassword: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                        placeholder="Admin account password"
+                      />
+                    </div>
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>User Password</label>
+                      <input
+                        type="text"
+                        value={computerFormData.userPassword}
+                        onChange={(e) => setComputerFormData({ ...computerFormData, userPassword: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                        placeholder="Standard user password"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Network */}
+                <div>
+                  <h3 className={`text-sm font-semibold mb-3 ${isDark ? "text-white" : "text-gray-900"}`}>Network</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>IP Address</label>
+                      <input
+                        type="text"
+                        value={computerFormData.ipAddress}
+                        onChange={(e) => setComputerFormData({ ...computerFormData, ipAddress: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                        placeholder="192.168.1.100"
+                      />
+                    </div>
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>Ethernet Port (if applicable)</label>
+                      <input
+                        type="text"
+                        value={computerFormData.ethernetPort}
+                        onChange={(e) => setComputerFormData({ ...computerFormData, ethernetPort: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                        placeholder="e.g., Port 12, Patch A-5"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Remote Access */}
+                <div>
+                  <h3 className={`text-sm font-semibold mb-3 ${isDark ? "text-white" : "text-gray-900"}`}>Remote Access</h3>
+                  <div className={`p-3 rounded-lg mb-4 ${isDark ? "bg-amber-500/10 border border-amber-500/30" : "bg-amber-50 border border-amber-200"}`}>
+                    <p className={`text-sm ${isDark ? "text-amber-400" : "text-amber-700"}`}>
+                      Note: Unauthenticated monitoring or remote connections are not allowed. An authentication code is required on the receiving computer to establish a connection.
+                    </p>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        id="remoteAccessEnabled"
+                        checked={computerFormData.remoteAccessEnabled}
+                        onChange={(e) => setComputerFormData({ ...computerFormData, remoteAccessEnabled: e.target.checked })}
+                        className="w-4 h-4 rounded border-gray-300 text-cyan-500 focus:ring-cyan-500"
+                      />
+                      <label htmlFor="remoteAccessEnabled" className={`text-sm font-medium ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                        Remote Access Enabled
+                      </label>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>Chrome Remote Desktop ID</label>
+                        <input
+                          type="text"
+                          value={computerFormData.chromeRemoteId}
+                          onChange={(e) => setComputerFormData({ ...computerFormData, chromeRemoteId: e.target.value })}
+                          className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                          placeholder="Session ID"
+                        />
+                      </div>
+                      <div>
+                        <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>Remote Access Code</label>
+                        <input
+                          type="text"
+                          value={computerFormData.remoteAccessCode}
+                          onChange={(e) => setComputerFormData({ ...computerFormData, remoteAccessCode: e.target.value })}
+                          className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                          placeholder="PIN or access code"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>Remote Connection Notes</label>
+                      <textarea
+                        value={computerFormData.remoteAccessNotes}
+                        onChange={(e) => setComputerFormData({ ...computerFormData, remoteAccessNotes: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                        rows={2}
+                        placeholder="Additional info for connecting remotely..."
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Hardware Details (Optional) */}
+                <div>
+                  <h3 className={`text-sm font-semibold mb-3 ${isDark ? "text-white" : "text-gray-900"}`}>Hardware Details (Optional)</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>Manufacturer</label>
+                      <input
+                        type="text"
+                        value={computerFormData.manufacturer}
+                        onChange={(e) => setComputerFormData({ ...computerFormData, manufacturer: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                        placeholder="Dell, HP, Lenovo..."
+                      />
+                    </div>
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>Model</label>
+                      <input
+                        type="text"
+                        value={computerFormData.model}
+                        onChange={(e) => setComputerFormData({ ...computerFormData, model: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                        placeholder="OptiPlex 7080"
+                      />
+                    </div>
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>Serial Number</label>
+                      <input
+                        type="text"
+                        value={computerFormData.serialNumber}
+                        onChange={(e) => setComputerFormData({ ...computerFormData, serialNumber: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                        placeholder="Service tag / Serial #"
+                      />
+                    </div>
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>Operating System</label>
+                      <select
+                        value={computerFormData.operatingSystem}
+                        onChange={(e) => setComputerFormData({ ...computerFormData, operatingSystem: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                      >
+                        <option value="">Select...</option>
+                        <option value="Windows 11">Windows 11</option>
+                        <option value="Windows 10">Windows 10</option>
+                        <option value="macOS">macOS</option>
+                        <option value="Linux">Linux</option>
+                        <option value="Chrome OS">Chrome OS</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Notes */}
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>Notes</label>
+                  <textarea
+                    value={computerFormData.notes}
+                    onChange={(e) => setComputerFormData({ ...computerFormData, notes: e.target.value })}
+                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                    rows={3}
+                    placeholder="Any additional notes..."
+                  />
+                </div>
+
+                {/* Buttons */}
+                <div className="flex justify-end gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowNewComputer(false);
+                      setEditingComputerId(null);
+                      resetComputerForm();
+                    }}
+                    className={`px-4 py-2 font-medium rounded-lg transition-colors ${isDark ? "bg-slate-700 text-white hover:bg-slate-600" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className={`px-4 py-2 font-medium rounded-lg transition-colors ${isDark ? "bg-cyan-500 text-white hover:bg-cyan-600" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+                  >
+                    {editingComputerId ? "Save Changes" : "Add Computer"}
                   </button>
                 </div>
               </form>

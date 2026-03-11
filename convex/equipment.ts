@@ -1640,6 +1640,7 @@ export const listComputers = query({
   args: {
     status: v.optional(v.string()),
     department: v.optional(v.string()),
+    locationId: v.optional(v.id("locations")),
   },
   handler: async (ctx, args) => {
     let computers = await ctx.db
@@ -1658,8 +1659,11 @@ export const listComputers = query({
     if (args.department) {
       computers = computers.filter((c) => c.department === args.department);
     }
+    if (args.locationId) {
+      computers = computers.filter((c) => c.locationId === args.locationId);
+    }
 
-    // Enrich with assigned personnel name and remote URL
+    // Enrich with assigned personnel name, location name, and remote URL
     const enriched = await Promise.all(
       computers.map(async (comp) => {
         let assignedToName = null;
@@ -1667,9 +1671,17 @@ export const listComputers = query({
           const person = await ctx.db.get(comp.assignedTo);
           assignedToName = person ? `${person.firstName} ${person.lastName}` : null;
         }
+
+        let locationName = comp.location || null; // Fallback to legacy string location
+        if (comp.locationId) {
+          const location = await ctx.db.get(comp.locationId);
+          locationName = location?.name || null;
+        }
+
         return {
           ...comp,
           assignedToName,
+          locationName,
           // Chrome Remote Desktop URL
           chromeRemoteUrl: comp.chromeRemoteId && comp.remoteAccessEnabled
             ? `https://remotedesktop.google.com/access/session/${comp.chromeRemoteId}`
@@ -1724,7 +1736,7 @@ export const getRemoteAccessComputers = query({
 // Create a new computer
 export const createComputer = mutation({
   args: {
-    name: v.string(),
+    name: v.string(), // Identifier
     type: v.string(), // "computer" | "laptop"
     serialNumber: v.optional(v.string()),
     manufacturer: v.optional(v.string()),
@@ -1732,11 +1744,17 @@ export const createComputer = mutation({
     operatingSystem: v.optional(v.string()),
     ipAddress: v.optional(v.string()),
     macAddress: v.optional(v.string()),
+    ethernetPort: v.optional(v.string()), // Ethernet port if applicable
+    adminPassword: v.optional(v.string()), // Admin password
+    userPassword: v.optional(v.string()), // User password
     chromeRemoteId: v.optional(v.string()),
     remoteAccessEnabled: v.boolean(),
+    remoteAccessCode: v.optional(v.string()), // Auth code for remote connection
+    remoteAccessNotes: v.optional(v.string()), // Remote connection info
     assignedTo: v.optional(v.id("personnel")),
     department: v.optional(v.string()),
     location: v.optional(v.string()),
+    locationId: v.optional(v.id("locations")), // Reference to locations table
     purchaseDate: v.optional(v.string()),
     warrantyExpiration: v.optional(v.string()),
     notes: v.optional(v.string()),
@@ -1754,11 +1772,17 @@ export const createComputer = mutation({
       operatingSystem: args.operatingSystem,
       ipAddress: args.ipAddress,
       macAddress: args.macAddress,
+      ethernetPort: args.ethernetPort,
+      adminPassword: args.adminPassword,
+      userPassword: args.userPassword,
       chromeRemoteId: args.chromeRemoteId,
       remoteAccessEnabled: args.remoteAccessEnabled,
+      remoteAccessCode: args.remoteAccessCode,
+      remoteAccessNotes: args.remoteAccessNotes,
       assignedTo: args.assignedTo,
       department: args.department,
       location: args.location,
+      locationId: args.locationId,
       status: "active",
       purchaseDate: args.purchaseDate,
       warrantyExpiration: args.warrantyExpiration,
@@ -1777,17 +1801,24 @@ export const updateComputer = mutation({
   args: {
     computerId: v.id("equipment"),
     name: v.optional(v.string()),
+    type: v.optional(v.string()), // "computer" | "laptop"
     serialNumber: v.optional(v.string()),
     manufacturer: v.optional(v.string()),
     model: v.optional(v.string()),
     operatingSystem: v.optional(v.string()),
     ipAddress: v.optional(v.string()),
     macAddress: v.optional(v.string()),
+    ethernetPort: v.optional(v.string()),
+    adminPassword: v.optional(v.string()),
+    userPassword: v.optional(v.string()),
     chromeRemoteId: v.optional(v.string()),
     remoteAccessEnabled: v.optional(v.boolean()),
+    remoteAccessCode: v.optional(v.string()),
+    remoteAccessNotes: v.optional(v.string()),
     assignedTo: v.optional(v.id("personnel")),
     department: v.optional(v.string()),
     location: v.optional(v.string()),
+    locationId: v.optional(v.id("locations")),
     status: v.optional(v.string()),
     purchaseDate: v.optional(v.string()),
     warrantyExpiration: v.optional(v.string()),
