@@ -239,7 +239,7 @@ export function usePermissions(): UsePermissionsResult {
     isFinalTimeApprover: user.isFinalTimeApprover === true,
     isPayrollProcessor: user.isPayrollProcessor === true,
     requiresDailyLog: user.requiresDailyLog === true,
-    hasEmailAccess: user.hasEmailAccess === true,
+    hasEmailAccess: user.hasEmailAccess === true || tier >= 5, // T5+ (super_admin) always has email access
   };
 }
 
