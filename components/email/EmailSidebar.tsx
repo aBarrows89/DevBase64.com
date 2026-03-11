@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Id, Doc } from "@/convex/_generated/dataModel";
 import { useTheme } from "@/app/theme-context";
 
@@ -208,7 +209,7 @@ export default function EmailSidebar({
 
       {/* Account info / Settings link */}
       <div className="p-3 border-t theme-border">
-        <a
+        <Link
           href="/email/accounts"
           className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
             isDark ? 'text-slate-400 hover:text-white hover:bg-slate-700/50' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
@@ -219,7 +220,7 @@ export default function EmailSidebar({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
           <span className="text-sm">Manage Accounts</span>
-        </a>
+        </Link>
       </div>
     </div>
   );
