@@ -12,6 +12,7 @@ import { internal, api } from "../_generated/api";
 import { v } from "convex/values";
 import { Id } from "../_generated/dataModel";
 import { ImapFlow } from "imapflow";
+import { decrypt } from "./encryptionUtils";
 
 // ============ TYPES ============
 
@@ -70,12 +71,22 @@ function getImapCredentials(account: {
     };
   }
 
-  // For generic IMAP
+  // For generic IMAP - decrypt the password
+  let password = account.imapPassword || "";
+  if (password && password.includes(":")) {
+    // Password is encrypted (format: iv:authTag:ciphertext)
+    try {
+      password = decrypt(password);
+    } catch (e) {
+      console.error("Failed to decrypt IMAP password:", e);
+    }
+  }
+
   return {
     host: account.imapHost || "imap.gmail.com",
     port: account.imapPort || 993,
     user: account.imapUsername || account.emailAddress,
-    pass: account.imapPassword || "",
+    pass: password,
     secure: account.imapTls !== false,
   };
 }
