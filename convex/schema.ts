@@ -2331,4 +2331,23 @@ export default defineSchema({
     .index("by_date", ["uploadDate"])
     .index("by_program", ["program"])
     .index("by_uploaded_by", ["uploadedBy"]),
+
+  // ============ DEVELOPMENT CREDENTIALS ============
+  // Secure storage for API keys, deploy keys, and other credentials (Development team only)
+  credentials: defineTable({
+    name: v.string(), // Display name (e.g., "Convex Deploy Key - Prod")
+    service: v.string(), // Service name (e.g., "Convex", "Vercel", "AWS", "Stripe")
+    keyType: v.string(), // Type (e.g., "deploy_key", "api_key", "secret", "token", "password")
+    value: v.string(), // The actual key/credential value
+    environment: v.optional(v.string()), // "production" | "development" | "staging"
+    project: v.optional(v.string()), // Project name if applicable
+    notes: v.optional(v.string()), // Additional notes
+    expiresAt: v.optional(v.number()), // Optional expiration date
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_service", ["service"])
+    .index("by_type", ["keyType"])
+    .index("by_environment", ["environment"]),
 });
