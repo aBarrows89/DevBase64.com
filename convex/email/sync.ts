@@ -73,19 +73,26 @@ function getImapCredentials(account: {
 
   // For generic IMAP - decrypt the password
   let password = account.imapPassword || "";
+  console.log("IMAP password format check - has colons:", password.includes(":"), "length:", password.length);
+
   if (password && password.includes(":")) {
     // Password is encrypted (format: iv:authTag:ciphertext)
     try {
       password = decrypt(password);
+      console.log("Password decrypted successfully, length:", password.length);
     } catch (e) {
       console.error("Failed to decrypt IMAP password:", e);
+      throw new Error("Failed to decrypt stored password - account may need to be re-added");
     }
   }
+
+  const username = account.imapUsername || account.emailAddress;
+  console.log("Using IMAP credentials - host:", account.imapHost, "user:", username, "pass length:", password.length);
 
   return {
     host: account.imapHost || "imap.gmail.com",
     port: account.imapPort || 993,
-    user: account.imapUsername || account.emailAddress,
+    user: username,
     pass: password,
     secure: account.imapTls !== false,
   };
@@ -265,7 +272,9 @@ export const performFullSync = internalAction({
         logger: false,
       });
 
+      console.log("Connecting to IMAP:", credentials.host, "port:", credentials.port, "user:", credentials.user);
       await client.connect();
+      console.log("IMAP connected successfully");
 
       // List and sync folders
       const folders = await client.list();
@@ -436,10 +445,28 @@ export const performFullSync = internalAction({
     } catch (error) {
       console.error("Full sync error:", error);
 
+      // Get more detailed error message
+      let errorMessage = "Unknown error";
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        // Check for common IMAP errors
+        if (error.message.includes("AUTHENTICATIONFAILED") || error.message.includes("Invalid credentials")) {
+          errorMessage = "Authentication failed - check your email/password";
+        } else if (error.message.includes("ECONNREFUSED")) {
+          errorMessage = "Connection refused - check server address and port";
+        } else if (error.message.includes("ETIMEDOUT") || error.message.includes("timeout")) {
+          errorMessage = "Connection timed out - server may be unreachable";
+        } else if (error.message.includes("certificate") || error.message.includes("SSL")) {
+          errorMessage = "SSL/TLS error - try toggling SSL setting";
+        } else if (error.message.includes("Command failed")) {
+          errorMessage = `IMAP error: ${error.message}`;
+        }
+      }
+
       // Update error state
       await ctx.runMutation(internal.email.accounts.markSyncError, {
         accountId: args.accountId,
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: errorMessage,
       });
 
       // Log failure
