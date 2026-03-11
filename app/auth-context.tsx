@@ -24,6 +24,8 @@ export interface User {
   reportsTo?: Id<"users">; // Who this user reports to
   // Feature-level permission overrides
   permissionOverrides?: Record<string, boolean>;
+  // Email client access
+  hasEmailAccess?: boolean;
 }
 
 interface AuthContextType {

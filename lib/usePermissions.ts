@@ -67,6 +67,7 @@ export interface UsePermissionsResult {
   isFinalTimeApprover: boolean;
   isPayrollProcessor: boolean;
   requiresDailyLog: boolean;
+  hasEmailAccess: boolean;
 }
 
 export function usePermissions(): UsePermissionsResult {
@@ -176,6 +177,7 @@ export function usePermissions(): UsePermissionsResult {
     isFinalTimeApprover: false,
     isPayrollProcessor: false,
     requiresDailyLog: false,
+    hasEmailAccess: false,
   };
 
   // If auth is still loading, return loading state
@@ -237,6 +239,7 @@ export function usePermissions(): UsePermissionsResult {
     isFinalTimeApprover: user.isFinalTimeApprover === true,
     isPayrollProcessor: user.isPayrollProcessor === true,
     requiresDailyLog: user.requiresDailyLog === true,
+    hasEmailAccess: user.hasEmailAccess === true,
   };
 }
 

@@ -26,6 +26,8 @@ export default defineSchema({
     isPayrollProcessor: v.optional(v.boolean()), // Can export payroll data
     // Feature-level permission overrides (three-state: undefined=use role default, true=grant, false=deny)
     permissionOverrides: v.optional(v.record(v.string(), v.boolean())),
+    // Email client access
+    hasEmailAccess: v.optional(v.boolean()),
     createdAt: v.optional(v.number()),
     lastLoginAt: v.optional(v.number()),
     // Legacy fields from old system
@@ -2350,4 +2352,260 @@ export default defineSchema({
     .index("by_service", ["service"])
     .index("by_type", ["keyType"])
     .index("by_environment", ["environment"]),
+
+  // ============ EMAIL CLIENT ============
+  // Email accounts connected by users
+  emailAccounts: defineTable({
+    userId: v.id("users"),
+    name: v.string(), // Display name (e.g., "Work Gmail", "Personal")
+    emailAddress: v.string(), // e.g., "john@company.com"
+    provider: v.string(), // "gmail" | "outlook" | "yahoo" | "icloud" | "imap"
+
+    // OAuth2 tokens (for Gmail, Outlook, Yahoo) - ENCRYPTED
+    accessToken: v.optional(v.string()),
+    refreshToken: v.optional(v.string()),
+    tokenExpiresAt: v.optional(v.number()),
+    oauthProvider: v.optional(v.string()), // "google" | "microsoft" | "yahoo" | "apple"
+
+    // IMAP/SMTP credentials (for generic IMAP providers) - ENCRYPTED
+    imapHost: v.optional(v.string()),
+    imapPort: v.optional(v.number()),
+    imapUsername: v.optional(v.string()),
+    imapPassword: v.optional(v.string()),
+    imapTls: v.optional(v.boolean()),
+    smtpHost: v.optional(v.string()),
+    smtpPort: v.optional(v.number()),
+    smtpUsername: v.optional(v.string()),
+    smtpPassword: v.optional(v.string()),
+    smtpTls: v.optional(v.boolean()),
+
+    // Sync state
+    lastSyncAt: v.optional(v.number()),
+    syncStatus: v.string(), // "idle" | "syncing" | "error"
+    syncError: v.optional(v.string()),
+    lastUidValidity: v.optional(v.number()), // IMAP UIDVALIDITY
+    lastUid: v.optional(v.number()), // Last synced UID per folder (stored as JSON)
+
+    // Settings
+    isActive: v.boolean(),
+    isPrimary: v.boolean(), // Primary account for sending
+    signature: v.optional(v.string()), // HTML signature
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_email", ["emailAddress"])
+    .index("by_user_active", ["userId", "isActive"]),
+
+  // Email folders (synced from provider)
+  emailFolders: defineTable({
+    accountId: v.id("emailAccounts"),
+    name: v.string(), // Display name
+    path: v.string(), // IMAP path (e.g., "INBOX", "[Gmail]/Sent Mail")
+    type: v.string(), // "inbox" | "sent" | "drafts" | "trash" | "spam" | "archive" | "custom"
+    unreadCount: v.number(),
+    totalCount: v.number(),
+    parentPath: v.optional(v.string()), // For nested folders
+    flags: v.optional(v.array(v.string())), // IMAP flags
+    lastSyncUid: v.optional(v.number()), // Last synced UID for this folder
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_account_type", ["accountId", "type"])
+    .index("by_path", ["accountId", "path"]),
+
+  // Cached emails (30-day rolling cache)
+  emails: defineTable({
+    accountId: v.id("emailAccounts"),
+    folderId: v.id("emailFolders"),
+
+    // Provider identifiers
+    messageId: v.string(), // Message-ID header
+    uid: v.number(), // IMAP UID
+    threadId: v.optional(v.string()), // Thread/conversation ID (provider-specific)
+
+    // Headers
+    subject: v.string(),
+    from: v.object({
+      name: v.optional(v.string()),
+      address: v.string(),
+    }),
+    to: v.array(v.object({
+      name: v.optional(v.string()),
+      address: v.string(),
+    })),
+    cc: v.optional(v.array(v.object({
+      name: v.optional(v.string()),
+      address: v.string(),
+    }))),
+    bcc: v.optional(v.array(v.object({
+      name: v.optional(v.string()),
+      address: v.string(),
+    }))),
+    replyTo: v.optional(v.object({
+      name: v.optional(v.string()),
+      address: v.string(),
+    })),
+    inReplyTo: v.optional(v.string()), // Message-ID of parent
+    references: v.optional(v.array(v.string())), // Message-ID chain
+
+    // Content
+    bodyText: v.optional(v.string()), // Plain text body
+    bodyHtml: v.optional(v.string()), // HTML body
+    snippet: v.string(), // Preview text (first 200 chars)
+
+    // Metadata
+    date: v.number(), // Email date timestamp
+    receivedAt: v.number(), // When we received/synced it
+    size: v.optional(v.number()), // Message size in bytes
+
+    // Flags
+    isRead: v.boolean(),
+    isStarred: v.boolean(),
+    isImportant: v.boolean(),
+    isDraft: v.boolean(),
+    hasAttachments: v.boolean(),
+    labels: v.optional(v.array(v.string())), // Provider labels/tags
+
+    // Security - encrypted content for sensitive emails
+    isEncrypted: v.optional(v.boolean()),
+
+    // Internal linking
+    linkedConversationId: v.optional(v.id("conversations")), // If converted to internal message
+    linkedPersonnelId: v.optional(v.id("personnel")), // If linked to personnel
+    linkedApplicationId: v.optional(v.id("applications")), // If linked to applicant
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_folder", ["folderId"])
+    .index("by_account_folder", ["accountId", "folderId"])
+    .index("by_date", ["accountId", "date"])
+    .index("by_thread", ["accountId", "threadId"])
+    .index("by_message_id", ["accountId", "messageId"])
+    .index("by_received", ["accountId", "receivedAt"]),
+
+  // Email attachments (metadata + storage reference)
+  emailAttachments: defineTable({
+    emailId: v.id("emails"),
+    fileName: v.string(),
+    mimeType: v.string(),
+    size: v.number(),
+    contentId: v.optional(v.string()), // For inline attachments
+    isInline: v.boolean(),
+
+    // Storage - always encrypted
+    storageId: v.optional(v.id("_storage")), // Convex storage for cached attachments
+    externalRef: v.optional(v.string()), // Provider-specific reference for on-demand fetch
+
+    createdAt: v.number(),
+  })
+    .index("by_email", ["emailId"]),
+
+  // Email drafts (stored separately for autosave)
+  emailDrafts: defineTable({
+    accountId: v.id("emailAccounts"),
+    userId: v.id("users"),
+
+    // If editing existing draft
+    existingEmailId: v.optional(v.id("emails")),
+
+    // Compose state
+    to: v.array(v.object({
+      name: v.optional(v.string()),
+      address: v.string(),
+    })),
+    cc: v.optional(v.array(v.object({
+      name: v.optional(v.string()),
+      address: v.string(),
+    }))),
+    bcc: v.optional(v.array(v.object({
+      name: v.optional(v.string()),
+      address: v.string(),
+    }))),
+    subject: v.string(),
+    bodyHtml: v.string(),
+    bodyText: v.optional(v.string()),
+
+    // Reply/forward context
+    replyToEmailId: v.optional(v.id("emails")),
+    forwardEmailId: v.optional(v.id("emails")),
+    mode: v.string(), // "compose" | "reply" | "reply_all" | "forward"
+
+    // Attachments (pending upload)
+    attachments: v.optional(v.array(v.object({
+      storageId: v.id("_storage"),
+      fileName: v.string(),
+      mimeType: v.string(),
+      size: v.number(),
+    }))),
+
+    // Autosave
+    lastSavedAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_account", ["accountId"]),
+
+  // Email send queue (for retry/tracking)
+  emailSendQueue: defineTable({
+    accountId: v.id("emailAccounts"),
+    userId: v.id("users"),
+    draftId: v.optional(v.id("emailDrafts")),
+
+    // Email content (snapshot at send time)
+    to: v.array(v.object({
+      name: v.optional(v.string()),
+      address: v.string(),
+    })),
+    cc: v.optional(v.array(v.object({
+      name: v.optional(v.string()),
+      address: v.string(),
+    }))),
+    bcc: v.optional(v.array(v.object({
+      name: v.optional(v.string()),
+      address: v.string(),
+    }))),
+    subject: v.string(),
+    bodyHtml: v.string(),
+    bodyText: v.optional(v.string()),
+    attachmentStorageIds: v.optional(v.array(v.id("_storage"))),
+
+    // Tracking
+    status: v.string(), // "pending" | "sending" | "sent" | "failed"
+    attempts: v.number(),
+    lastAttemptAt: v.optional(v.number()),
+    error: v.optional(v.string()),
+    sentAt: v.optional(v.number()),
+    messageId: v.optional(v.string()), // Provider's message ID
+    providerMessageId: v.optional(v.string()), // Provider's message ID (deprecated, use messageId)
+
+    // Schedule (for scheduled send)
+    scheduledFor: v.optional(v.number()),
+
+    createdAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_status", ["status"])
+    .index("by_scheduled", ["scheduledFor"]),
+
+  // Email sync log (for debugging/auditing)
+  emailSyncLogs: defineTable({
+    accountId: v.id("emailAccounts"),
+    action: v.string(), // "full_sync" | "incremental_sync" | "send" | "delete" | "move" | "flag_update"
+    status: v.string(), // "started" | "completed" | "failed"
+    details: v.optional(v.string()),
+    emailsProcessed: v.optional(v.number()),
+    duration: v.optional(v.number()), // ms
+    error: v.optional(v.string()),
+
+    createdAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_created", ["createdAt"]),
 });

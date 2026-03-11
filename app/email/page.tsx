@@ -1,0 +1,261 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import Protected from "../protected";
+import Sidebar from "@/components/Sidebar";
+import { useAuth } from "../auth-context";
+import { useQuery, useMutation, useAction } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { Id, Doc } from "@/convex/_generated/dataModel";
+import EmailSidebar from "@/components/email/EmailSidebar";
+import EmailList from "@/components/email/EmailList";
+import EmailView from "@/components/email/EmailView";
+import EmailComposer from "@/components/email/EmailComposer";
+
+type EmailFolder = Doc<"emailFolders">;
+type Email = Doc<"emails">;
+
+// Stripped-down account type from listByUser query (excludes sensitive fields)
+interface EmailAccount {
+  _id: Id<"emailAccounts">;
+  userId: Id<"users">;
+  name: string;
+  emailAddress: string;
+  provider: string;
+  oauthProvider?: string;
+  lastSyncAt?: number;
+  syncStatus: string;
+  syncError?: string;
+  isActive: boolean;
+  isPrimary: boolean;
+  signature?: string;
+  createdAt: number;
+  updatedAt: number;
+  imapHost?: string;
+  imapPort?: number;
+  smtpHost?: string;
+  smtpPort?: number;
+}
+
+export default function EmailPage() {
+  const { user } = useAuth();
+  const [selectedAccountId, setSelectedAccountId] = useState<Id<"emailAccounts"> | null>(null);
+  const [selectedFolderId, setSelectedFolderId] = useState<Id<"emailFolders"> | null>(null);
+  const [selectedEmailId, setSelectedEmailId] = useState<Id<"emails"> | null>(null);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [showComposeModal, setShowComposeModal] = useState(false);
+  const [composeMode, setComposeMode] = useState<"compose" | "reply" | "reply_all" | "forward">("compose");
+
+  // Get user's email accounts
+  const accounts = useQuery(
+    api.email.accounts.listByUser,
+    user?._id ? { userId: user._id } : "skip"
+  );
+
+  // Get folders for selected account
+  const folders = useQuery(
+    api.email.folders.listByAccount,
+    selectedAccountId ? { accountId: selectedAccountId } : "skip"
+  );
+
+  // Get emails for selected folder
+  const emailsResult = useQuery(
+    api.email.emails.listByFolder,
+    selectedFolderId ? { folderId: selectedFolderId, limit: 50 } : "skip"
+  );
+
+  // Get selected email details
+  const selectedEmail = useQuery(
+    api.email.emails.get,
+    selectedEmailId ? { emailId: selectedEmailId } : "skip"
+  );
+
+  // Trigger sync action
+  const triggerSync = useAction(api.email.sync.triggerSync);
+
+  // Mark as read mutation
+  const markAsRead = useMutation(api.email.emails.markAsRead);
+
+  // Set default account when accounts load
+  useEffect(() => {
+    if (accounts && accounts.length > 0 && !selectedAccountId) {
+      const primary = accounts.find(a => a.isPrimary) || accounts[0];
+      setSelectedAccountId(primary._id);
+    }
+  }, [accounts, selectedAccountId]);
+
+  // Set default folder (inbox) when folders load
+  useEffect(() => {
+    if (folders && folders.length > 0 && !selectedFolderId) {
+      const inbox = folders.find(f => f.type === "inbox");
+      if (inbox) {
+        setSelectedFolderId(inbox._id);
+      }
+    }
+  }, [folders, selectedFolderId]);
+
+  // Mark email as read when selected
+  useEffect(() => {
+    if (selectedEmail && !selectedEmail.isRead) {
+      markAsRead({ emailId: selectedEmail._id });
+    }
+  }, [selectedEmail, markAsRead]);
+
+  // Handle sync
+  const handleSync = async () => {
+    if (selectedAccountId) {
+      try {
+        await triggerSync({ accountId: selectedAccountId });
+      } catch (error) {
+        console.error("Sync failed:", error);
+      }
+    }
+  };
+
+  // Handle folder selection
+  const handleFolderSelect = (folderId: Id<"emailFolders">) => {
+    setSelectedFolderId(folderId);
+    setSelectedEmailId(null);
+  };
+
+  // Handle email selection
+  const handleEmailSelect = (emailId: Id<"emails">) => {
+    setSelectedEmailId(emailId);
+  };
+
+  // Handle back to list (mobile)
+  const handleBackToList = () => {
+    setSelectedEmailId(null);
+  };
+
+  // Handle compose actions
+  const handleCompose = () => {
+    setComposeMode("compose");
+    setShowComposeModal(true);
+  };
+
+  const handleReply = () => {
+    setComposeMode("reply");
+    setShowComposeModal(true);
+  };
+
+  const handleReplyAll = () => {
+    setComposeMode("reply_all");
+    setShowComposeModal(true);
+  };
+
+  const handleForward = () => {
+    setComposeMode("forward");
+    setShowComposeModal(true);
+  };
+
+  const handleCloseCompose = () => {
+    setShowComposeModal(false);
+    setComposeMode("compose");
+  };
+
+  const selectedAccount = accounts?.find(a => a._id === selectedAccountId);
+
+  return (
+    <Protected requireFlag="hasEmailAccess">
+      <div className="min-h-screen theme-bg-primary flex">
+        <Sidebar />
+        <main className="flex-1 flex overflow-hidden">
+          {/* Email Sidebar */}
+          <EmailSidebar
+            accounts={accounts || []}
+            selectedAccountId={selectedAccountId}
+            onAccountSelect={setSelectedAccountId}
+            folders={folders || []}
+            selectedFolderId={selectedFolderId}
+            onFolderSelect={handleFolderSelect}
+            onCompose={handleCompose}
+            onSync={handleSync}
+            isCollapsed={isSidebarCollapsed}
+            onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+          />
+
+          {/* Email List */}
+          <div className={`${selectedEmailId ? 'hidden lg:flex' : 'flex'} flex-col w-full lg:w-96 border-r theme-border`}>
+            <EmailList
+              emails={emailsResult?.emails || []}
+              selectedEmailId={selectedEmailId}
+              onEmailSelect={handleEmailSelect}
+              isLoading={!emailsResult}
+              folder={folders?.find(f => f._id === selectedFolderId)}
+            />
+          </div>
+
+          {/* Email View */}
+          <div className={`${selectedEmailId ? 'flex' : 'hidden lg:flex'} flex-1 flex-col`}>
+            {selectedEmail && user?._id ? (
+              <EmailView
+                email={selectedEmail}
+                userId={user._id}
+                onBack={handleBackToList}
+                onReply={handleReply}
+                onForward={handleForward}
+              />
+            ) : selectedEmail ? (
+              <div className="flex-1 flex items-center justify-center theme-bg-secondary">
+                <svg className="animate-spin w-8 h-8 theme-text-secondary" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              </div>
+            ) : (
+              <div className="flex-1 flex items-center justify-center theme-bg-secondary">
+                <div className="text-center">
+                  <svg className="w-16 h-16 mx-auto mb-4 theme-text-tertiary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  <p className="theme-text-secondary">Select an email to read</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* No Accounts State */}
+          {accounts && accounts.length === 0 && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-50">
+              <div className="theme-bg-primary rounded-xl p-8 max-w-md mx-4 shadow-xl">
+                <div className="text-center">
+                  <svg className="w-16 h-16 mx-auto mb-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  <h2 className="text-xl font-semibold theme-text-primary mb-2">Connect Your Email</h2>
+                  <p className="theme-text-secondary mb-6">
+                    Get started by connecting your email account. We support Gmail, Outlook, Yahoo, iCloud, and custom IMAP servers.
+                  </p>
+                  <a
+                    href="/email/accounts"
+                    className="inline-flex items-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                  >
+                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    Add Email Account
+                  </a>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Compose Modal */}
+          {showComposeModal && selectedAccountId && user && (
+            <EmailComposer
+              accountId={selectedAccountId}
+              userId={user._id}
+              mode={composeMode}
+              replyToEmail={composeMode !== "compose" ? selectedEmail || undefined : undefined}
+              onClose={handleCloseCompose}
+              onSent={() => {
+                // Optionally refresh the folder
+              }}
+            />
+          )}
+        </main>
+      </div>
+    </Protected>
+  );
+}

@@ -11,7 +11,7 @@ interface ProtectedProps {
   requireAdmin?: boolean; // Deprecated: use minTier instead
   requiredRoles?: string[]; // Array of allowed roles (for backwards compatibility)
   minTier?: Tier; // Minimum tier required (0-5)
-  requireFlag?: "isFinalTimeApprover" | "isPayrollProcessor" | "requiresDailyLog"; // Require specific flag
+  requireFlag?: "isFinalTimeApprover" | "isPayrollProcessor" | "requiresDailyLog" | "hasEmailAccess"; // Require specific flag
 }
 
 export default function Protected({
@@ -44,6 +44,7 @@ export default function Protected({
     if (requireFlag === "isFinalTimeApprover") return permissions.isFinalTimeApprover;
     if (requireFlag === "isPayrollProcessor") return permissions.isPayrollProcessor;
     if (requireFlag === "requiresDailyLog") return permissions.requiresDailyLog;
+    if (requireFlag === "hasEmailAccess") return permissions.hasEmailAccess;
     return true;
   };
 

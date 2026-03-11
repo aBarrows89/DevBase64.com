@@ -32,4 +32,20 @@ crons.monthly(
   internal.dealerRebates.deleteOldUploads
 );
 
+// ============ EMAIL CLIENT CRONS ============
+
+// Sync all email accounts every 5 minutes
+crons.interval(
+  "email-sync-all-accounts",
+  { minutes: 5 },
+  internal.email.sync.syncAllAccounts
+);
+
+// Clean up old cached emails (older than 30 days) - runs daily at 4 AM UTC
+crons.daily(
+  "email-cleanup-old-emails",
+  { hourUTC: 4, minuteUTC: 0 },
+  internal.email.emails.cleanupOldEmails
+);
+
 export default crons;
