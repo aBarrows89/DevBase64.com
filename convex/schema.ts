@@ -794,6 +794,12 @@ export default defineSchema({
     state: v.optional(v.string()),
     zipCode: v.optional(v.string()),
     phone: v.optional(v.string()), // Location phone number
+    // Security codes
+    pinCode: v.optional(v.string()), // Door PIN/code lock
+    alarmCode: v.optional(v.string()), // Alarm system code
+    gateCode: v.optional(v.string()), // Gate access code
+    wifiPassword: v.optional(v.string()), // WiFi password
+    securityNotes: v.optional(v.string()), // Additional security notes
     isActive: v.boolean(),
     managerId: v.optional(v.id("users")), // Manager responsible for this location
     // Departments available at this location
