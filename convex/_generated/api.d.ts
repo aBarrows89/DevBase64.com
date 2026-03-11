@@ -31,6 +31,7 @@ import type * as dealerRebates from "../dealerRebates.js";
 import type * as deletedRecords from "../deletedRecords.js";
 import type * as documentFolders from "../documentFolders.js";
 import type * as documents from "../documents.js";
+import type * as email_accountActions from "../email/accountActions.js";
 import type * as email_accounts from "../email/accounts.js";
 import type * as email_drafts from "../email/drafts.js";
 import type * as email_emails from "../email/emails.js";
@@ -112,6 +113,7 @@ declare const fullApi: ApiFromModules<{
   deletedRecords: typeof deletedRecords;
   documentFolders: typeof documentFolders;
   documents: typeof documents;
+  "email/accountActions": typeof email_accountActions;
   "email/accounts": typeof email_accounts;
   "email/drafts": typeof email_drafts;
   "email/emails": typeof email_emails;

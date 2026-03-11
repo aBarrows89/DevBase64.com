@@ -5,14 +5,13 @@ import { useRouter } from "next/navigation";
 import Protected from "@/app/protected";
 import Sidebar from "@/components/Sidebar";
 import { useAuth } from "@/app/auth-context";
-import { useMutation } from "convex/react";
+import { useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { encrypt } from "@/lib/email/encryption";
 
 export default function ICloudSetupPage() {
   const router = useRouter();
   const { user } = useAuth();
-  const createAccount = useMutation(api.email.accounts.createIcloudAccount);
+  const createAccount = useAction(api.email.accountActions.createIcloudAccount);
 
   const [email, setEmail] = useState("");
   const [appPassword, setAppPassword] = useState("");
@@ -33,14 +32,12 @@ export default function ICloudSetupPage() {
         throw new Error("Please enter a valid email address");
       }
 
-      // Encrypt the app password before sending
-      const encryptedPassword = encrypt(appPassword);
-
+      // Password will be encrypted server-side in Convex
       await createAccount({
         userId: user._id,
         emailAddress: email,
         name: name || undefined,
-        appPassword: encryptedPassword,
+        appPassword,
       });
 
       router.push("/email/accounts?connected=icloud&email=" + encodeURIComponent(email));

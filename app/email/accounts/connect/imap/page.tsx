@@ -5,14 +5,13 @@ import { useRouter } from "next/navigation";
 import Protected from "@/app/protected";
 import Sidebar from "@/components/Sidebar";
 import { useAuth } from "@/app/auth-context";
-import { useMutation } from "convex/react";
+import { useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { encrypt } from "@/lib/email/encryption";
 
 export default function ImapSetupPage() {
   const router = useRouter();
   const { user } = useAuth();
-  const createAccount = useMutation(api.email.accounts.createImapAccount);
+  const createAccount = useAction(api.email.accountActions.createImapAccount);
 
   // Preset options
   const [preset, setPreset] = useState<"ietires" | "custom">("ietires");
@@ -76,10 +75,7 @@ export default function ImapSetupPage() {
       const finalSmtpUsername = useSameCredentials ? imapUsername : smtpUsername;
       const finalSmtpPassword = useSameCredentials ? imapPassword : smtpPassword;
 
-      // Encrypt passwords before sending
-      const encryptedImapPassword = encrypt(imapPassword);
-      const encryptedSmtpPassword = encrypt(finalSmtpPassword);
-
+      // Passwords will be encrypted server-side in Convex
       await createAccount({
         userId: user._id,
         emailAddress: email,
@@ -87,12 +83,12 @@ export default function ImapSetupPage() {
         imapHost,
         imapPort: parseInt(imapPort),
         imapUsername: imapUsername || email,
-        imapPassword: encryptedImapPassword,
+        imapPassword,
         imapTls,
         smtpHost,
         smtpPort: parseInt(smtpPort),
         smtpUsername: finalSmtpUsername || email,
-        smtpPassword: encryptedSmtpPassword,
+        smtpPassword: finalSmtpPassword,
         smtpTls,
       });
 

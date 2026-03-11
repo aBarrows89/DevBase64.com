@@ -5,7 +5,8 @@
  */
 
 import { v } from "convex/values";
-import { query, mutation, internalMutation } from "../_generated/server";
+import { query, mutation, internalMutation, action } from "../_generated/server";
+import { internal } from "../_generated/api";
 import { Id } from "../_generated/dataModel";
 
 // ============ QUERIES ============
@@ -209,24 +210,22 @@ export const createOAuthAccount = mutation({
 });
 
 /**
- * Create a generic IMAP/SMTP email account.
+ * Internal mutation to create IMAP account (called by action after encryption).
  */
-export const createImapAccount = mutation({
+export const createImapAccountInternal = internalMutation({
   args: {
     userId: v.id("users"),
     emailAddress: v.string(),
     name: v.optional(v.string()),
-    // IMAP settings
     imapHost: v.string(),
     imapPort: v.number(),
     imapUsername: v.string(),
-    imapPassword: v.string(), // Already encrypted
+    imapPassword: v.string(),
     imapTls: v.boolean(),
-    // SMTP settings
     smtpHost: v.string(),
     smtpPort: v.number(),
     smtpUsername: v.string(),
-    smtpPassword: v.string(), // Already encrypted
+    smtpPassword: v.string(),
     smtpTls: v.boolean(),
   },
   handler: async (ctx, args) => {
@@ -286,14 +285,14 @@ export const createImapAccount = mutation({
 });
 
 /**
- * Create an iCloud account (uses app-specific password).
+ * Internal mutation to create iCloud account (called by action after encryption).
  */
-export const createIcloudAccount = mutation({
+export const createIcloudAccountInternal = internalMutation({
   args: {
     userId: v.id("users"),
     emailAddress: v.string(),
     name: v.optional(v.string()),
-    appPassword: v.string(), // Already encrypted
+    appPassword: v.string(),
   },
   handler: async (ctx, args) => {
     // Verify user has email access
