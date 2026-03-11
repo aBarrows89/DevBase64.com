@@ -106,12 +106,12 @@ export default function EmailPage() {
   const [isSyncing, setIsSyncing] = useState(false);
 
   // Handle sync
-  const handleSync = async () => {
+  const handleSync = async (fullSync = false) => {
     if (selectedAccountId) {
       setIsSyncing(true);
       setSyncError(null);
       try {
-        const result = await triggerSync({ accountId: selectedAccountId });
+        const result = await triggerSync({ accountId: selectedAccountId, fullSync });
         console.log("Sync result:", result);
         if (!result.success) {
           setSyncError(result.error || "Sync failed");

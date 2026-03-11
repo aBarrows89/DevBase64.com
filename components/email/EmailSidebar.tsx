@@ -23,7 +23,7 @@ interface EmailSidebarProps {
   selectedFolderId: Id<"emailFolders"> | null;
   onFolderSelect: (folderId: Id<"emailFolders">) => void;
   onCompose: () => void;
-  onSync: () => void;
+  onSync: (fullSync?: boolean) => void;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
 }
@@ -55,10 +55,10 @@ export default function EmailSidebar({
   const isDark = theme === "dark";
   const [isSyncing, setIsSyncing] = useState(false);
 
-  const handleSync = async () => {
+  const handleSync = async (fullSync = false) => {
     setIsSyncing(true);
     try {
-      await onSync();
+      await onSync(fullSync);
     } finally {
       setTimeout(() => setIsSyncing(false), 2000);
     }
@@ -208,7 +208,19 @@ export default function EmailSidebar({
       </div>
 
       {/* Account info / Settings link */}
-      <div className="p-3 border-t theme-border">
+      <div className="p-3 border-t theme-border space-y-1">
+        <button
+          onClick={() => handleSync(true)}
+          disabled={isSyncing}
+          className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
+            isDark ? 'text-slate-400 hover:text-white hover:bg-slate-700/50' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+          } ${isSyncing ? 'opacity-50 cursor-not-allowed' : ''}`}
+        >
+          <svg className={`w-5 h-5 ${isSyncing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          <span className="text-sm">Full Resync</span>
+        </button>
         <Link
           href="/email/accounts"
           className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
