@@ -3,10 +3,24 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { Id, Doc } from "@/convex/_generated/dataModel";
 import { useTheme } from "@/app/theme-context";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
+
+// Dynamic import for SignatureEditor to avoid SSR issues with TipTap
+const SignatureEditor = dynamic(() => import("./SignatureEditor"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-48 flex items-center justify-center">
+      <svg className="w-6 h-6 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+      </svg>
+    </div>
+  ),
+});
 
 type EmailFolder = Doc<"emailFolders">;
 
@@ -506,39 +520,27 @@ export default function EmailSidebar({
                   Email Signature
                 </h4>
                 {editingSignature ? (
-                  <div className="space-y-3">
-                    <textarea
-                      value={signatureText}
-                      onChange={(e) => setSignatureText(e.target.value)}
-                      placeholder="Enter your email signature (HTML supported)"
-                      rows={6}
-                      className={`w-full px-3 py-2 rounded-lg border ${
-                        isDark
-                          ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400'
-                          : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'
-                      } focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm`}
-                    />
-                    <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
-                      Tip: You can use HTML tags like &lt;br&gt;, &lt;b&gt;, &lt;i&gt;, &lt;a href=&quot;...&quot;&gt;
-                    </p>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={handleSaveSignature}
-                        disabled={isSavingSignature}
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg text-sm font-medium"
-                      >
-                        {isSavingSignature ? "Saving..." : "Save Signature"}
-                      </button>
-                      <button
-                        onClick={() => setEditingSignature(false)}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                          isDark ? 'bg-slate-700 hover:bg-slate-600 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
-                        }`}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
+                  <SignatureEditor
+                    initialContent={signatureText}
+                    onSave={async (html) => {
+                      setSignatureText(html);
+                      setIsSavingSignature(true);
+                      try {
+                        await updateSettings({
+                          accountId: selectedAccount._id,
+                          userId,
+                          signature: html,
+                        });
+                        setEditingSignature(false);
+                      } catch (error) {
+                        console.error("Failed to save signature:", error);
+                      } finally {
+                        setIsSavingSignature(false);
+                      }
+                    }}
+                    onCancel={() => setEditingSignature(false)}
+                    isSaving={isSavingSignature}
+                  />
                 ) : (
                   <div>
                     {selectedAccount.signature ? (

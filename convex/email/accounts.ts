@@ -657,3 +657,25 @@ export const clearSyncError = mutation({
     });
   },
 });
+
+/**
+ * Generate upload URL for signature images.
+ */
+export const generateSignatureImageUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+/**
+ * Get URL for a stored signature image.
+ */
+export const getSignatureImageUrl = query({
+  args: {
+    storageId: v.id("_storage"),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.storage.getUrl(args.storageId);
+  },
+});

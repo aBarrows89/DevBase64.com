@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Id, Doc } from "@/convex/_generated/dataModel";
 import { useTheme } from "@/app/theme-context";
-import { useMutation, useAction } from "convex/react";
+import { useMutation, useAction, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -66,6 +66,10 @@ export default function EmailComposer({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const autosaveTimeout = useRef<NodeJS.Timeout | null>(null);
+  const signatureInserted = useRef(false);
+
+  // Query for account to get signature
+  const account = useQuery(api.email.accounts.get, { accountId });
 
   // Mutations and actions
   const createDraft = useMutation(api.email.drafts.create);
@@ -107,9 +111,22 @@ export default function EmailComposer({
     },
   });
 
+  // Build signature HTML block
+  const getSignatureBlock = useCallback(() => {
+    if (!account?.signature) return "";
+    return `
+      <br>
+      <div class="email-signature" style="margin-top: 20px; padding-top: 10px; border-top: 1px solid #e5e7eb;">
+        ${account.signature}
+      </div>
+    `;
+  }, [account?.signature]);
+
   // Initialize for reply/forward
   useEffect(() => {
-    if (replyToEmail && editor) {
+    if (replyToEmail && editor && account !== undefined && !signatureInserted.current) {
+      const signature = getSignatureBlock();
+
       if (mode === "reply" || mode === "reply_all") {
         // Set recipient
         setTo([replyToEmail.from]);
@@ -128,16 +145,21 @@ export default function EmailComposer({
           : `Re: ${replyToEmail.subject}`;
         setSubject(reSubject);
 
-        // Set quoted content
+        // Set quoted content with signature before the quote
         const date = new Date(replyToEmail.date).toLocaleString();
         const quotedContent = `
-          <br><br>
+          <p><br></p>
+          ${signature}
+          <br>
           <div style="border-left: 2px solid #ccc; padding-left: 10px; margin-left: 10px; color: #666;">
             <p>On ${date}, ${replyToEmail.from.name || replyToEmail.from.address} wrote:</p>
             ${replyToEmail.bodyHtml || `<p>${replyToEmail.bodyText || replyToEmail.snippet}</p>`}
           </div>
         `;
         editor.commands.setContent(quotedContent);
+        // Move cursor to the beginning for the user to type their reply
+        editor.commands.focus("start");
+        signatureInserted.current = true;
       } else if (mode === "forward") {
         // Set subject
         const fwdSubject = replyToEmail.subject.toLowerCase().startsWith("fwd:")
@@ -145,10 +167,12 @@ export default function EmailComposer({
           : `Fwd: ${replyToEmail.subject}`;
         setSubject(fwdSubject);
 
-        // Set forwarded content
+        // Set forwarded content with signature before the forwarded message
         const date = new Date(replyToEmail.date).toLocaleString();
         const forwardedContent = `
-          <br><br>
+          <p><br></p>
+          ${signature}
+          <br>
           <div>
             <p>---------- Forwarded message ---------</p>
             <p>From: ${replyToEmail.from.name ? `${replyToEmail.from.name} &lt;${replyToEmail.from.address}&gt;` : replyToEmail.from.address}</p>
@@ -160,9 +184,24 @@ export default function EmailComposer({
           </div>
         `;
         editor.commands.setContent(forwardedContent);
+        // Move cursor to the beginning for the user to type their message
+        editor.commands.focus("start");
+        signatureInserted.current = true;
       }
     }
-  }, [replyToEmail, mode, editor]);
+  }, [replyToEmail, mode, editor, account, getSignatureBlock]);
+
+  // Initialize signature for new compose
+  useEffect(() => {
+    if (mode === "compose" && editor && account !== undefined && !signatureInserted.current && !replyToEmail) {
+      const signature = getSignatureBlock();
+      if (signature) {
+        editor.commands.setContent(`<p><br></p>${signature}`);
+        editor.commands.focus("start");
+        signatureInserted.current = true;
+      }
+    }
+  }, [mode, editor, account, replyToEmail, getSignatureBlock]);
 
   // Create initial draft
   useEffect(() => {
