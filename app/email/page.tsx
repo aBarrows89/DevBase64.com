@@ -174,9 +174,9 @@ export default function EmailPage() {
 
   return (
     <Protected requireFlag="hasEmailAccess">
-      <div className="min-h-screen theme-bg-primary flex">
+      <div className="h-screen theme-bg-primary flex overflow-hidden">
         <Sidebar />
-        <main className="flex-1 flex overflow-hidden">
+        <main className="flex-1 flex overflow-hidden h-full">
           {/* Sync Error Banner */}
           {(selectedAccount?.syncError || syncError) && (
             <div className="absolute top-0 left-0 right-0 z-40 bg-red-500/10 border-b border-red-500/20 p-3 flex items-center justify-center gap-2 text-red-400 text-sm">
@@ -226,7 +226,7 @@ export default function EmailPage() {
           />
 
           {/* Email List */}
-          <div className={`${selectedEmailId ? 'hidden lg:flex' : 'flex'} flex-col w-full lg:w-96 border-r theme-border`}>
+          <div className={`${selectedEmailId ? 'hidden lg:flex' : 'flex'} flex-col w-full lg:w-96 h-full border-r theme-border flex-shrink-0`}>
             <EmailList
               emails={emailsResult?.emails || []}
               selectedEmailId={selectedEmailId}
@@ -237,7 +237,7 @@ export default function EmailPage() {
           </div>
 
           {/* Email View */}
-          <div className={`${selectedEmailId ? 'flex' : 'hidden lg:flex'} flex-1 flex-col`}>
+          <div className={`${selectedEmailId ? 'flex' : 'hidden lg:flex'} flex-1 flex-col h-full min-w-0`}>
             {selectedEmail && user?._id ? (
               <EmailView
                 email={selectedEmail}
