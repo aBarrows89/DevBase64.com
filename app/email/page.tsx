@@ -223,6 +223,7 @@ export default function EmailPage() {
             onSync={handleSync}
             isCollapsed={isSidebarCollapsed}
             onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            userId={user?._id as Id<"users">}
           />
 
           {/* Email List */}
