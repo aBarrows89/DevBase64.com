@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Protected from "../protected";
 import Sidebar from "@/components/Sidebar";
 import { useAuth } from "../auth-context";
@@ -11,6 +11,9 @@ import EmailSidebar from "@/components/email/EmailSidebar";
 import EmailList from "@/components/email/EmailList";
 import EmailView from "@/components/email/EmailView";
 import EmailComposer from "@/components/email/EmailComposer";
+
+// Auto-fetch interval in milliseconds (2 minutes)
+const AUTO_FETCH_INTERVAL = 2 * 60 * 1000;
 
 type EmailFolder = Doc<"emailFolders">;
 type Email = Doc<"emails">;
@@ -107,26 +110,94 @@ export default function EmailPage() {
   // Sync state
   const [syncError, setSyncError] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const syncInProgress = useRef(false);
+  const autoFetchInterval = useRef<NodeJS.Timeout | null>(null);
+  const initialSyncDone = useRef<Set<string>>(new Set());
 
   // Handle sync
-  const handleSync = async (fullSync = false) => {
-    if (selectedAccountId) {
+  const handleSync = useCallback(async (fullSync = false, isAutoFetch = false) => {
+    if (!selectedAccountId || syncInProgress.current) return;
+
+    syncInProgress.current = true;
+    if (!isAutoFetch) {
       setIsSyncing(true);
-      setSyncError(null);
-      try {
-        const result = await triggerSync({ accountId: selectedAccountId, fullSync });
+    }
+    setSyncError(null);
+
+    try {
+      const result = await triggerSync({ accountId: selectedAccountId, fullSync });
+      if (!isAutoFetch) {
         console.log("Sync result:", result);
-        if (!result.success) {
-          setSyncError(result.error || "Sync failed");
-        }
-      } catch (error) {
-        console.error("Sync failed:", error);
+      }
+      if (!result.success) {
+        setSyncError(result.error || "Sync failed");
+      } else {
+        setLastSyncTime(new Date());
+      }
+    } catch (error) {
+      console.error("Sync failed:", error);
+      if (!isAutoFetch) {
         setSyncError(error instanceof Error ? error.message : "Sync failed");
-      } finally {
+      }
+    } finally {
+      syncInProgress.current = false;
+      if (!isAutoFetch) {
         setIsSyncing(false);
       }
     }
-  };
+  }, [selectedAccountId, triggerSync]);
+
+  // Auto-fetch: Initial sync when account is selected
+  useEffect(() => {
+    if (selectedAccountId && !initialSyncDone.current.has(selectedAccountId)) {
+      initialSyncDone.current.add(selectedAccountId);
+      // Small delay to let UI settle
+      const timeout = setTimeout(() => {
+        handleSync(false, true);
+      }, 500);
+      return () => clearTimeout(timeout);
+    }
+  }, [selectedAccountId, handleSync]);
+
+  // Auto-fetch: Periodic sync every 2 minutes
+  useEffect(() => {
+    if (selectedAccountId) {
+      // Clear any existing interval
+      if (autoFetchInterval.current) {
+        clearInterval(autoFetchInterval.current);
+      }
+
+      // Set up new interval
+      autoFetchInterval.current = setInterval(() => {
+        handleSync(false, true);
+      }, AUTO_FETCH_INTERVAL);
+
+      return () => {
+        if (autoFetchInterval.current) {
+          clearInterval(autoFetchInterval.current);
+          autoFetchInterval.current = null;
+        }
+      };
+    }
+  }, [selectedAccountId, handleSync]);
+
+  // Auto-fetch: Sync when window regains focus (if more than 1 minute since last sync)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && selectedAccountId) {
+        const now = new Date();
+        const timeSinceLastSync = lastSyncTime ? now.getTime() - lastSyncTime.getTime() : Infinity;
+        // Only sync if more than 1 minute since last sync
+        if (timeSinceLastSync > 60 * 1000) {
+          handleSync(false, true);
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [selectedAccountId, lastSyncTime, handleSync]);
 
   // Handle folder selection
   const handleFolderSelect = (folderId: Id<"emailFolders">) => {
