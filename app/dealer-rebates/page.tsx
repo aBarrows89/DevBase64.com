@@ -50,9 +50,12 @@ function parsePositionalCSV(text: string): string[][] {
 }
 
 function normalizeAcct(raw: string): string {
-  const s = raw.trim();
+  let s = raw.trim();
   if (s.includes('-')) return s.split('-').pop()!.toLowerCase();
-  return (s.replace(/^\s+/, '').replace(/^0+/, '') || '0').toLowerCase();
+  // Strip warehouse prefix (e.g. W08R20 -> R20, W084187 -> 4187)
+  s = s.replace(/^W\d{2}/i, '');
+  s = s.replace(/^\s+/, '').replace(/^0+/, '') || '0';
+  return s.toLowerCase();
 }
 
 function toFalkenDate(yymmdd: string): string {
