@@ -609,6 +609,7 @@ export const ALL_PERMISSIONS: PermissionDefinition[] = [
   { key: "menu.iePriceSystem", label: "IE Price System", description: "Access IE Price System tool", category: "documents" },
   { key: "dealerRebates.deactivateDealers", label: "Deactivate Dealers", description: "Deactivate or reactivate dealers in the rebate tool", category: "documents" },
   { key: "dealerRebates.deleteUploads", label: "Delete Upload History", description: "Delete past upload records from the rebate tool", category: "documents" },
+  { key: "dealerRebates.viewStats", label: "View Rebate Stats", description: "View rebate statistics and analytics", category: "documents" },
 
   // Dashboard Widgets
   { key: "dashboard.activeProjects", label: "Active Projects Widget", description: "Show active projects on dashboard", category: "reports" },
@@ -679,6 +680,7 @@ export function getRoleDefaults(user: PermissionUser): Record<string, boolean> {
   const tier = getTier(user.role);
   defaults["dealerRebates.deactivateDealers"] = tier >= 4;
   defaults["dealerRebates.deleteUploads"] = tier >= 5; // super admin only
+  defaults["dealerRebates.viewStats"] = tier >= 3; // director+
 
   return defaults;
 }

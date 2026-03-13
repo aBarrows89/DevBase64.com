@@ -144,7 +144,7 @@ type Dealer = {
 };
 
 // ─── TABS ─────────────────────────────────────────────────────────────────────
-const TABS = ["Upload & Process", "Dealer Management", "Upload History"] as const;
+const TABS = ["Upload & Process", "Dealer Management", "Upload History", "Stats"] as const;
 type TabType = typeof TABS[number];
 
 const UPLOAD_STEPS = ["Upload ART24T", "Select Programs", "Review & Export"];
@@ -155,8 +155,12 @@ export default function DealerRebatesPage() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
   const { user } = useAuth();
+  const permissions = usePermissions();
 
   const [activeTab, setActiveTab] = useState<TabType>("Upload & Process");
+
+  const canViewStats = permissions.hasPermission("dealerRebates.viewStats");
+  const visibleTabs = TABS.filter(tab => tab !== "Stats" || canViewStats);
 
   return (
     <Protected>
@@ -182,7 +186,7 @@ export default function DealerRebatesPage() {
             </div>
             {/* Tabs */}
             <div className="flex gap-1 mt-4">
-              {TABS.map(tab => (
+              {visibleTabs.map(tab => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -202,6 +206,7 @@ export default function DealerRebatesPage() {
             {activeTab === "Upload & Process" && <UploadTab isDark={isDark} userId={user?._id} />}
             {activeTab === "Dealer Management" && <DealerManagementTab isDark={isDark} />}
             {activeTab === "Upload History" && <UploadHistoryTab isDark={isDark} />}
+            {activeTab === "Stats" && <StatsTab isDark={isDark} />}
           </div>
         </main>
       </div>
@@ -1319,6 +1324,380 @@ function UploadHistoryTab({ isDark }: { isDark: boolean }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TAB 4: STATS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface MonthData {
+  key: string; // YYYY-MM
+  label: string;
+  falken: number;
+  milestar: number;
+  total: number;
+}
+
+function StatsTab({ isDark }: { isDark: boolean }) {
+  const uploads = useQuery(api.dealerRebates.getUploads, {});
+  const dealers = useQuery(api.dealerRebates.listDealers, { activeOnly: true });
+
+  const stats = useMemo(() => {
+    if (!uploads || uploads.length === 0) return null;
+
+    const now = new Date();
+    const thisYear = now.getFullYear();
+    const thisMonth = now.getMonth();
+    const lastYear = thisYear - 1;
+
+    // Aggregate by month
+    const monthMap: Record<string, { falken: number; milestar: number }> = {};
+    uploads.forEach(u => {
+      const d = new Date(u.uploadDate);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      if (!monthMap[key]) monthMap[key] = { falken: 0, milestar: 0 };
+      if (u.program === "falken") monthMap[key].falken += u.matchedRows;
+      else if (u.program === "milestar") monthMap[key].milestar += u.matchedRows;
+    });
+
+    // Build sorted month array (last 12 months)
+    const months: MonthData[] = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(thisYear, thisMonth - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const data = monthMap[key] || { falken: 0, milestar: 0 };
+      months.push({
+        key,
+        label: d.toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
+        falken: data.falken,
+        milestar: data.milestar,
+        total: data.falken + data.milestar,
+      });
+    }
+
+    // Current year totals
+    const cyFalken = months.filter(m => m.key.startsWith(String(thisYear))).reduce((s, m) => s + m.falken, 0);
+    const cyMilestar = months.filter(m => m.key.startsWith(String(thisYear))).reduce((s, m) => s + m.milestar, 0);
+
+    // Last year totals (from uploads)
+    const lyFalken = uploads
+      .filter(u => { const d = new Date(u.uploadDate); return d.getFullYear() === lastYear && u.program === "falken"; })
+      .reduce((s, u) => s + u.matchedRows, 0);
+    const lyMilestar = uploads
+      .filter(u => { const d = new Date(u.uploadDate); return d.getFullYear() === lastYear && u.program === "milestar"; })
+      .reduce((s, u) => s + u.matchedRows, 0);
+
+    // This month
+    const currentMonthKey = `${thisYear}-${String(thisMonth + 1).padStart(2, "0")}`;
+    const cmData = monthMap[currentMonthKey] || { falken: 0, milestar: 0 };
+
+    // Last month
+    const lm = new Date(thisYear, thisMonth - 1, 1);
+    const lastMonthKey = `${lm.getFullYear()}-${String(lm.getMonth() + 1).padStart(2, "0")}`;
+    const lmData = monthMap[lastMonthKey] || { falken: 0, milestar: 0 };
+
+    // YoY same months comparison (Jan-current month)
+    const cyToDate = uploads
+      .filter(u => { const d = new Date(u.uploadDate); return d.getFullYear() === thisYear && d.getMonth() <= thisMonth; })
+      .reduce((s, u) => s + u.matchedRows, 0);
+    const lyToDate = uploads
+      .filter(u => { const d = new Date(u.uploadDate); return d.getFullYear() === lastYear && d.getMonth() <= thisMonth; })
+      .reduce((s, u) => s + u.matchedRows, 0);
+
+    const yoyGrowth = lyToDate > 0 ? ((cyToDate - lyToDate) / lyToDate * 100) : null;
+
+    // Top dealers by volume (across all uploads)
+    const dealerVolume: Record<string, { name: string; falken: number; milestar: number }> = {};
+    uploads.forEach(u => {
+      if (!u.dealerBreakdown) return;
+      u.dealerBreakdown.forEach(d => {
+        const key = d.name;
+        if (!dealerVolume[key]) dealerVolume[key] = { name: d.name, falken: 0, milestar: 0 };
+        if (u.program === "falken") dealerVolume[key].falken += d.rowCount;
+        else dealerVolume[key].milestar += d.rowCount;
+      });
+    });
+    const topDealers = Object.values(dealerVolume)
+      .map(d => ({ ...d, total: d.falken + d.milestar }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 10);
+
+    // Max for chart scaling
+    const maxMonth = Math.max(...months.map(m => m.total), 1);
+
+    return {
+      months,
+      maxMonth,
+      currentMonth: { falken: cmData.falken, milestar: cmData.milestar, total: cmData.falken + cmData.milestar },
+      lastMonth: { falken: lmData.falken, milestar: lmData.milestar, total: lmData.falken + lmData.milestar },
+      currentYear: { falken: cyFalken, milestar: cyMilestar, total: cyFalken + cyMilestar },
+      lastYear: { falken: lyFalken, milestar: lyMilestar, total: lyFalken + lyMilestar },
+      yoyGrowth,
+      cyToDate,
+      lyToDate,
+      topDealers,
+      totalUploads: uploads.length,
+    };
+  }, [uploads]);
+
+  if (!uploads || !dealers) {
+    return <div className={`text-center py-12 ${isDark ? "text-slate-400" : "text-gray-500"}`}>Loading stats...</div>;
+  }
+
+  if (!stats) {
+    return <div className={`text-center py-12 ${isDark ? "text-slate-500" : "text-gray-400"}`}>No upload data yet. Process some ART24T files to see stats.</div>;
+  }
+
+  const growthColor = (val: number | null) => {
+    if (val === null) return isDark ? "text-slate-500" : "text-gray-400";
+    return val >= 0 ? "text-green-400" : "text-red-400";
+  };
+
+  const growthArrow = (val: number | null) => {
+    if (val === null) return "—";
+    return val >= 0 ? `+${val.toFixed(1)}%` : `${val.toFixed(1)}%`;
+  };
+
+  const monthGrowth = stats.lastMonth.total > 0
+    ? ((stats.currentMonth.total - stats.lastMonth.total) / stats.lastMonth.total * 100)
+    : null;
+
+  return (
+    <div>
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className={`rounded-xl border p-4 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
+          <div className={`text-xs font-medium uppercase tracking-wider mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>This Month</div>
+          <div className={`text-3xl font-mono font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{stats.currentMonth.total.toLocaleString()}</div>
+          <div className="flex items-center gap-2 mt-1">
+            <span className={`text-xs font-bold ${growthColor(monthGrowth)}`}>{growthArrow(monthGrowth)}</span>
+            <span className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>vs last month</span>
+          </div>
+        </div>
+
+        <div className={`rounded-xl border p-4 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
+          <div className={`text-xs font-medium uppercase tracking-wider mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>Year to Date</div>
+          <div className={`text-3xl font-mono font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{stats.currentYear.total.toLocaleString()}</div>
+          <div className="flex items-center gap-2 mt-1">
+            <span className={`text-xs font-bold ${growthColor(stats.yoyGrowth)}`}>{growthArrow(stats.yoyGrowth)}</span>
+            <span className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>YoY</span>
+          </div>
+        </div>
+
+        <div className={`rounded-xl border p-4 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
+          <div className={`text-xs font-medium uppercase tracking-wider mb-1 ${isDark ? "text-amber-400/70" : "text-amber-600"}`}>Falken YTD</div>
+          <div className="text-3xl font-mono font-bold text-amber-400">{stats.currentYear.falken.toLocaleString()}</div>
+          <div className={`text-xs mt-1 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+            {stats.lastYear.falken > 0
+              ? `${stats.lastYear.falken.toLocaleString()} last year`
+              : "No prior year data"}
+          </div>
+        </div>
+
+        <div className={`rounded-xl border p-4 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
+          <div className={`text-xs font-medium uppercase tracking-wider mb-1 ${isDark ? "text-blue-400/70" : "text-blue-600"}`}>Milestar YTD</div>
+          <div className="text-3xl font-mono font-bold text-blue-400">{stats.currentYear.milestar.toLocaleString()}</div>
+          <div className={`text-xs mt-1 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+            {stats.lastYear.milestar > 0
+              ? `${stats.lastYear.milestar.toLocaleString()} last year`
+              : "No prior year data"}
+          </div>
+        </div>
+      </div>
+
+      {/* Monthly Chart */}
+      <div className={`rounded-xl border p-6 mb-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
+        <h3 className={`text-sm font-bold uppercase tracking-wider mb-4 ${isDark ? "text-orange-400" : "text-orange-600"}`}>
+          Monthly Volume (Last 12 Months)
+        </h3>
+        <div className="flex items-end gap-1.5 h-48">
+          {stats.months.map(m => {
+            const falkenH = stats.maxMonth > 0 ? (m.falken / stats.maxMonth * 100) : 0;
+            const milestarH = stats.maxMonth > 0 ? (m.milestar / stats.maxMonth * 100) : 0;
+            return (
+              <div key={m.key} className="flex-1 flex flex-col items-center gap-1 group relative">
+                <div className="w-full flex flex-col justify-end h-40">
+                  {m.total > 0 ? (
+                    <>
+                      <div
+                        className="w-full rounded-t bg-amber-500/80 transition-all"
+                        style={{ height: `${falkenH}%`, minHeight: falkenH > 0 ? 2 : 0 }}
+                      />
+                      <div
+                        className="w-full rounded-b bg-blue-500/80 transition-all"
+                        style={{ height: `${milestarH}%`, minHeight: milestarH > 0 ? 2 : 0 }}
+                      />
+                    </>
+                  ) : (
+                    <div className={`w-full h-0.5 rounded ${isDark ? "bg-slate-700" : "bg-gray-200"}`} />
+                  )}
+                </div>
+                <span className={`text-[9px] font-mono ${isDark ? "text-slate-500" : "text-gray-400"}`}>{m.label}</span>
+                {/* Tooltip */}
+                <div className={`absolute bottom-full mb-2 hidden group-hover:block z-10 px-2 py-1 rounded text-[10px] whitespace-nowrap ${isDark ? "bg-slate-700 text-white" : "bg-gray-800 text-white"}`}>
+                  <div className="font-bold">{m.total} tires</div>
+                  <div className="text-amber-400">Falken: {m.falken}</div>
+                  <div className="text-blue-400">Milestar: {m.milestar}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="flex items-center gap-4 mt-4">
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded bg-amber-500/80" />
+            <span className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>Falken</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded bg-blue-500/80" />
+            <span className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>Milestar</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Monthly Breakdown Table + Top Dealers */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div className={`rounded-xl border overflow-hidden ${isDark ? "border-slate-700" : "border-gray-200 shadow-sm"}`}>
+          <div className={`px-5 py-3 border-b ${isDark ? "bg-slate-800/80 border-slate-700" : "bg-gray-50 border-gray-200"}`}>
+            <h3 className={`text-sm font-bold ${isDark ? "text-white" : "text-gray-900"}`}>Monthly Breakdown</h3>
+          </div>
+          <div className="overflow-y-auto max-h-80">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className={isDark ? "text-slate-400" : "text-gray-500"}>
+                  <th className="text-left py-2 px-4 font-medium text-xs">Month</th>
+                  <th className="text-right py-2 px-4 font-medium text-xs">Falken</th>
+                  <th className="text-right py-2 px-4 font-medium text-xs">Milestar</th>
+                  <th className="text-right py-2 px-4 font-medium text-xs">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...stats.months].reverse().map(m => (
+                  <tr key={m.key} className={`border-t ${isDark ? "border-slate-700/50" : "border-gray-100"}`}>
+                    <td className={`py-2 px-4 font-medium ${isDark ? "text-white" : "text-gray-900"}`}>{m.label}</td>
+                    <td className="py-2 px-4 text-right font-mono text-amber-400">{m.falken || "—"}</td>
+                    <td className="py-2 px-4 text-right font-mono text-blue-400">{m.milestar || "—"}</td>
+                    <td className={`py-2 px-4 text-right font-mono font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{m.total || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className={`rounded-xl border overflow-hidden ${isDark ? "border-slate-700" : "border-gray-200 shadow-sm"}`}>
+          <div className={`px-5 py-3 border-b ${isDark ? "bg-slate-800/80 border-slate-700" : "bg-gray-50 border-gray-200"}`}>
+            <h3 className={`text-sm font-bold ${isDark ? "text-white" : "text-gray-900"}`}>Top 10 Dealers by Volume</h3>
+          </div>
+          <div className="overflow-y-auto max-h-80">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className={isDark ? "text-slate-400" : "text-gray-500"}>
+                  <th className="text-left py-2 px-4 font-medium text-xs">#</th>
+                  <th className="text-left py-2 px-4 font-medium text-xs">Dealer</th>
+                  <th className="text-right py-2 px-4 font-medium text-xs">Tires</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.topDealers.map((d, i) => {
+                  const maxVol = stats.topDealers[0]?.total || 1;
+                  return (
+                    <tr key={d.name} className={`border-t ${isDark ? "border-slate-700/50" : "border-gray-100"}`}>
+                      <td className={`py-2 px-4 font-mono text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>{i + 1}</td>
+                      <td className="py-2 px-4">
+                        <div className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"}`}>{d.name}</div>
+                        <div className="flex gap-2 mt-0.5">
+                          {d.falken > 0 && <span className="text-[10px] text-amber-400">{d.falken} FAL</span>}
+                          {d.milestar > 0 && <span className="text-[10px] text-blue-400">{d.milestar} MIL</span>}
+                        </div>
+                      </td>
+                      <td className="py-2 px-4 text-right">
+                        <div className={`font-mono font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{d.total}</div>
+                        <div className="mt-1 h-1.5 rounded-full overflow-hidden bg-slate-700/30" style={{ width: 60 }}>
+                          <div className="h-full rounded-full bg-gradient-to-r from-amber-500 to-blue-500" style={{ width: `${(d.total / maxVol * 100)}%` }} />
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {stats.topDealers.length === 0 && (
+                  <tr><td colSpan={3} className={`py-8 text-center text-sm ${isDark ? "text-slate-500" : "text-gray-400"}`}>No dealer data yet</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* YoY Comparison */}
+      <div className={`rounded-xl border p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
+        <h3 className={`text-sm font-bold uppercase tracking-wider mb-4 ${isDark ? "text-orange-400" : "text-orange-600"}`}>
+          Year-over-Year Comparison
+        </h3>
+        <div className="grid grid-cols-3 gap-6">
+          <div>
+            <div className={`text-xs font-medium mb-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>Combined</div>
+            <div className="flex items-end gap-3">
+              <div>
+                <div className={`text-2xl font-mono font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{stats.cyToDate.toLocaleString()}</div>
+                <div className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>{new Date().getFullYear()} YTD</div>
+              </div>
+              <div>
+                <div className={`text-lg font-mono ${isDark ? "text-slate-500" : "text-gray-400"}`}>{stats.lyToDate.toLocaleString()}</div>
+                <div className={`text-xs ${isDark ? "text-slate-600" : "text-gray-300"}`}>{new Date().getFullYear() - 1} YTD</div>
+              </div>
+            </div>
+            {stats.yoyGrowth !== null && (
+              <div className={`mt-2 text-sm font-bold ${growthColor(stats.yoyGrowth)}`}>
+                {growthArrow(stats.yoyGrowth)} YoY
+              </div>
+            )}
+          </div>
+          <div>
+            <div className="text-xs font-medium mb-2 text-amber-400">Falken</div>
+            <div className="flex items-end gap-3">
+              <div>
+                <div className="text-2xl font-mono font-bold text-amber-400">{stats.currentYear.falken.toLocaleString()}</div>
+                <div className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>{new Date().getFullYear()}</div>
+              </div>
+              <div>
+                <div className={`text-lg font-mono ${isDark ? "text-slate-500" : "text-gray-400"}`}>{stats.lastYear.falken.toLocaleString()}</div>
+                <div className={`text-xs ${isDark ? "text-slate-600" : "text-gray-300"}`}>{new Date().getFullYear() - 1}</div>
+              </div>
+            </div>
+            {stats.lastYear.falken > 0 && (
+              <div className={`mt-2 text-sm font-bold ${growthColor(((stats.currentYear.falken - stats.lastYear.falken) / stats.lastYear.falken * 100))}`}>
+                {growthArrow(((stats.currentYear.falken - stats.lastYear.falken) / stats.lastYear.falken * 100))} YoY
+              </div>
+            )}
+          </div>
+          <div>
+            <div className="text-xs font-medium mb-2 text-blue-400">Milestar</div>
+            <div className="flex items-end gap-3">
+              <div>
+                <div className="text-2xl font-mono font-bold text-blue-400">{stats.currentYear.milestar.toLocaleString()}</div>
+                <div className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>{new Date().getFullYear()}</div>
+              </div>
+              <div>
+                <div className={`text-lg font-mono ${isDark ? "text-slate-500" : "text-gray-400"}`}>{stats.lastYear.milestar.toLocaleString()}</div>
+                <div className={`text-xs ${isDark ? "text-slate-600" : "text-gray-300"}`}>{new Date().getFullYear() - 1}</div>
+              </div>
+            </div>
+            {stats.lastYear.milestar > 0 && (
+              <div className={`mt-2 text-sm font-bold ${growthColor(((stats.currentYear.milestar - stats.lastYear.milestar) / stats.lastYear.milestar * 100))}`}>
+                {growthArrow(((stats.currentYear.milestar - stats.lastYear.milestar) / stats.lastYear.milestar * 100))} YoY
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Footer stats */}
+      <div className={`mt-4 text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+        Based on {stats.totalUploads} upload{stats.totalUploads !== 1 ? "s" : ""} &middot; {dealers?.filter(d => d.isActive).length ?? 0} active dealers
+      </div>
     </div>
   );
 }
