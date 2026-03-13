@@ -916,7 +916,7 @@ function DealerManagementTab({ isDark }: { isDark: boolean }) {
                 <th className="text-left py-3 px-4 font-medium">Name</th>
                 <th className="text-left py-3 px-4 font-medium">JMK</th>
                 <th className="text-left py-3 px-4 font-medium">Fanatic ID</th>
-                <th className="text-left py-3 px-4 font-medium">Dealer #</th>
+                <th className="text-left py-3 px-4 font-medium">Momentum #</th>
                 <th className="text-left py-3 px-4 font-medium">Programs</th>
                 <th className="text-left py-3 px-4 font-medium">Status</th>
                 <th className="text-right py-3 px-4 font-medium">Actions</th>
@@ -1038,7 +1038,7 @@ function DealerManagementTab({ isDark }: { isDark: boolean }) {
                   />
                 </div>
                 <div>
-                  <label className={`text-xs font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Milestar Dealer #</label>
+                  <label className={`text-xs font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Momentum #</label>
                   <input
                     type="text"
                     value={formDealerNumber}

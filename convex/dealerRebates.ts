@@ -43,27 +43,26 @@ export const createDealer = mutation({
     primSec: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    // Check for duplicate Fanatic ID
-    if (args.fanaticId) {
-      const existingFanatic = await ctx.db
+    // Check: 1 JMK per Fanatic ID / Momentum number
+    if (args.jmk) {
+      const existingByJmk = await ctx.db
         .query("dealerRebateDealers")
-        .withIndex("by_fanatic_id", (q) => q.eq("fanaticId", args.fanaticId!))
+        .withIndex("by_jmk", (q) => q.eq("jmk", args.jmk))
         .collect();
-      const activeDupe = existingFanatic.find(d => d.isActive);
-      if (activeDupe) {
-        return { success: false, error: `Fanatic ID ${args.fanaticId} is already assigned to "${activeDupe.name}" (JMK: ${activeDupe.jmk})` };
-      }
-    }
+      const activeWithJmk = existingByJmk.filter(d => d.isActive);
 
-    // Check for duplicate Milestar Dealer Number
-    if (args.dealerNumber) {
-      const existingDealer = await ctx.db
-        .query("dealerRebateDealers")
-        .withIndex("by_dealer_number", (q) => q.eq("dealerNumber", args.dealerNumber!))
-        .collect();
-      const activeDupe = existingDealer.find(d => d.isActive);
-      if (activeDupe) {
-        return { success: false, error: `Dealer number ${args.dealerNumber} is already assigned to "${activeDupe.name}" (JMK: ${activeDupe.jmk})` };
+      if (args.fanaticId && args.programs.includes("falken")) {
+        const existing = activeWithJmk.find(d => d.fanaticId && d.fanaticId !== args.fanaticId && d.programs.includes("falken"));
+        if (existing) {
+          return { success: false, error: `JMK ${args.jmk} already has a Fanatic ID (${existing.fanaticId}) assigned to "${existing.name}"` };
+        }
+      }
+
+      if (args.dealerNumber && args.programs.includes("milestar")) {
+        const existing = activeWithJmk.find(d => d.dealerNumber && d.dealerNumber !== args.dealerNumber && d.programs.includes("milestar"));
+        if (existing) {
+          return { success: false, error: `JMK ${args.jmk} already has a Momentum # (${existing.dealerNumber}) assigned to "${existing.name}"` };
+        }
       }
     }
 
@@ -96,27 +95,32 @@ export const updateDealer = mutation({
   handler: async (ctx, args) => {
     const { id, ...updates } = args;
 
-    // Check for duplicate Fanatic ID (excluding self)
-    if (updates.fanaticId !== undefined) {
-      const existingFanatic = await ctx.db
-        .query("dealerRebateDealers")
-        .withIndex("by_fanatic_id", (q) => q.eq("fanaticId", updates.fanaticId!))
-        .collect();
-      const activeDupe = existingFanatic.find(d => d.isActive && d._id !== id);
-      if (activeDupe) {
-        return { success: false, error: `Fanatic ID ${updates.fanaticId} is already assigned to "${activeDupe.name}" (JMK: ${activeDupe.jmk})` };
-      }
-    }
+    // Check: 1 JMK per Fanatic ID / Momentum number (excluding self)
+    const current = await ctx.db.get(id);
+    const jmk = updates.jmk ?? current?.jmk;
+    const fanaticId = updates.fanaticId ?? current?.fanaticId;
+    const dealerNumber = updates.dealerNumber ?? current?.dealerNumber;
+    const programs = updates.programs ?? current?.programs ?? [];
 
-    // Check for duplicate Milestar Dealer Number (excluding self)
-    if (updates.dealerNumber !== undefined) {
-      const existingDealer = await ctx.db
+    if (jmk) {
+      const existingByJmk = await ctx.db
         .query("dealerRebateDealers")
-        .withIndex("by_dealer_number", (q) => q.eq("dealerNumber", updates.dealerNumber!))
+        .withIndex("by_jmk", (q) => q.eq("jmk", jmk))
         .collect();
-      const activeDupe = existingDealer.find(d => d.isActive && d._id !== id);
-      if (activeDupe) {
-        return { success: false, error: `Dealer number ${updates.dealerNumber} is already assigned to "${activeDupe.name}" (JMK: ${activeDupe.jmk})` };
+      const activeWithJmk = existingByJmk.filter(d => d.isActive && d._id !== id);
+
+      if (fanaticId && programs.includes("falken")) {
+        const existing = activeWithJmk.find(d => d.fanaticId && d.fanaticId !== fanaticId && d.programs.includes("falken"));
+        if (existing) {
+          return { success: false, error: `JMK ${jmk} already has a Fanatic ID (${existing.fanaticId}) assigned to "${existing.name}"` };
+        }
+      }
+
+      if (dealerNumber && programs.includes("milestar")) {
+        const existing = activeWithJmk.find(d => d.dealerNumber && d.dealerNumber !== dealerNumber && d.programs.includes("milestar"));
+        if (existing) {
+          return { success: false, error: `JMK ${jmk} already has a Momentum # (${existing.dealerNumber}) assigned to "${existing.name}"` };
+        }
       }
     }
 
