@@ -8,7 +8,10 @@ const TRACKING_PIXEL = Buffer.from(
   "base64"
 );
 
-const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+// Create client lazily to avoid build-time issues
+function getConvexClient() {
+  return new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+}
 
 export async function GET(
   request: NextRequest,
@@ -25,6 +28,7 @@ export async function GET(
     const userAgent = request.headers.get("user-agent") || undefined;
 
     // Record the read event (fire and forget)
+    const convex = getConvexClient();
     convex.mutation(api.email.readReceipts.recordRead, {
       trackingId,
       ipAddress,
