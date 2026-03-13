@@ -803,6 +803,7 @@ function DealerManagementTab({ isDark }: { isDark: boolean }) {
   };
 
   const openEdit = (d: Dealer) => {
+    setFormError("");
     setEditingDealer(d);
     setFormJmk(d.jmk);
     setFormName(d.name);
@@ -813,9 +814,12 @@ function DealerManagementTab({ isDark }: { isDark: boolean }) {
     setShowAddModal(true);
   };
 
+  const [formError, setFormError] = useState("");
+
   const handleSave = async () => {
     if (!formName.trim()) return;
     setFormSaving(true);
+    setFormError("");
     try {
       const data = {
         jmk: formJmk.trim(),
@@ -826,11 +830,18 @@ function DealerManagementTab({ isDark }: { isDark: boolean }) {
         primSec: formPrimSec ? Number(formPrimSec) : undefined,
       };
 
+      let result;
       if (editingDealer) {
-        await updateDealer({ id: editingDealer._id, ...data });
+        result = await updateDealer({ id: editingDealer._id, ...data });
       } else {
-        await createDealer(data);
+        result = await createDealer(data);
       }
+
+      if (result && !result.success && result.error) {
+        setFormError(result.error);
+        return;
+      }
+
       setShowAddModal(false);
       setEditingDealer(null);
       resetForm();
@@ -876,7 +887,7 @@ function DealerManagementTab({ isDark }: { isDark: boolean }) {
           Show inactive
         </label>
         <button
-          onClick={() => { setEditingDealer(null); resetForm(); setShowAddModal(true); }}
+          onClick={() => { setEditingDealer(null); resetForm(); setFormError(""); setShowAddModal(true); }}
           className="px-4 py-2 rounded-lg text-sm font-bold bg-orange-500 hover:bg-orange-600 text-white transition-colors"
         >
           + Add Dealer
@@ -1055,6 +1066,11 @@ function DealerManagementTab({ isDark }: { isDark: boolean }) {
                 </div>
               </div>
             </div>
+            {formError && (
+              <div className={`mt-4 p-3 rounded-lg text-sm ${isDark ? "bg-red-500/10 text-red-400 border border-red-500/20" : "bg-red-50 text-red-600 border border-red-200"}`}>
+                {formError}
+              </div>
+            )}
             <div className="flex justify-end gap-3 mt-6">
               <button
                 onClick={() => { setShowAddModal(false); setEditingDealer(null); }}

@@ -43,6 +43,30 @@ export const createDealer = mutation({
     primSec: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    // Check for duplicate Fanatic ID
+    if (args.fanaticId) {
+      const existingFanatic = await ctx.db
+        .query("dealerRebateDealers")
+        .withIndex("by_fanatic_id", (q) => q.eq("fanaticId", args.fanaticId!))
+        .collect();
+      const activeDupe = existingFanatic.find(d => d.isActive);
+      if (activeDupe) {
+        return { success: false, error: `Fanatic ID ${args.fanaticId} is already assigned to "${activeDupe.name}" (JMK: ${activeDupe.jmk})` };
+      }
+    }
+
+    // Check for duplicate Milestar Dealer Number
+    if (args.dealerNumber) {
+      const existingDealer = await ctx.db
+        .query("dealerRebateDealers")
+        .withIndex("by_dealer_number", (q) => q.eq("dealerNumber", args.dealerNumber!))
+        .collect();
+      const activeDupe = existingDealer.find(d => d.isActive);
+      if (activeDupe) {
+        return { success: false, error: `Dealer number ${args.dealerNumber} is already assigned to "${activeDupe.name}" (JMK: ${activeDupe.jmk})` };
+      }
+    }
+
     const id = await ctx.db.insert("dealerRebateDealers", {
       jmk: args.jmk,
       name: args.name,
@@ -71,6 +95,31 @@ export const updateDealer = mutation({
   },
   handler: async (ctx, args) => {
     const { id, ...updates } = args;
+
+    // Check for duplicate Fanatic ID (excluding self)
+    if (updates.fanaticId !== undefined) {
+      const existingFanatic = await ctx.db
+        .query("dealerRebateDealers")
+        .withIndex("by_fanatic_id", (q) => q.eq("fanaticId", updates.fanaticId!))
+        .collect();
+      const activeDupe = existingFanatic.find(d => d.isActive && d._id !== id);
+      if (activeDupe) {
+        return { success: false, error: `Fanatic ID ${updates.fanaticId} is already assigned to "${activeDupe.name}" (JMK: ${activeDupe.jmk})` };
+      }
+    }
+
+    // Check for duplicate Milestar Dealer Number (excluding self)
+    if (updates.dealerNumber !== undefined) {
+      const existingDealer = await ctx.db
+        .query("dealerRebateDealers")
+        .withIndex("by_dealer_number", (q) => q.eq("dealerNumber", updates.dealerNumber!))
+        .collect();
+      const activeDupe = existingDealer.find(d => d.isActive && d._id !== id);
+      if (activeDupe) {
+        return { success: false, error: `Dealer number ${updates.dealerNumber} is already assigned to "${activeDupe.name}" (JMK: ${activeDupe.jmk})` };
+      }
+    }
+
     const cleanUpdates: Record<string, unknown> = { updatedAt: Date.now() };
     for (const [key, value] of Object.entries(updates)) {
       if (value !== undefined) cleanUpdates[key] = value;
