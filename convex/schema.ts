@@ -2377,7 +2377,7 @@ export default defineSchema({
     sortOrder: v.optional(v.number()),
 
     isActive: v.boolean(),
-    createdBy: v.id("users"),
+    createdBy: v.optional(v.id("users")), // Optional for system-seeded defaults
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -2421,12 +2421,20 @@ export default defineSchema({
     isPrimary: v.boolean(), // Primary account for sending
     signature: v.optional(v.string()), // HTML signature
 
+    // Shared mailbox support
+    isShared: v.optional(v.boolean()), // If this is a shared mailbox
+    sharedWithUserIds: v.optional(v.array(v.id("users"))), // Users who have access
+
+    // Token expiry warning
+    tokenExpiryWarned: v.optional(v.boolean()), // If user was warned about expiring token
+
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_user", ["userId"])
     .index("by_email", ["emailAddress"])
-    .index("by_user_active", ["userId", "isActive"]),
+    .index("by_user_active", ["userId", "isActive"])
+    .index("by_shared", ["isShared"]),
 
   // Email folders (synced from provider)
   emailFolders: defineTable({
@@ -2503,6 +2511,14 @@ export default defineSchema({
     // Security - encrypted content for sensitive emails
     isEncrypted: v.optional(v.boolean()),
 
+    // Snooze support
+    snoozedUntil: v.optional(v.number()), // When to resurface
+    isSnoozed: v.optional(v.boolean()),
+
+    // Thread metadata
+    threadPosition: v.optional(v.number()), // Position in thread (1, 2, 3...)
+    threadCount: v.optional(v.number()), // Total emails in thread
+
     // Internal linking
     linkedConversationId: v.optional(v.id("conversations")), // If converted to internal message
     linkedPersonnelId: v.optional(v.id("personnel")), // If linked to personnel
@@ -2517,7 +2533,8 @@ export default defineSchema({
     .index("by_date", ["accountId", "date"])
     .index("by_thread", ["accountId", "threadId"])
     .index("by_message_id", ["accountId", "messageId"])
-    .index("by_received", ["accountId", "receivedAt"]),
+    .index("by_received", ["accountId", "receivedAt"])
+    .index("by_snoozed", ["accountId", "isSnoozed", "snoozedUntil"]),
 
   // Email attachments (metadata + storage reference)
   emailAttachments: defineTable({
@@ -2618,11 +2635,20 @@ export default defineSchema({
     // Schedule (for scheduled send)
     scheduledFor: v.optional(v.number()),
 
+    // Read receipt tracking
+    trackingEnabled: v.optional(v.boolean()),
+    trackingId: v.optional(v.string()),
+
+    // Retry support
+    maxRetries: v.optional(v.number()),
+    nextRetryAt: v.optional(v.number()),
+
     createdAt: v.number(),
   })
     .index("by_user", ["userId"])
     .index("by_status", ["status"])
-    .index("by_scheduled", ["scheduledFor"]),
+    .index("by_scheduled", ["scheduledFor"])
+    .index("by_retry", ["status", "nextRetryAt"]),
 
   // Email sync log (for debugging/auditing)
   emailSyncLogs: defineTable({
@@ -2638,4 +2664,245 @@ export default defineSchema({
   })
     .index("by_account", ["accountId"])
     .index("by_created", ["createdAt"]),
+
+  // ============ EMAIL ENHANCED FEATURES ============
+
+  // Custom labels/tags for emails
+  emailLabels: defineTable({
+    userId: v.id("users"),
+    name: v.string(),
+    color: v.string(), // Hex color code
+    description: v.optional(v.string()),
+    sortOrder: v.optional(v.number()),
+    isSystem: v.boolean(), // System labels can't be deleted
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_name", ["userId", "name"]),
+
+  // Email to label mapping (many-to-many)
+  emailLabelAssignments: defineTable({
+    emailId: v.id("emails"),
+    labelId: v.id("emailLabels"),
+    assignedBy: v.id("users"),
+    assignedAt: v.number(),
+  })
+    .index("by_email", ["emailId"])
+    .index("by_label", ["labelId"]),
+
+  // Snoozed emails
+  emailSnooze: defineTable({
+    emailId: v.id("emails"),
+    userId: v.id("users"),
+    snoozedUntil: v.number(), // When to resurface
+    originalFolderId: v.id("emailFolders"), // Where to move back
+    isActive: v.boolean(), // False when unsnoozed
+
+    createdAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_email", ["emailId"])
+    .index("by_snooze_time", ["isActive", "snoozedUntil"]),
+
+  // Email templates
+  emailTemplates: defineTable({
+    userId: v.id("users"),
+    name: v.string(),
+    description: v.optional(v.string()),
+    subject: v.string(),
+    bodyHtml: v.string(),
+    bodyText: v.optional(v.string()),
+    category: v.optional(v.string()), // For organization
+    isShared: v.boolean(), // If true, visible to all users
+    usageCount: v.number(),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_shared", ["isShared"])
+    .index("by_category", ["userId", "category"]),
+
+  // Read receipts / email tracking
+  emailReadReceipts: defineTable({
+    emailId: v.id("emails"), // The sent email being tracked
+    sendQueueId: v.optional(v.id("emailSendQueue")),
+    recipientEmail: v.string(),
+    trackingId: v.string(), // Unique tracking pixel ID
+
+    // Tracking data
+    openedAt: v.optional(v.number()),
+    openCount: v.number(),
+    lastOpenedAt: v.optional(v.number()),
+    userAgent: v.optional(v.string()),
+    ipAddress: v.optional(v.string()),
+
+    // Link tracking
+    linksClicked: v.optional(v.array(v.object({
+      url: v.string(),
+      clickedAt: v.number(),
+    }))),
+
+    createdAt: v.number(),
+  })
+    .index("by_email", ["emailId"])
+    .index("by_tracking_id", ["trackingId"])
+    .index("by_recipient", ["recipientEmail"]),
+
+  // Shared mailboxes
+  sharedMailboxes: defineTable({
+    accountId: v.id("emailAccounts"),
+    name: v.string(),
+    description: v.optional(v.string()),
+
+    // Access control
+    ownerUserId: v.id("users"),
+    memberUserIds: v.array(v.id("users")),
+    permissions: v.object({
+      canRead: v.boolean(),
+      canSend: v.boolean(),
+      canDelete: v.boolean(),
+      canManageMembers: v.boolean(),
+    }),
+
+    isActive: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_owner", ["ownerUserId"])
+    .index("by_member", ["memberUserIds"]),
+
+  // Contact cache for autocomplete
+  emailContacts: defineTable({
+    userId: v.id("users"),
+    email: v.string(),
+    name: v.optional(v.string()),
+
+    // Frequency tracking for smart suggestions
+    sendCount: v.number(),
+    receiveCount: v.number(),
+    lastContactedAt: v.number(),
+
+    // Linked to internal personnel if applicable
+    personnelId: v.optional(v.id("personnel")),
+
+    // User can mark as favorite or blocked
+    isFavorite: v.boolean(),
+    isBlocked: v.boolean(),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_email", ["userId", "email"])
+    .index("by_user_favorite", ["userId", "isFavorite"])
+    .index("by_frequency", ["userId", "sendCount"]),
+
+  // Email analytics (aggregated stats)
+  emailAnalytics: defineTable({
+    accountId: v.id("emailAccounts"),
+    userId: v.id("users"),
+    period: v.string(), // "daily" | "weekly" | "monthly"
+    periodStart: v.number(), // Start of period timestamp
+
+    // Volume metrics
+    emailsSent: v.number(),
+    emailsReceived: v.number(),
+    emailsRead: v.number(),
+    emailsReplied: v.number(),
+
+    // Time metrics
+    avgResponseTimeMs: v.optional(v.number()),
+    fastestResponseMs: v.optional(v.number()),
+    slowestResponseMs: v.optional(v.number()),
+
+    // Hour distribution (0-23 -> count)
+    hourlyDistribution: v.optional(v.array(v.number())),
+
+    // Top contacts
+    topSenders: v.optional(v.array(v.object({
+      email: v.string(),
+      count: v.number(),
+    }))),
+    topRecipients: v.optional(v.array(v.object({
+      email: v.string(),
+      count: v.number(),
+    }))),
+
+    createdAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_user", ["userId"])
+    .index("by_period", ["accountId", "period", "periodStart"]),
+
+  // Email audit log (detailed action tracking)
+  emailAuditLog: defineTable({
+    userId: v.id("users"),
+    accountId: v.optional(v.id("emailAccounts")),
+    emailId: v.optional(v.id("emails")),
+
+    action: v.string(), // "view" | "send" | "delete" | "move" | "label" | "star" | "archive" | "export" | "forward"
+    details: v.optional(v.string()), // JSON with additional context
+
+    // Context
+    ipAddress: v.optional(v.string()),
+    userAgent: v.optional(v.string()),
+
+    createdAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_email", ["emailId"])
+    .index("by_account", ["accountId"])
+    .index("by_action", ["action", "createdAt"])
+    .index("by_created", ["createdAt"]),
+
+  // Email retry queue (for failed sends)
+  emailRetryQueue: defineTable({
+    sendQueueId: v.id("emailSendQueue"),
+    userId: v.id("users"),
+    accountId: v.id("emailAccounts"),
+
+    // Retry state
+    retryCount: v.number(),
+    maxRetries: v.number(),
+    nextRetryAt: v.number(),
+    lastError: v.string(),
+
+    // Notification
+    userNotified: v.boolean(),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_next_retry", ["nextRetryAt"])
+    .index("by_send_queue", ["sendQueueId"]),
+
+  // Email search index (for full-text search caching)
+  emailSearchIndex: defineTable({
+    emailId: v.id("emails"),
+    accountId: v.id("emailAccounts"),
+    userId: v.id("users"),
+
+    // Searchable text (normalized, lowercase)
+    searchText: v.string(), // Combined subject + body + sender + recipients
+
+    // For filtering
+    fromAddress: v.string(),
+    toAddresses: v.array(v.string()),
+    hasAttachment: v.boolean(),
+    date: v.number(),
+
+    createdAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_user", ["userId"])
+    .index("by_email", ["emailId"])
+    .searchIndex("search_emails", {
+      searchField: "searchText",
+      filterFields: ["accountId", "userId", "fromAddress", "hasAttachment"],
+    }),
 });

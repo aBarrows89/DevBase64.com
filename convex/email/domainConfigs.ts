@@ -7,7 +7,7 @@
  */
 
 import { v } from "convex/values";
-import { query, mutation } from "../_generated/server";
+import { query, mutation, internalMutation } from "../_generated/server";
 
 // ============ QUERIES ============
 
@@ -248,5 +248,126 @@ export const toggleActive = mutation({
       isActive: !config.isActive,
       updatedAt: Date.now(),
     });
+  },
+});
+
+/**
+ * Seed default domain configurations.
+ * This is a public mutation that can be called to restore defaults.
+ */
+export const seedDefaults = mutation({
+  args: {
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    // Verify user is super admin
+    const user = await ctx.db.get(args.userId);
+    if (!user || user.role !== "super_admin") {
+      throw new Error("Only super admins can seed domain configurations");
+    }
+
+    const now = Date.now();
+    const defaults = [
+      {
+        domain: "ietires.com",
+        name: "IE Tires",
+        description: "IE Tires company email",
+        imapHost: "svm.ietires.com",
+        imapPort: 993,
+        imapTls: true,
+        smtpHost: "svm.ietires.com",
+        smtpPort: 465,
+        smtpTls: true,
+        useEmailAsUsername: true,
+        sortOrder: 1,
+      },
+    ];
+
+    let added = 0;
+    let skipped = 0;
+
+    for (const config of defaults) {
+      // Check if domain already exists
+      const existing = await ctx.db
+        .query("emailDomainConfigs")
+        .withIndex("by_domain", (q) => q.eq("domain", config.domain))
+        .first();
+
+      if (existing) {
+        skipped++;
+        continue;
+      }
+
+      await ctx.db.insert("emailDomainConfigs", {
+        ...config,
+        isActive: true,
+        createdBy: args.userId,
+        createdAt: now,
+        updatedAt: now,
+      });
+      added++;
+    }
+
+    return { added, skipped };
+  },
+});
+
+/**
+ * Internal mutation to seed defaults (can be called from dashboard).
+ * Run this from the Convex dashboard: Functions > email/domainConfigs > initDefaults
+ */
+export const initDefaults = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+
+    // Try to get first super admin for createdBy field (optional)
+    const superAdmin = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("role"), "super_admin"))
+      .first();
+
+    const defaults = [
+      {
+        domain: "ietires.com",
+        name: "IE Tires",
+        description: "IE Tires company email - svm.ietires.com",
+        imapHost: "svm.ietires.com",
+        imapPort: 993,
+        imapTls: true,
+        smtpHost: "svm.ietires.com",
+        smtpPort: 465,
+        smtpTls: true,
+        useEmailAsUsername: true,
+        sortOrder: 1,
+      },
+    ];
+
+    let added = 0;
+    let skipped = 0;
+
+    for (const config of defaults) {
+      // Check if domain already exists
+      const existing = await ctx.db
+        .query("emailDomainConfigs")
+        .withIndex("by_domain", (q) => q.eq("domain", config.domain))
+        .first();
+
+      if (existing) {
+        skipped++;
+        continue;
+      }
+
+      await ctx.db.insert("emailDomainConfigs", {
+        ...config,
+        isActive: true,
+        createdBy: superAdmin?._id,
+        createdAt: now,
+        updatedAt: now,
+      });
+      added++;
+    }
+
+    return { added, skipped };
   },
 });

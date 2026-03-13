@@ -48,4 +48,57 @@ crons.daily(
   internal.email.emails.cleanupOldEmails
 );
 
+// Process scheduled emails every minute
+crons.interval(
+  "email-process-scheduled-sends",
+  { minutes: 1 },
+  internal.email.send.processScheduledSends
+);
+
+// Retry failed emails every 5 minutes
+crons.interval(
+  "email-retry-failed-sends",
+  { minutes: 5 },
+  internal.email.send.retryFailedSends
+);
+
+// Process snoozed emails every minute
+crons.interval(
+  "email-process-snoozed",
+  { minutes: 1 },
+  internal.email.snooze.processDueSnoozes
+);
+
+// Clean up old send queue entries daily at 5 AM UTC
+crons.daily(
+  "email-cleanup-send-queue",
+  { hourUTC: 5, minuteUTC: 0 },
+  internal.email.sendMutations.cleanupOldQueueEntries,
+  {}
+);
+
+// Clean up old audit logs (keep 1 year) - runs weekly on Sunday at 3 AM UTC
+crons.weekly(
+  "email-cleanup-audit-logs",
+  { dayOfWeek: "sunday", hourUTC: 3, minuteUTC: 0 },
+  internal.email.audit.cleanup,
+  {}
+);
+
+// Clean up old analytics (keep 1 year) - runs monthly on the 1st at 4 AM UTC
+crons.monthly(
+  "email-cleanup-analytics",
+  { day: 1, hourUTC: 4, minuteUTC: 0 },
+  internal.email.analytics.cleanup,
+  {}
+);
+
+// Clean up old read receipts (keep 90 days) - runs daily at 5 AM UTC
+crons.daily(
+  "email-cleanup-read-receipts",
+  { hourUTC: 5, minuteUTC: 30 },
+  internal.email.readReceipts.cleanup,
+  {}
+);
+
 export default crons;

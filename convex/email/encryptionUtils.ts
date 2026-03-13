@@ -49,27 +49,60 @@ export function encrypt(plaintext: string): string {
 }
 
 /**
+ * Check if a string is encrypted (has the expected format).
+ */
+export function isEncrypted(value: string): boolean {
+  if (!value) return false;
+  const parts = value.split(":");
+  if (parts.length !== 3) return false;
+  const [iv, authTag, encrypted] = parts;
+  return (
+    iv.length === IV_LENGTH * 2 &&
+    authTag.length === AUTH_TAG_LENGTH * 2 &&
+    encrypted.length > 0 &&
+    /^[a-f0-9]+$/i.test(iv) &&
+    /^[a-f0-9]+$/i.test(authTag) &&
+    /^[a-f0-9]+$/i.test(encrypted)
+  );
+}
+
+/**
  * Decrypt an encrypted string using AES-256-GCM.
+ * Returns the original string if not encrypted (backwards compatibility).
  */
 export function decrypt(ciphertext: string): string {
   if (!ciphertext) return "";
 
-  const parts = ciphertext.split(":");
-  if (parts.length !== 3) {
-    throw new Error("Invalid ciphertext format. Expected iv:authTag:encrypted");
+  // If not encrypted, return as-is (backwards compatibility)
+  if (!isEncrypted(ciphertext)) {
+    return ciphertext;
   }
 
-  const [ivHex, authTagHex, encrypted] = parts;
+  // Check if encryption key is set
+  const keyHex = process.env.EMAIL_ENCRYPTION_KEY;
+  if (!keyHex || keyHex.length !== 64) {
+    console.warn("EMAIL_ENCRYPTION_KEY not set or invalid, returning password as-is");
+    return ciphertext;
+  }
 
-  const key = getEncryptionKey();
-  const iv = Buffer.from(ivHex, "hex");
-  const authTag = Buffer.from(authTagHex, "hex");
+  try {
+    const parts = ciphertext.split(":");
+    const [ivHex, authTagHex, encrypted] = parts;
 
-  const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
-  decipher.setAuthTag(authTag);
+    const key = getEncryptionKey();
+    const iv = Buffer.from(ivHex, "hex");
+    const authTag = Buffer.from(authTagHex, "hex");
 
-  let decrypted = decipher.update(encrypted, "hex", "utf8");
-  decrypted += decipher.final("utf8");
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+    decipher.setAuthTag(authTag);
 
-  return decrypted;
+    let decrypted = decipher.update(encrypted, "hex", "utf8");
+    decrypted += decipher.final("utf8");
+
+    return decrypted;
+  } catch (error) {
+    console.error("Decryption failed:", error);
+    // Return original value if decryption fails
+    return ciphertext;
+  }
 }

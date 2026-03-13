@@ -12,6 +12,7 @@ import { v } from "convex/values";
 import { Id } from "../_generated/dataModel";
 import nodemailer from "nodemailer";
 import type { Transporter } from "nodemailer";
+import { decrypt } from "./encryptionUtils";
 
 // ============ TYPES ============
 
@@ -64,17 +65,19 @@ function getSmtpCredentials(account: {
       host: config.host,
       port: config.port,
       user: account.emailAddress,
-      pass: account.accessToken, // OAuth access token
+      pass: decrypt(account.accessToken), // Decrypt OAuth access token
       secure: config.port === 465,
     };
   }
 
-  // For generic SMTP
+  // For generic SMTP - decrypt the password
+  const decryptedPassword = account.smtpPassword ? decrypt(account.smtpPassword) : "";
+
   return {
     host: account.smtpHost || "smtp.gmail.com",
     port: account.smtpPort || 587,
     user: account.smtpUsername || account.emailAddress,
-    pass: account.smtpPassword || "",
+    pass: decryptedPassword,
     secure: account.smtpTls !== false && (account.smtpPort === 465),
   };
 }
@@ -329,4 +332,176 @@ export const queueEmail = action({
     return { queueId };
   },
 });
+
+/**
+ * Process scheduled emails that are due (called by cron).
+ */
+export const processScheduledSends = internalAction({
+  args: {},
+  handler: async (ctx): Promise<{ processed: number; failed: number }> => {
+    // Get due scheduled emails
+    const dueEmails = await ctx.runMutation(
+      internal.email.sendMutations.getDueScheduledEmails,
+      {}
+    );
+
+    let processed = 0;
+    let failed = 0;
+
+    for (const queueEntry of dueEmails) {
+      // Mark as sending
+      await ctx.runMutation(internal.email.sendMutations.updateQueueStatus, {
+        queueId: queueEntry._id,
+        status: "sending",
+      });
+
+      try {
+        // Send the email
+        const result = await sendQueuedEmail(ctx, queueEntry);
+
+        if (result.success) {
+          await ctx.runMutation(internal.email.sendMutations.updateQueueStatus, {
+            queueId: queueEntry._id,
+            status: "sent",
+            messageId: result.messageId,
+          });
+          processed++;
+        } else {
+          await ctx.runMutation(internal.email.sendMutations.moveToRetryQueue, {
+            queueId: queueEntry._id,
+            error: result.error || "Unknown error",
+          });
+          failed++;
+        }
+      } catch (error) {
+        await ctx.runMutation(internal.email.sendMutations.moveToRetryQueue, {
+          queueId: queueEntry._id,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+        failed++;
+      }
+    }
+
+    return { processed, failed };
+  },
+});
+
+/**
+ * Retry failed emails (called by cron).
+ */
+export const retryFailedSends = internalAction({
+  args: {},
+  handler: async (ctx): Promise<{ retried: number; failed: number }> => {
+    // Get failed emails eligible for retry
+    const failedEmails = await ctx.runMutation(
+      internal.email.sendMutations.getFailedEmailsForRetry,
+      { maxAttempts: 3 }
+    );
+
+    let retried = 0;
+    let failed = 0;
+
+    for (const queueEntry of failedEmails) {
+      // Mark as sending
+      await ctx.runMutation(internal.email.sendMutations.updateQueueStatus, {
+        queueId: queueEntry._id,
+        status: "sending",
+      });
+
+      try {
+        // Retry sending the email
+        const result = await sendQueuedEmail(ctx, queueEntry);
+
+        if (result.success) {
+          await ctx.runMutation(internal.email.sendMutations.updateQueueStatus, {
+            queueId: queueEntry._id,
+            status: "sent",
+            messageId: result.messageId,
+          });
+          retried++;
+        } else {
+          await ctx.runMutation(internal.email.sendMutations.moveToRetryQueue, {
+            queueId: queueEntry._id,
+            error: result.error || "Unknown error",
+          });
+          failed++;
+        }
+      } catch (error) {
+        await ctx.runMutation(internal.email.sendMutations.moveToRetryQueue, {
+          queueId: queueEntry._id,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+        failed++;
+      }
+    }
+
+    return { retried, failed };
+  },
+});
+
+/**
+ * Helper to send a queued email.
+ */
+async function sendQueuedEmail(
+  ctx: { runQuery: Function; storage: { getUrl: Function }; runMutation: Function },
+  queueEntry: {
+    accountId: Id<"emailAccounts">;
+    to: EmailAddress[];
+    cc?: EmailAddress[];
+    bcc?: EmailAddress[];
+    subject: string;
+    bodyHtml: string;
+    bodyText?: string;
+  }
+): Promise<SendResult> {
+  // Get account with credentials
+  const account = await ctx.runQuery(
+    api.email.accounts.getWithCredentials,
+    { accountId: queueEntry.accountId }
+  );
+
+  if (!account || !account.isActive) {
+    return { success: false, error: "Account not found or inactive" };
+  }
+
+  try {
+    const credentials = getSmtpCredentials(account);
+    const transporter = createTransporter(credentials, account.oauthProvider);
+
+    // Build email options
+    const mailOptions: nodemailer.SendMailOptions = {
+      from: account.name
+        ? `"${account.name}" <${account.emailAddress}>`
+        : account.emailAddress,
+      to: formatAddresses(queueEntry.to),
+      subject: queueEntry.subject,
+      html: account.signature
+        ? `${queueEntry.bodyHtml}<br><br>${account.signature}`
+        : queueEntry.bodyHtml,
+      text: queueEntry.bodyText || queueEntry.bodyHtml.replace(/<[^>]+>/g, ""),
+    };
+
+    if (queueEntry.cc && queueEntry.cc.length > 0) {
+      mailOptions.cc = formatAddresses(queueEntry.cc);
+    }
+
+    if (queueEntry.bcc && queueEntry.bcc.length > 0) {
+      mailOptions.bcc = formatAddresses(queueEntry.bcc);
+    }
+
+    // Send the email
+    const info = await transporter.sendMail(mailOptions);
+
+    return {
+      success: true,
+      messageId: info.messageId,
+    };
+  } catch (error) {
+    console.error("Send queued email error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
 

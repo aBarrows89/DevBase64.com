@@ -62,6 +62,7 @@ function EmailDomainSettingsContent() {
   const [form, setForm] = useState(DEFAULT_FORM);
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
 
   const openCreate = () => {
     setEditingId(null);
@@ -138,6 +139,87 @@ function EmailDomainSettingsContent() {
     }
   };
 
+  // Export configurations as JSON
+  const handleExport = () => {
+    if (!configs || configs.length === 0) {
+      alert("No configurations to export");
+      return;
+    }
+
+    // Strip internal fields for export
+    const exportData = configs.map(({ _id, createdAt, updatedAt, ...rest }) => rest);
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `email-domain-configs-${new Date().toISOString().split("T")[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // Import configurations from JSON file
+  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !user?._id) return;
+
+    setIsImporting(true);
+    try {
+      const text = await file.text();
+      const importedConfigs = JSON.parse(text);
+
+      if (!Array.isArray(importedConfigs)) {
+        throw new Error("Invalid format: expected an array of configurations");
+      }
+
+      let imported = 0;
+      let skipped = 0;
+
+      for (const config of importedConfigs) {
+        // Validate required fields
+        if (!config.domain || !config.name || !config.imapHost || !config.smtpHost) {
+          skipped++;
+          continue;
+        }
+
+        // Check if domain already exists
+        const existingDomain = configs?.find((c) => c.domain === config.domain);
+        if (existingDomain) {
+          skipped++;
+          continue;
+        }
+
+        await createConfig({
+          userId: user._id,
+          domain: config.domain,
+          name: config.name,
+          description: config.description || "",
+          imapHost: config.imapHost,
+          imapPort: config.imapPort || 993,
+          imapTls: config.imapTls !== false,
+          smtpHost: config.smtpHost,
+          smtpPort: config.smtpPort || 587,
+          smtpTls: config.smtpTls !== false,
+          useEmailAsUsername: config.useEmailAsUsername !== false,
+          sortOrder: config.sortOrder || 0,
+        });
+        imported++;
+      }
+
+      alert(`Import complete: ${imported} imported, ${skipped} skipped (duplicates or invalid)`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to import configurations");
+    } finally {
+      setIsImporting(false);
+      // Reset the file input
+      event.target.value = "";
+    }
+  };
+
   return (
     <div className="h-screen theme-bg-primary flex overflow-hidden">
       <Sidebar />
@@ -161,15 +243,68 @@ function EmailDomainSettingsContent() {
                 Configure default IMAP/SMTP settings for email domains. Users with matching email domains will have these settings auto-filled.
               </p>
             </div>
-            <button
-              onClick={openCreate}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Add Domain
-            </button>
+            <div className="flex items-center gap-2">
+              {/* Export Button */}
+              <button
+                onClick={handleExport}
+                disabled={!configs || configs.length === 0}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg font-medium transition-colors ${
+                  isDark
+                    ? "bg-slate-700 hover:bg-slate-600 text-white disabled:bg-slate-800 disabled:text-slate-500"
+                    : "bg-gray-100 hover:bg-gray-200 text-gray-700 disabled:bg-gray-50 disabled:text-gray-400"
+                }`}
+                title="Export configurations as JSON"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+                Export
+              </button>
+
+              {/* Import Button */}
+              <label
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg font-medium transition-colors cursor-pointer ${
+                  isImporting
+                    ? isDark
+                      ? "bg-slate-800 text-slate-500"
+                      : "bg-gray-50 text-gray-400"
+                    : isDark
+                    ? "bg-slate-700 hover:bg-slate-600 text-white"
+                    : "bg-gray-100 hover:bg-gray-200 text-gray-700"
+                }`}
+                title="Import configurations from JSON"
+              >
+                {isImporting ? (
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                )}
+                {isImporting ? "Importing..." : "Import"}
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={handleImport}
+                  disabled={isImporting}
+                  className="hidden"
+                />
+              </label>
+
+              {/* Add Domain Button */}
+              <button
+                onClick={openCreate}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Add Domain
+              </button>
+            </div>
           </div>
 
           {/* Configs List */}

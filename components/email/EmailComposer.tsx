@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Id, Doc } from "@/convex/_generated/dataModel";
 import { useTheme } from "@/app/theme-context";
 import { useMutation, useAction, useQuery } from "convex/react";
@@ -10,6 +10,16 @@ import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
 import Underline from "@tiptap/extension-underline";
+
+// Debounce hook for autocomplete search
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debouncedValue;
+}
 
 interface EmailAddress {
   name?: string;
@@ -63,6 +73,63 @@ export default function EmailComposer({
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draftId, setDraftId] = useState<Id<"emailDrafts"> | null>(null);
+
+  // Autocomplete state
+  const [activeAutocomplete, setActiveAutocomplete] = useState<"to" | "cc" | "bcc" | null>(null);
+  const [autocompleteIndex, setAutocompleteIndex] = useState(0);
+  const toInputRef = useRef<HTMLInputElement>(null);
+  const ccInputRef = useRef<HTMLInputElement>(null);
+  const bccInputRef = useRef<HTMLInputElement>(null);
+  const autocompleteRef = useRef<HTMLDivElement>(null);
+
+  // Debounce search queries
+  const debouncedToInput = useDebounce(toInput, 200);
+  const debouncedCcInput = useDebounce(ccInput, 200);
+  const debouncedBccInput = useDebounce(bccInput, 200);
+
+  // Determine which search query to use
+  const currentSearchQuery = activeAutocomplete === "to"
+    ? debouncedToInput
+    : activeAutocomplete === "cc"
+    ? debouncedCcInput
+    : activeAutocomplete === "bcc"
+    ? debouncedBccInput
+    : "";
+
+  // Contact search for autocomplete
+  const contactResults = useQuery(
+    api.email.contacts.search,
+    currentSearchQuery.length >= 1 && activeAutocomplete
+      ? { userId, query: currentSearchQuery, limit: 8 }
+      : "skip"
+  );
+
+  // Filter out already selected recipients
+  const filteredContacts = useMemo(() => {
+    if (!contactResults) return [];
+    const selectedAddresses = new Set([
+      ...to.map(r => r.address.toLowerCase()),
+      ...cc.map(r => r.address.toLowerCase()),
+      ...bcc.map(r => r.address.toLowerCase()),
+    ]);
+    return contactResults.filter(c => !selectedAddresses.has(c.email.toLowerCase()));
+  }, [contactResults, to, cc, bcc]);
+
+  // Reset autocomplete index when results change
+  useEffect(() => {
+    setAutocompleteIndex(0);
+  }, [filteredContacts.length]);
+
+  // Close autocomplete when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (autocompleteRef.current && !autocompleteRef.current.contains(e.target as Node)) {
+        setActiveAutocomplete(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const autosaveTimeout = useRef<NodeJS.Timeout | null>(null);
@@ -255,20 +322,80 @@ export default function EmailComposer({
     return null;
   };
 
+  // Select a contact from autocomplete
+  const selectAutocompleteContact = (
+    contact: { email: string; name?: string },
+    field: "to" | "cc" | "bcc"
+  ) => {
+    const newRecipient: EmailAddress = {
+      address: contact.email,
+      name: contact.name,
+    };
+
+    if (field === "to") {
+      if (!to.some(r => r.address.toLowerCase() === contact.email.toLowerCase())) {
+        setTo([...to, newRecipient]);
+      }
+      setToInput("");
+    } else if (field === "cc") {
+      if (!cc.some(r => r.address.toLowerCase() === contact.email.toLowerCase())) {
+        setCc([...cc, newRecipient]);
+      }
+      setCcInput("");
+    } else if (field === "bcc") {
+      if (!bcc.some(r => r.address.toLowerCase() === contact.email.toLowerCase())) {
+        setBcc([...bcc, newRecipient]);
+      }
+      setBccInput("");
+    }
+
+    setActiveAutocomplete(null);
+    setAutocompleteIndex(0);
+  };
+
   // Handle recipient input
   const handleRecipientKeyDown = (
     e: React.KeyboardEvent<HTMLInputElement>,
     input: string,
     setInput: (s: string) => void,
     recipients: EmailAddress[],
-    setRecipients: (r: EmailAddress[]) => void
+    setRecipients: (r: EmailAddress[]) => void,
+    field: "to" | "cc" | "bcc"
   ) => {
+    // Navigate autocomplete with arrow keys
+    if (filteredContacts.length > 0 && activeAutocomplete === field) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setAutocompleteIndex((prev) => Math.min(prev + 1, filteredContacts.length - 1));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setAutocompleteIndex((prev) => Math.max(prev - 1, 0));
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        const selectedContact = filteredContacts[autocompleteIndex];
+        if (selectedContact) {
+          selectAutocompleteContact(selectedContact, field);
+        }
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setActiveAutocomplete(null);
+        return;
+      }
+    }
+
     if (e.key === "Enter" || e.key === "Tab" || e.key === ",") {
       e.preventDefault();
       const parsed = parseEmailInput(input);
       if (parsed && !recipients.some(r => r.address === parsed.address)) {
         setRecipients([...recipients, parsed]);
         setInput("");
+        setActiveAutocomplete(null);
       }
     } else if (e.key === "Backspace" && !input && recipients.length > 0) {
       setRecipients(recipients.slice(0, -1));
@@ -435,9 +562,9 @@ export default function EmailComposer({
         {/* Recipients */}
         <div className={`px-4 py-2 border-b ${isDark ? "border-slate-700" : "border-gray-200"}`}>
           {/* To */}
-          <div className="flex items-center gap-2 py-1">
+          <div className="flex items-center gap-2 py-1 relative">
             <span className="text-sm theme-text-tertiary w-12">To:</span>
-            <div className="flex-1 flex flex-wrap items-center gap-1">
+            <div className="flex-1 flex flex-wrap items-center gap-1 relative" ref={activeAutocomplete === "to" ? autocompleteRef : undefined}>
               {to.map((recipient) => (
                 <span
                   key={recipient.address}
@@ -455,20 +582,59 @@ export default function EmailComposer({
                 </span>
               ))}
               <input
+                ref={toInputRef}
                 type="text"
                 value={toInput}
-                onChange={(e) => setToInput(e.target.value)}
-                onKeyDown={(e) => handleRecipientKeyDown(e, toInput, setToInput, to, setTo)}
-                onBlur={() => {
-                  const parsed = parseEmailInput(toInput);
-                  if (parsed && !to.some(r => r.address === parsed.address)) {
-                    setTo([...to, parsed]);
-                    setToInput("");
-                  }
+                onChange={(e) => {
+                  setToInput(e.target.value);
+                  setActiveAutocomplete("to");
                 }}
-                placeholder={to.length === 0 ? "recipient@email.com" : ""}
+                onFocus={() => setActiveAutocomplete("to")}
+                onKeyDown={(e) => handleRecipientKeyDown(e, toInput, setToInput, to, setTo, "to")}
+                onBlur={() => {
+                  // Delay to allow click on autocomplete
+                  setTimeout(() => {
+                    if (activeAutocomplete !== "to") {
+                      const parsed = parseEmailInput(toInput);
+                      if (parsed && !to.some(r => r.address === parsed.address)) {
+                        setTo([...to, parsed]);
+                        setToInput("");
+                      }
+                    }
+                  }, 150);
+                }}
+                placeholder={to.length === 0 ? "Start typing to search contacts..." : ""}
                 className={`flex-1 min-w-[150px] bg-transparent focus:outline-none text-sm theme-text-primary`}
               />
+              {/* Autocomplete dropdown for To */}
+              {activeAutocomplete === "to" && filteredContacts.length > 0 && (
+                <div className={`absolute left-0 top-full mt-1 w-full max-h-60 overflow-y-auto rounded-lg shadow-lg z-50 ${isDark ? "bg-slate-700 border border-slate-600" : "bg-white border border-gray-200"}`}>
+                  {filteredContacts.map((contact, index) => (
+                    <button
+                      key={contact._id}
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        selectAutocompleteContact(contact, "to");
+                      }}
+                      className={`w-full px-3 py-2 text-left text-sm flex items-center gap-3 ${
+                        index === autocompleteIndex
+                          ? isDark ? "bg-slate-600" : "bg-blue-50"
+                          : isDark ? "hover:bg-slate-600" : "hover:bg-gray-50"
+                      }`}
+                    >
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium ${isDark ? "bg-blue-600" : "bg-blue-500"}`}>
+                        {(contact.name?.[0] || contact.email[0]).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        {contact.name && <p className="font-medium theme-text-primary truncate">{contact.name}</p>}
+                        <p className={`truncate ${contact.name ? "text-xs theme-text-secondary" : "theme-text-primary"}`}>{contact.email}</p>
+                      </div>
+                      <span className="text-xs theme-text-tertiary">{contact.sendCount + contact.receiveCount} emails</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-1 text-sm theme-text-tertiary">
               {!showCc && (
@@ -482,9 +648,9 @@ export default function EmailComposer({
 
           {/* Cc */}
           {showCc && (
-            <div className="flex items-center gap-2 py-1">
+            <div className="flex items-center gap-2 py-1 relative">
               <span className="text-sm theme-text-tertiary w-12">Cc:</span>
-              <div className="flex-1 flex flex-wrap items-center gap-1">
+              <div className="flex-1 flex flex-wrap items-center gap-1 relative" ref={activeAutocomplete === "cc" ? autocompleteRef : undefined}>
                 {cc.map((recipient) => (
                   <span
                     key={recipient.address}
@@ -502,21 +668,56 @@ export default function EmailComposer({
                   </span>
                 ))}
                 <input
+                  ref={ccInputRef}
                   type="text"
                   value={ccInput}
-                  onChange={(e) => setCcInput(e.target.value)}
-                  onKeyDown={(e) => handleRecipientKeyDown(e, ccInput, setCcInput, cc, setCc)}
+                  onChange={(e) => {
+                    setCcInput(e.target.value);
+                    setActiveAutocomplete("cc");
+                  }}
+                  onFocus={() => setActiveAutocomplete("cc")}
+                  onKeyDown={(e) => handleRecipientKeyDown(e, ccInput, setCcInput, cc, setCc, "cc")}
+                  placeholder="Start typing to search..."
                   className={`flex-1 min-w-[150px] bg-transparent focus:outline-none text-sm theme-text-primary`}
                 />
+                {/* Autocomplete dropdown for Cc */}
+                {activeAutocomplete === "cc" && filteredContacts.length > 0 && (
+                  <div className={`absolute left-0 top-full mt-1 w-full max-h-60 overflow-y-auto rounded-lg shadow-lg z-50 ${isDark ? "bg-slate-700 border border-slate-600" : "bg-white border border-gray-200"}`}>
+                    {filteredContacts.map((contact, index) => (
+                      <button
+                        key={contact._id}
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          selectAutocompleteContact(contact, "cc");
+                        }}
+                        className={`w-full px-3 py-2 text-left text-sm flex items-center gap-3 ${
+                          index === autocompleteIndex
+                            ? isDark ? "bg-slate-600" : "bg-blue-50"
+                            : isDark ? "hover:bg-slate-600" : "hover:bg-gray-50"
+                        }`}
+                      >
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium ${isDark ? "bg-blue-600" : "bg-blue-500"}`}>
+                          {(contact.name?.[0] || contact.email[0]).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          {contact.name && <p className="font-medium theme-text-primary truncate">{contact.name}</p>}
+                          <p className={`truncate ${contact.name ? "text-xs theme-text-secondary" : "theme-text-primary"}`}>{contact.email}</p>
+                        </div>
+                        <span className="text-xs theme-text-tertiary">{contact.sendCount + contact.receiveCount} emails</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
 
           {/* Bcc */}
           {showBcc && (
-            <div className="flex items-center gap-2 py-1">
+            <div className="flex items-center gap-2 py-1 relative">
               <span className="text-sm theme-text-tertiary w-12">Bcc:</span>
-              <div className="flex-1 flex flex-wrap items-center gap-1">
+              <div className="flex-1 flex flex-wrap items-center gap-1 relative" ref={activeAutocomplete === "bcc" ? autocompleteRef : undefined}>
                 {bcc.map((recipient) => (
                   <span
                     key={recipient.address}
@@ -534,12 +735,47 @@ export default function EmailComposer({
                   </span>
                 ))}
                 <input
+                  ref={bccInputRef}
                   type="text"
                   value={bccInput}
-                  onChange={(e) => setBccInput(e.target.value)}
-                  onKeyDown={(e) => handleRecipientKeyDown(e, bccInput, setBccInput, bcc, setBcc)}
+                  onChange={(e) => {
+                    setBccInput(e.target.value);
+                    setActiveAutocomplete("bcc");
+                  }}
+                  onFocus={() => setActiveAutocomplete("bcc")}
+                  onKeyDown={(e) => handleRecipientKeyDown(e, bccInput, setBccInput, bcc, setBcc, "bcc")}
+                  placeholder="Start typing to search..."
                   className={`flex-1 min-w-[150px] bg-transparent focus:outline-none text-sm theme-text-primary`}
                 />
+                {/* Autocomplete dropdown for Bcc */}
+                {activeAutocomplete === "bcc" && filteredContacts.length > 0 && (
+                  <div className={`absolute left-0 top-full mt-1 w-full max-h-60 overflow-y-auto rounded-lg shadow-lg z-50 ${isDark ? "bg-slate-700 border border-slate-600" : "bg-white border border-gray-200"}`}>
+                    {filteredContacts.map((contact, index) => (
+                      <button
+                        key={contact._id}
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          selectAutocompleteContact(contact, "bcc");
+                        }}
+                        className={`w-full px-3 py-2 text-left text-sm flex items-center gap-3 ${
+                          index === autocompleteIndex
+                            ? isDark ? "bg-slate-600" : "bg-blue-50"
+                            : isDark ? "hover:bg-slate-600" : "hover:bg-gray-50"
+                        }`}
+                      >
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium ${isDark ? "bg-blue-600" : "bg-blue-500"}`}>
+                          {(contact.name?.[0] || contact.email[0]).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          {contact.name && <p className="font-medium theme-text-primary truncate">{contact.name}</p>}
+                          <p className={`truncate ${contact.name ? "text-xs theme-text-secondary" : "theme-text-primary"}`}>{contact.email}</p>
+                        </div>
+                        <span className="text-xs theme-text-tertiary">{contact.sendCount + contact.receiveCount} emails</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
