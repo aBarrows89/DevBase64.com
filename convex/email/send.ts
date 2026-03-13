@@ -186,7 +186,11 @@ async function copyToSentFolder(
     references?: string;
   }
 ): Promise<boolean> {
+  console.log("[COPY TO SENT] Starting copy to Sent folder...");
+  console.log("[COPY TO SENT] Account:", account.emailAddress);
+
   const credentials = getImapCredentials(account);
+  console.log("[COPY TO SENT] IMAP credentials - host:", credentials.host, "port:", credentials.port);
 
   const client = new ImapFlow({
     host: credentials.host,
@@ -200,11 +204,15 @@ async function copyToSentFolder(
   });
 
   try {
+    console.log("[COPY TO SENT] Connecting to IMAP...");
     await client.connect();
+    console.log("[COPY TO SENT] Connected successfully");
 
     // Find the Sent folder
     const mailboxes = await client.list();
-    let sentPath = "Sent"; // Default
+    console.log("[COPY TO SENT] Found mailboxes:", mailboxes.map(m => m.path).join(", "));
+
+    let sentPath = "INBOX.Sent"; // Default for Dovecot-style folders
 
     for (const box of mailboxes) {
       const flags = box.flags ? Array.from(box.flags) : [];
@@ -215,9 +223,12 @@ async function copyToSentFolder(
           flags.some((f: string) => f.toLowerCase() === "\\sent") ||
           pathLower.includes("sent")) {
         sentPath = box.path;
+        console.log("[COPY TO SENT] Found Sent folder:", sentPath);
         break;
       }
     }
+
+    console.log("[COPY TO SENT] Using Sent folder path:", sentPath);
 
     // Build the raw email message
     const boundary = `----=_Part_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -257,12 +268,14 @@ async function copyToSentFolder(
     rawEmail += `--${boundary}--\r\n`;
 
     // Append to Sent folder with \Seen flag
-    await client.append(sentPath, rawEmail, ["\\Seen"]);
+    console.log("[COPY TO SENT] Appending email to folder:", sentPath);
+    const appendResult = await client.append(sentPath, rawEmail, ["\\Seen"]);
+    console.log("[COPY TO SENT] Append result:", appendResult);
 
-    console.log(`Email copied to ${sentPath} folder`);
+    console.log(`[COPY TO SENT] Email copied to ${sentPath} folder successfully`);
     return true;
   } catch (error) {
-    console.error("Failed to copy email to Sent folder:", error);
+    console.error("[COPY TO SENT] Failed to copy email to Sent folder:", error);
     return false;
   } finally {
     try {

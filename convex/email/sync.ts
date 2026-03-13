@@ -621,8 +621,8 @@ export const performIncrementalSync = internalAction({
       console.log(`[SYNC] Checking for new emails. UIDNEXT: ${mailbox.uidNext}, lastSyncUid: ${lastSyncUid}`);
 
       // UIDNEXT is the UID that will be assigned to the next message
-      // So we only have new messages if UIDNEXT > lastSyncUid + 1
-      if (mailbox.uidNext && mailbox.uidNext > lastSyncUid + 1) {
+      // So we have new messages if UIDNEXT > lastSyncUid (meaning there are UIDs from lastSyncUid+1 to UIDNEXT-1)
+      if (mailbox.uidNext && mailbox.uidNext > lastSyncUid) {
         const uidRange = `${lastSyncUid + 1}:*`;
         console.log(`[SYNC] Fetching new emails with UID range: ${uidRange}`);
 
@@ -701,7 +701,7 @@ export const performIncrementalSync = internalAction({
           });
         }
       } else {
-        console.log(`[SYNC] No new emails to fetch. UIDNEXT (${mailbox.uidNext}) <= lastSyncUid + 1 (${lastSyncUid + 1})`);
+        console.log(`[SYNC] No new emails to fetch. UIDNEXT (${mailbox.uidNext}) <= lastSyncUid (${lastSyncUid})`);
       }
 
       // Update folder counts
@@ -711,6 +711,111 @@ export const performIncrementalSync = internalAction({
         totalCount: Number(mailboxCounts.exists) || 0,
         unreadCount: Number(mailboxCounts.unseen) || 0,
       });
+
+      // Also sync Sent folder
+      const sentFolder = await ctx.runQuery(api.email.folders.getByType, {
+        accountId: args.accountId,
+        type: "sent",
+      });
+
+      if (sentFolder) {
+        try {
+          const sentMailbox = await client.mailboxOpen(sentFolder.path);
+          const sentLastSyncUid = sentFolder.lastSyncUid || 0;
+
+          console.log(`[SYNC] Checking Sent folder. UIDNEXT: ${sentMailbox.uidNext}, lastSyncUid: ${sentLastSyncUid}`);
+
+          if (sentMailbox.uidNext && sentMailbox.uidNext > sentLastSyncUid) {
+            const sentUidRange = `${sentLastSyncUid + 1}:*`;
+            console.log(`[SYNC] Fetching new sent emails with UID range: ${sentUidRange}`);
+
+            try {
+              const sentMessages = client.fetch(sentUidRange, {
+                uid: true,
+                envelope: true,
+                bodyStructure: true,
+                flags: true,
+                labels: true,
+                source: { start: 0, maxLength: 50000 },
+              });
+
+              for await (const msg of sentMessages) {
+                const envelope = msg.envelope;
+                if (!envelope) continue;
+
+                let bodyText: string | undefined;
+                let bodyHtml: string | undefined;
+
+                if (msg.source) {
+                  const parsed = await parseEmailBody(msg.source);
+                  bodyText = parsed.text?.substring(0, 50000);
+                  bodyHtml = parsed.html?.substring(0, 100000);
+                }
+
+                const hasAttachments =
+                  msg.bodyStructure?.childNodes?.some(
+                    (node: { disposition?: string }) =>
+                      node.disposition === "attachment"
+                  ) || false;
+
+                const flags = msg.flags || new Set();
+
+                await ctx.runMutation(internal.email.emails.create, {
+                  accountId: args.accountId,
+                  folderId: sentFolder._id,
+                  messageId: envelope.messageId || `${msg.uid}@sent`,
+                  uid: msg.uid,
+                  threadId: envelope.messageId,
+                  subject: envelope.subject || "(No Subject)",
+                  from: parseAddress(envelope.from?.[0]) || {
+                    address: "unknown@unknown.com",
+                  },
+                  to: parseAddresses(envelope.to),
+                  cc: parseAddresses(envelope.cc),
+                  bcc: parseAddresses(envelope.bcc),
+                  replyTo: parseAddress(envelope.replyTo?.[0]),
+                  inReplyTo: envelope.inReplyTo || undefined,
+                  references: undefined,
+                  bodyText,
+                  bodyHtml,
+                  snippet: generateSnippet(bodyText, bodyHtml),
+                  date: envelope.date?.getTime() || Date.now(),
+                  size: msg.size || undefined,
+                  isRead: flags.has("\\Seen"),
+                  isStarred: flags.has("\\Flagged"),
+                  isImportant: false,
+                  isDraft: flags.has("\\Draft"),
+                  hasAttachments,
+                  labels: msg.labels ? Array.from(msg.labels) : undefined,
+                });
+
+                totalEmails++;
+              }
+            } catch (err) {
+              console.error("Error fetching sent messages:", err);
+            }
+
+            if (sentMailbox.uidNext) {
+              await ctx.runMutation(internal.email.folders.updateLastSyncUid, {
+                folderId: sentFolder._id,
+                lastSyncUid: sentMailbox.uidNext - 1,
+              });
+            }
+          } else {
+            console.log(`[SYNC] No new sent emails to fetch. UIDNEXT (${sentMailbox.uidNext}) <= lastSyncUid (${sentLastSyncUid})`);
+          }
+
+          // Update sent folder counts
+          const sentCounts = sentMailbox as { exists?: number | string; unseen?: number | string };
+          await ctx.runMutation(api.email.folders.updateCounts, {
+            folderId: sentFolder._id,
+            totalCount: Number(sentCounts.exists) || 0,
+            unreadCount: Number(sentCounts.unseen) || 0,
+          });
+        } catch (err) {
+          console.error("Error syncing Sent folder:", err);
+        }
+      }
 
       await client.logout();
 
