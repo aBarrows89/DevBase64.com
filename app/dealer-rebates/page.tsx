@@ -755,7 +755,7 @@ function DealerManagementTab({ isDark }: { isDark: boolean }) {
   const updateDealer = useMutation(api.dealerRebates.updateDealer);
   const deleteDealer = useMutation(api.dealerRebates.deleteDealer);
   const permissions = usePermissions();
-  const canDeactivate = permissions.hasMinTier(4); // T4+ (admin/super admin)
+  const canDeactivate = permissions.hasPermission("dealerRebates.deactivateDealers");
 
   const [search, setSearch] = useState("");
   const [programFilter, setProgramFilter] = useState<string>("all");
@@ -1110,6 +1110,12 @@ function DealerManagementTab({ isDark }: { isDark: boolean }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function UploadHistoryTab({ isDark }: { isDark: boolean }) {
+  const permissions = usePermissions();
+  const canDeleteUploads = permissions.hasPermission("dealerRebates.deleteUploads");
+  const deleteUploadMut = useMutation(api.dealerRebates.deleteUpload);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<Id<"dealerRebateUploads"> | null>(null);
+  const [confirmDeleteName, setConfirmDeleteName] = useState("");
+
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [programFilter, setProgramFilter] = useState<string>("all");
@@ -1235,21 +1241,63 @@ function UploadHistoryTab({ isDark }: { isDark: boolean }) {
                       </div>
                     </div>
                   )}
-                  {selectedUpload?.resultData && (
-                    <button
-                      onClick={e => { e.stopPropagation(); reExport(); }}
-                      className="px-4 py-1.5 rounded-lg text-sm font-bold bg-green-600 hover:bg-green-700 text-white transition-colors"
-                    >
-                      Re-export CSV
-                    </button>
-                  )}
-                  {selectedUpload && !selectedUpload.resultData && (
-                    <span className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>Loading export data...</span>
-                  )}
+                  <div className="flex items-center gap-3">
+                    {selectedUpload?.resultData && (
+                      <button
+                        onClick={e => { e.stopPropagation(); reExport(); }}
+                        className="px-4 py-1.5 rounded-lg text-sm font-bold bg-green-600 hover:bg-green-700 text-white transition-colors"
+                      >
+                        Re-export CSV
+                      </button>
+                    )}
+                    {selectedUpload && !selectedUpload.resultData && (
+                      <span className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>Loading export data...</span>
+                    )}
+                    {canDeleteUploads && (
+                      <button
+                        onClick={e => { e.stopPropagation(); setConfirmDeleteId(u._id); setConfirmDeleteName(u.fileName); }}
+                        className="px-4 py-1.5 rounded-lg text-sm font-bold bg-red-600 hover:bg-red-700 text-white transition-colors"
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {confirmDeleteId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setConfirmDeleteId(null)}>
+          <div className={`w-full max-w-sm rounded-xl border p-6 ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200 shadow-xl"}`} onClick={e => e.stopPropagation()}>
+            <h3 className={`text-lg font-bold mb-2 ${isDark ? "text-white" : "text-gray-900"}`}>
+              Delete Upload Record?
+            </h3>
+            <p className={`text-sm mb-4 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+              Are you sure you want to permanently delete the upload record for <strong className={isDark ? "text-white" : "text-gray-900"}>{confirmDeleteName}</strong>? This cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setConfirmDeleteId(null)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium ${isDark ? "text-slate-300 hover:bg-slate-700" : "text-gray-600 hover:bg-gray-100"}`}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  await deleteUploadMut({ id: confirmDeleteId });
+                  setConfirmDeleteId(null);
+                  setSelectedUploadId(null);
+                }}
+                className="px-4 py-2 rounded-lg text-sm font-bold bg-red-600 hover:bg-red-700 text-white transition-colors"
+              >
+                Yes, Delete
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

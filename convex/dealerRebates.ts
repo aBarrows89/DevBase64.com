@@ -200,6 +200,14 @@ export const searchUploadsByDealer = query({
   },
 });
 
+export const deleteUpload = mutation({
+  args: { id: v.id("dealerRebateUploads") },
+  handler: async (ctx, args) => {
+    await ctx.db.delete(args.id);
+    return { success: true };
+  },
+});
+
 // Cleanup old uploads (> 12 months)
 export const deleteOldUploads = internalMutation({
   args: {},

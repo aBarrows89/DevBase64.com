@@ -21,6 +21,7 @@ import {
   canAccessRoute,
   getAccessibleLocations,
   getResolvedPermissions,
+  hasPermission as checkPerm,
   MenuPermissions,
   ATSPermissions,
   PersonnelPermissions,
@@ -62,6 +63,7 @@ export interface UsePermissionsResult {
   // Utilities
   canAccessRoute: (route: string) => boolean;
   getAccessibleLocations: (locations: { _id: Id<"locations">; name: string }[]) => { _id: Id<"locations">; name: string }[];
+  hasPermission: (permKey: string) => boolean;
 
   // Flags
   isFinalTimeApprover: boolean;
@@ -174,6 +176,7 @@ export function usePermissions(): UsePermissionsResult {
     },
     canAccessRoute: () => false,
     getAccessibleLocations: () => [],
+    hasPermission: () => false,
     isFinalTimeApprover: false,
     isPayrollProcessor: false,
     requiresDailyLog: false,
@@ -236,6 +239,7 @@ export function usePermissions(): UsePermissionsResult {
     dashboardWidgets: getDashboardWidgetPermissions(permissionUser),
     canAccessRoute: (route: string) => canAccessRoute(permissionUser, route),
     getAccessibleLocations: (locations) => getAccessibleLocations(permissionUser, locations),
+    hasPermission: (permKey: string) => checkPerm(permissionUser, permKey),
     isFinalTimeApprover: user.isFinalTimeApprover === true,
     isPayrollProcessor: user.isPayrollProcessor === true,
     requiresDailyLog: user.requiresDailyLog === true,
