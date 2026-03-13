@@ -703,7 +703,102 @@ export const performIncrementalSync = internalAction({
           });
         }
       } else {
-        console.log(`[SYNC] No new emails to fetch. UIDNEXT (${mailbox.uidNext}) == lastSyncUid + 1 (${lastSyncUid + 1})`);
+        console.log(`[SYNC] No new emails by UID. Checking for missed emails by date...`);
+
+        // Fallback: Check for emails from last 2 hours that might have been missed
+        const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+        try {
+          const recentUids = await client.search(
+            { since: twoHoursAgo },
+            { uid: true }
+          ) as number[];
+
+          if (recentUids.length > 0) {
+            console.log(`[SYNC] Found ${recentUids.length} emails from last 2 hours, checking for missed ones...`);
+
+            // Check which of these are already in our database
+            const existingEmails = await ctx.runQuery(api.email.emails.listByFolder, {
+              folderId: inboxFolder._id,
+              limit: 100,
+            });
+            const existingUids = new Set(existingEmails.emails.map(e => e.uid));
+
+            const missingUids = recentUids.filter(uid => !existingUids.has(uid));
+
+            if (missingUids.length > 0) {
+              console.log(`[SYNC] Found ${missingUids.length} missed emails! UIDs: ${missingUids.join(', ')}`);
+
+              const uidRange = missingUids.join(",");
+              // Use UID FETCH by passing { uid: true } as third parameter
+              const messages = client.fetch(uidRange, {
+                uid: true,
+                envelope: true,
+                bodyStructure: true,
+                flags: true,
+                labels: true,
+                source: { start: 0, maxLength: 50000 },
+              }, { uid: true });
+
+              for await (const msg of messages) {
+                const envelope = msg.envelope;
+                if (!envelope) continue;
+
+                let bodyText: string | undefined;
+                let bodyHtml: string | undefined;
+
+                if (msg.source) {
+                  const parsed = await parseEmailBody(msg.source);
+                  bodyText = parsed.text?.substring(0, 50000);
+                  bodyHtml = parsed.html?.substring(0, 100000);
+                }
+
+                const hasAttachments =
+                  msg.bodyStructure?.childNodes?.some(
+                    (node: { disposition?: string }) =>
+                      node.disposition === "attachment"
+                  ) || false;
+
+                const flags = msg.flags || new Set();
+
+                await ctx.runMutation(internal.email.emails.create, {
+                  accountId: args.accountId,
+                  folderId: inboxFolder._id,
+                  messageId: envelope.messageId || `${msg.uid}@inbox`,
+                  uid: msg.uid,
+                  threadId: envelope.messageId,
+                  subject: envelope.subject || "(No Subject)",
+                  from: parseAddress(envelope.from?.[0]) || {
+                    address: "unknown@unknown.com",
+                  },
+                  to: parseAddresses(envelope.to),
+                  cc: parseAddresses(envelope.cc),
+                  bcc: parseAddresses(envelope.bcc),
+                  replyTo: parseAddress(envelope.replyTo?.[0]),
+                  inReplyTo: envelope.inReplyTo || undefined,
+                  references: undefined,
+                  bodyText,
+                  bodyHtml,
+                  snippet: generateSnippet(bodyText, bodyHtml),
+                  date: envelope.date?.getTime() || Date.now(),
+                  size: msg.size || undefined,
+                  isRead: flags.has("\\Seen"),
+                  isStarred: flags.has("\\Flagged"),
+                  isImportant: false,
+                  isDraft: flags.has("\\Draft"),
+                  hasAttachments,
+                  labels: msg.labels ? Array.from(msg.labels) : undefined,
+                });
+
+                totalEmails++;
+                console.log(`[SYNC] Recovered missed email: ${envelope.subject}`);
+              }
+            } else {
+              console.log(`[SYNC] All recent emails are already synced.`);
+            }
+          }
+        } catch (err) {
+          console.error("[SYNC] Error checking for missed emails:", err);
+        }
       }
 
       // Update folder counts
