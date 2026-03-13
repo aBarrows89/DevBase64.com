@@ -271,6 +271,30 @@ export const updateCounts = mutation({
 });
 
 /**
+ * Reset lastSyncUid to force a resync.
+ */
+export const resetLastSyncUid = mutation({
+  args: {
+    folderId: v.id("emailFolders"),
+    newUid: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const folder = await ctx.db.get(args.folderId);
+    if (!folder) {
+      throw new Error("Folder not found");
+    }
+
+    const oldUid = folder.lastSyncUid;
+    await ctx.db.patch(args.folderId, {
+      lastSyncUid: args.newUid ?? 0,
+      updatedAt: Date.now(),
+    });
+
+    return { oldUid, newUid: args.newUid ?? 0 };
+  },
+});
+
+/**
  * Increment/decrement unread count.
  */
 export const adjustUnreadCount = mutation({

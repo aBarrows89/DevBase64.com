@@ -618,7 +618,9 @@ export const performIncrementalSync = internalAction({
       // Check for new messages since last sync
       const lastSyncUid = inboxFolder.lastSyncUid || 0;
 
-      if (mailbox.uidNext && mailbox.uidNext > lastSyncUid + 1) {
+      console.log(`[SYNC] Checking for new emails. UIDNEXT: ${mailbox.uidNext}, lastSyncUid: ${lastSyncUid}`);
+
+      if (mailbox.uidNext && mailbox.uidNext > lastSyncUid) {
         const uidRange = `${lastSyncUid + 1}:*`;
 
         try {
