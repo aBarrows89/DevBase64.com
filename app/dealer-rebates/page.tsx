@@ -52,8 +52,21 @@ function parsePositionalCSV(text: string): string[][] {
 function normalizeAcct(raw: string): string {
   let s = raw.trim();
   if (s.includes('-')) return s.split('-').pop()!.toLowerCase();
-  // Strip warehouse prefix (e.g. W08R20 -> R20, W084187 -> 4187)
+  // Handle inter-location transfers (e.g. W08R25, R25W08, R20W07, W07R20)
+  // Extract the retail store code (R##) from either side of a transfer JMK
+  const transferMatch = s.match(/^([RW]\d{2})([RW]\d{2})$/i);
+  if (transferMatch) {
+    const [, left, right] = transferMatch;
+    // Prefer the R-location (retail store); if both are W (warehouse-to-warehouse), use right side
+    if (left.match(/^R/i)) s = left;
+    else if (right.match(/^R/i)) s = right;
+    else s = right;
+    return s.toLowerCase();
+  }
+  // Strip warehouse prefix (e.g. W084187 -> 4187)
   s = s.replace(/^W\d{2}/i, '');
+  // Strip V/E/X vendor prefixes (e.g. V4187 -> 4187, E1159 -> 1159, X1328 -> 1328)
+  s = s.replace(/^[VEX]/i, '');
   s = s.replace(/^\s+/, '').replace(/^0+/, '') || '0';
   return s.toLowerCase();
 }
@@ -67,6 +80,12 @@ function toFalkenDate(yymmdd: string): string {
 }
 
 function cleanSku(raw: string): string { return raw.replace(/\[+$/, "").trim(); }
+
+// Strip the internal brand prefix from a SKU to get the manufacturer's part number
+// e.g. FA28034809 -> 28034809, ML22229251 -> 22229251
+function toMfrPartNumber(sku: string): string {
+  return sku.replace(/^[A-Za-z]{2}/, "");
+}
 
 function toCSV(headers: string[], rows: Record<string, string | number>[]): string {
   const esc = (v: string | number) => { const s = String(v ?? ""); return s.includes(",") ? `"${s}"` : s; };
@@ -301,7 +320,7 @@ function UploadTab({ isDark, userId }: { isDark: boolean; userId?: Id<"users"> }
             Distributor_Center_State: IE_FALKEN.state,
             Distributor_Center_Postal_Code: IE_FALKEN.zip,
             Invoice_Number: invoice,
-            SKU: sku,
+            SKU: toMfrPartNumber(sku),
             Date: toFalkenDate(dateRaw),
             Quantity: qty,
             Price_Per_Tire: price,
@@ -322,7 +341,7 @@ function UploadTab({ isDark, userId }: { isDark: boolean; userId?: Id<"users"> }
             DealerNumber: dealer.dealerNumber,
             InvoiceNumber: invoice,
             InvoiceDate: dateRaw,
-            ProductCode: sku,
+            ProductCode: toMfrPartNumber(sku),
             Quantity: qty,
             SellPricePerTire: price,
             _dealer: dealer.name,

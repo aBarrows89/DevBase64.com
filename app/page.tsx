@@ -12,6 +12,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { SearchButton } from "@/components/GlobalSearch";
 import ActivityFeed from "@/components/ActivityFeed";
+import EmailWidget from "@/components/EmailWidget";
 import { Id } from "@/convex/_generated/dataModel";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
@@ -47,6 +48,7 @@ const DASHBOARD_CARDS = [
   { id: "hiringAnalytics", label: "Hiring Analytics", description: "Hiring metrics and upcoming interviews" },
   { id: "activityFeed", label: "Activity Feed", description: "Recent system activity" },
   { id: "tenureCheckIns", label: "Tenure Check-ins", description: "Due employee milestone reviews" },
+  { id: "email", label: "Email", description: "Recent unread emails from your inbox" },
 ];
 
 function DashboardContent() {
@@ -1174,6 +1176,11 @@ function DashboardContent() {
           </div>
           )}
 
+          {/* Email Widget */}
+          {isCardEnabled("email") && user?.hasEmailAccess && (
+            <EmailWidget />
+          )}
+
           {/* Activity Feed & Tenure Check-ins */}
           {((widgets.activityFeed && isCardEnabled("activityFeed")) || (widgets.tenureCheckins && isCardEnabled("tenureCheckIns"))) && (
           <div className={`grid grid-cols-1 ${!widgets.tenureCheckins ? "" : "lg:grid-cols-2"} gap-4 sm:gap-6`}>
@@ -1294,6 +1301,7 @@ function DashboardContent() {
                 if (card.id === "hiringAnalytics" && !widgets.hiringAnalytics) return null;
                 if (card.id === "tenureCheckIns" && !widgets.tenureCheckins) return null;
                 if (card.id === "activityFeed" && !widgets.activityFeed) return null;
+                if (card.id === "email" && !user?.hasEmailAccess) return null;
                 return (
                   <label
                     key={card.id}
