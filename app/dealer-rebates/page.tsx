@@ -28,25 +28,23 @@ const COL = {
   ACTIVITY_DATE: 18,  // S: Activity Date (MM/DD/YY)
 };
 
-// ─── STORE TRANSFER MAPPINGS ─────────────────────────────────────────────────
-// Map inter-location Account IDs to the destination store's dealer JMK
-// Format is SOURCE+DEST — we attribute to the destination store
+// ─── STORE ACCOUNT MAPPINGS ──────────────────────────────────────────────────
+// Map all Account ID variants to the store's dealer JMK
 // Essey Tire = R20, Export Tire = R25, King Super Tire = R35
-const STORE_TRANSFERS: Record<string, string> = {
-  // Transfers TO Essey Tire (R20)
+const STORE_ACCOUNTS: Record<string, string> = {
+  // Essey Tire (R20) — transfers, retail counter, employee accounts
   "w08r20": "r20", "w07r20": "r20", "w08w20": "r20",
   "r25r20": "r20", "r10r20": "r20", "r35r20": "r20", "r15r20": "r20",
-  // Returns FROM Essey Tire (R20) — still attributed to Essey
   "r20w08": "r20", "r20w07": "r20", "w20w08": "r20",
-  // Transfers TO Export Tire (R25)
+  "99-r20": "r20", "e1260": "r20",
+  // Export Tire (R25) — transfers, retail counter, employee accounts
   "w08r25": "r25", "w07r25": "r25", "w08w25": "r25", "w20w25": "r25",
   "r20r25": "r25", "r10r25": "r25", "r35r25": "r25", "r15r25": "r25",
-  // Returns FROM Export Tire (R25) — still attributed to Export
   "r25w08": "r25", "r25w07": "r25", "w25w08": "r25",
-  // Transfers TO King Super Tire (R35)
+  "99-r25": "r25", "e1261": "r25", "e1217": "r25",
+  // King Super Tire (R35)
   "w08r35": "r35", "w07r35": "r35", "w08w35": "r35",
   "r20r35": "r35", "r10r35": "r35", "r25r35": "r35",
-  // Returns FROM King Super Tire (R35) — still attributed to King Super
   "r35w08": "r35", "r35w07": "r35", "w35w08": "r35",
 };
 
@@ -75,8 +73,8 @@ function parsePositionalCSV(text: string): string[][] {
 
 function normalizeAcct(raw: string): string {
   let s = raw.trim().toLowerCase();
-  // Check for known store transfer patterns (W08W20, W20W08, etc.)
-  if (STORE_TRANSFERS[s]) return STORE_TRANSFERS[s];
+  // Check for known store account mappings (transfers, retail counter, employee IDs)
+  if (STORE_ACCOUNTS[s]) return STORE_ACCOUNTS[s];
   // Strip leading zeros and whitespace
   s = s.replace(/^\s+/, '').replace(/^0+/, '') || '0';
   return s;
