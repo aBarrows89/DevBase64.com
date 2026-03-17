@@ -14,16 +14,29 @@ import { usePermissions } from "@/lib/usePermissions";
 const IE_FALKEN = { distributorAccount: "20118", address: "400 Unity St.  STE. 100", city: "Latrobe", state: "PA", zip: "15650" };
 const IE_MILESTAR = { parentDistributor: "119662", distributorCenter: "119662:0" };
 
-// ─── ART24T POSITIONAL COLUMN INDICES (zero-based) ─────────────────────────────
+// ─── OEA07V COLUMN INDICES (zero-based) ──────────────────────────────────────
 const COL = {
-  JMK: 0,
-  INVOICE: 1,
-  DATE: 4,       // YYMMDD format
-  PRODUCT_TYPE: 6,
-  BRAND: 7,      // FAL=Falken, MIL=Milestar
-  SKU: 9,
-  QTY: 13,
-  PRICE: 17,
+  ITEM_ID: 0,         // A: Item Id (internal SKU)
+  PRODUCT_TYPE: 3,    // D: Product Type
+  MFG_ID: 4,          // E: MFG Id (brand code: FAL, MIL, etc.)
+  MFG_ITEM_ID: 5,     // F: MFG's Item Id (manufacturer part number)
+  LOC_ID: 8,          // I: Loc Id
+  QTY: 10,            // K: Qty Sl/Rc (negative = sold, multiply by -1)
+  SELL_PRICE: 13,     // N: U/Sell FET/In
+  ACCOUNT_ID: 15,     // P: Account Id (JMK)
+  INV_ID: 16,         // Q: Inv Id (invoice number)
+  ACTIVITY_DATE: 18,  // S: Activity Date (MM/DD/YY)
+};
+
+// ─── STORE TRANSFER MAPPINGS ─────────────────────────────────────────────────
+// Account IDs for inter-store transfers (purchases and returns)
+const STORE_TRANSFERS: Record<string, string> = {
+  "w08w20": "r20",  // Essey Tire (purchase from W08 to W20)
+  "w20w08": "r20",  // Essey Tire (return from W20 to W08)
+  "w08w25": "r25",  // Export Tire (purchase from W08 to W25)
+  "w25w08": "r25",  // Export Tire (return from W25 to W08)
+  "w08w35": "r35",  // King Super Tire (purchase from W08 to W35)
+  "w35w08": "r35",  // King Super Tire (return from W35 to W08)
 };
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -50,42 +63,28 @@ function parsePositionalCSV(text: string): string[][] {
 }
 
 function normalizeAcct(raw: string): string {
-  let s = raw.trim();
-  if (s.includes('-')) return s.split('-').pop()!.toLowerCase();
+  let s = raw.trim().toLowerCase();
+  // Check for known store transfer patterns (W08W20, W20W08, etc.)
+  if (STORE_TRANSFERS[s]) return STORE_TRANSFERS[s];
   // Handle inter-location transfers (e.g. W08R25, R25W08, R20W07, W07R20)
-  // Extract the retail store code (R##) from either side of a transfer JMK
-  const transferMatch = s.match(/^([RW]\d{2})([RW]\d{2})$/i);
+  const transferMatch = s.match(/^([rw]\d{2})([rw]\d{2})$/);
   if (transferMatch) {
     const [, left, right] = transferMatch;
-    // Prefer the R-location (retail store); if both are W (warehouse-to-warehouse), use right side
-    if (left.match(/^R/i)) s = left;
-    else if (right.match(/^R/i)) s = right;
-    else s = right;
-    return s.toLowerCase();
+    // Prefer the R-location (retail store); if both are W, use right side
+    if (left.startsWith('r')) return left;
+    if (right.startsWith('r')) return right;
+    return right;
   }
   // Strip warehouse prefix (e.g. W084187 -> 4187)
-  s = s.replace(/^W\d{2}/i, '');
+  s = s.replace(/^w\d{2}/, '');
   // Strip V/E/X vendor prefixes (e.g. V4187 -> 4187, E1159 -> 1159, X1328 -> 1328)
-  s = s.replace(/^[VEX]/i, '');
+  s = s.replace(/^[vex]/, '');
+  if (s.includes('-')) return s.split('-').pop()!;
   s = s.replace(/^\s+/, '').replace(/^0+/, '') || '0';
-  return s.toLowerCase();
-}
-
-function toFalkenDate(yymmdd: string): string {
-  if (!yymmdd || yymmdd.length !== 6) return yymmdd;
-  const yr = "20" + yymmdd.slice(0, 2);
-  const mo = parseInt(yymmdd.slice(2, 4), 10);
-  const dy = parseInt(yymmdd.slice(4, 6), 10);
-  return `${mo}/${dy}/${yr}`;
+  return s;
 }
 
 function cleanSku(raw: string): string { return raw.replace(/\[+$/, "").trim(); }
-
-// Strip the internal brand prefix from a SKU to get the manufacturer's part number
-// e.g. FA28034809 -> 28034809, ML22229251 -> 22229251
-function toMfrPartNumber(sku: string): string {
-  return sku.replace(/^[A-Za-z]{2}/, "");
-}
 
 function toCSV(headers: string[], rows: Record<string, string | number>[]): string {
   const esc = (v: string | number) => { const s = String(v ?? ""); return s.includes(",") ? `"${s}"` : s; };
@@ -166,7 +165,7 @@ type Dealer = {
 const TABS = ["Upload & Process", "Dealer Management", "Upload History", "Stats"] as const;
 type TabType = typeof TABS[number];
 
-const UPLOAD_STEPS = ["Upload ART24T", "Select Programs", "Review & Export"];
+const UPLOAD_STEPS = ["Upload OEA07V", "Select Programs", "Review & Export"];
 
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 
@@ -199,7 +198,7 @@ export default function DealerRebatesPage() {
                   Dealer Rebate Tool
                 </h1>
                 <p className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                  Associate Dealer Program &mdash; ART24T to CSV Upload Generator
+                  Associate Dealer Program &mdash; OEA07V to CSV Upload Generator
                 </p>
               </div>
             </div>
@@ -300,13 +299,15 @@ function UploadTab({ isDark, userId }: { isDark: boolean; userId?: Id<"users"> }
     const milestarDealersSeen = new Set<string>();
 
     filteredRows.forEach(cols => {
-      const jmk = normalizeAcct(cols[COL.JMK] ?? "");
-      const invoice = (cols[COL.INVOICE] ?? "").trim();
-      const dateRaw = (cols[COL.DATE] ?? "").trim();
-      const brand = (cols[COL.BRAND] ?? "").trim().toUpperCase();
-      const sku = cleanSku(cols[COL.SKU] ?? "");
-      const qty = (cols[COL.QTY] ?? "").trim();
-      const price = (cols[COL.PRICE] ?? "").trim();
+      const jmk = normalizeAcct(cols[COL.ACCOUNT_ID] ?? "");
+      const invoice = (cols[COL.INV_ID] ?? "").trim();
+      const dateRaw = (cols[COL.ACTIVITY_DATE] ?? "").trim();
+      const brand = (cols[COL.MFG_ID] ?? "").trim().toUpperCase();
+      const mfrPartNumber = (cols[COL.MFG_ITEM_ID] ?? "").trim();
+      // Qty is negative in OEA07V (sold = negative), multiply by -1
+      const rawQty = parseFloat((cols[COL.QTY] ?? "0").trim()) || 0;
+      const qty = String(Math.abs(rawQty));
+      const price = (cols[COL.SELL_PRICE] ?? "").trim();
 
       // Only include Falken-brand tires on Falken report
       if (programs.falken && brand === "FAL" && falkenByJmk[jmk]) {
@@ -320,8 +321,8 @@ function UploadTab({ isDark, userId }: { isDark: boolean; userId?: Id<"users"> }
             Distributor_Center_State: IE_FALKEN.state,
             Distributor_Center_Postal_Code: IE_FALKEN.zip,
             Invoice_Number: invoice,
-            SKU: toMfrPartNumber(sku),
-            Date: toFalkenDate(dateRaw),
+            SKU: mfrPartNumber,
+            Date: dateRaw,
             Quantity: qty,
             Price_Per_Tire: price,
             _dealer: dealer.name,
@@ -341,7 +342,7 @@ function UploadTab({ isDark, userId }: { isDark: boolean; userId?: Id<"users"> }
             DealerNumber: dealer.dealerNumber,
             InvoiceNumber: invoice,
             InvoiceDate: dateRaw,
-            ProductCode: toMfrPartNumber(sku),
+            ProductCode: mfrPartNumber,
             Quantity: qty,
             SellPricePerTire: price,
             _dealer: dealer.name,
@@ -507,7 +508,7 @@ function UploadTab({ isDark, userId }: { isDark: boolean; userId?: Id<"users"> }
       {step === 0 && (
         <div className={`rounded-xl border p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
           <h2 className={`text-sm font-bold uppercase tracking-wider mb-4 ${isDark ? "text-orange-400" : "text-orange-600"}`}>
-            Upload ART24T Report
+            Upload OEA07V Report
           </h2>
           <div
             className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all ${
@@ -524,7 +525,7 @@ function UploadTab({ isDark, userId }: { isDark: boolean; userId?: Id<"users"> }
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
             </svg>
             <p className={`font-semibold mb-1 ${isDark ? "text-white" : "text-gray-900"}`}>
-              Drop ART24T CSV here, or click to browse
+              Drop OEA07V CSV here, or click to browse
             </p>
             <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
               Only product types starting with &quot;T&quot; will be processed
@@ -685,7 +686,7 @@ function UploadTab({ isDark, userId }: { isDark: boolean; userId?: Id<"users"> }
                   </>
                 ) : (
                   <div className={`p-3 rounded-lg text-sm ${isDark ? "bg-amber-500/10 text-amber-300 border border-amber-500/20" : "bg-amber-50 text-amber-700 border border-amber-200"}`}>
-                    No Falken Fanatic dealers matched in this ART24T.
+                    No Falken Fanatic dealers matched in this OEA07V.
                   </div>
                 )}
               </div>
@@ -745,7 +746,7 @@ function UploadTab({ isDark, userId }: { isDark: boolean; userId?: Id<"users"> }
                   </>
                 ) : (
                   <div className={`p-3 rounded-lg text-sm ${isDark ? "bg-blue-500/10 text-blue-300 border border-blue-500/20" : "bg-blue-50 text-blue-700 border border-blue-200"}`}>
-                    No Milestar Momentum dealers matched in this ART24T.
+                    No Milestar Momentum dealers matched in this OEA07V.
                   </div>
                 )}
               </div>
@@ -1466,7 +1467,7 @@ function StatsTab({ isDark }: { isDark: boolean }) {
   }
 
   if (!stats) {
-    return <div className={`text-center py-12 ${isDark ? "text-slate-500" : "text-gray-400"}`}>No upload data yet. Process some ART24T files to see stats.</div>;
+    return <div className={`text-center py-12 ${isDark ? "text-slate-500" : "text-gray-400"}`}>No upload data yet. Process some OEA07V files to see stats.</div>;
   }
 
   const growthColor = (val: number | null) => {
