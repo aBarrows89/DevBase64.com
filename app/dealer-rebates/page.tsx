@@ -32,18 +32,12 @@ const COL = {
 // Map all Account ID variants to the store's dealer JMK as stored in the database
 // TRD Tire / Essey Tire = W08R20, Command Trax / Export Tire = W08R25, King Super Tire = W08R35
 const STORE_ACCOUNTS: Record<string, string> = {
-  // TRD Tire / Essey Tire (JMK: W08R20)
-  "w08r20": "w08r20", "w07r20": "w08r20", "w08w20": "w08r20",
-  "r25r20": "w08r20", "r10r20": "w08r20", "r35r20": "w08r20", "r15r20": "w08r20",
-  "r20w08": "w08r20", "r20w07": "w08r20", "w20w08": "w08r20",
-  // Command Trax / Export Tire (JMK: W08R25)
-  "w08r25": "w08r25", "w07r25": "w08r25", "w08w25": "w08r25", "w20w25": "w08r25",
-  "r20r25": "w08r25", "r10r25": "w08r25", "r35r25": "w08r25", "r15r25": "w08r25",
-  "r25w08": "w08r25", "r25w07": "w08r25", "w25w08": "w08r25",
-  // King Super Tire (JMK: W08R35)
-  "w08r35": "w08r35", "w07r35": "w08r35", "w08w35": "w08r35",
-  "r20r35": "w08r35", "r10r35": "w08r35", "r25r35": "w08r35",
-  "r35w08": "w08r35", "r35w07": "w08r35", "w35w08": "w08r35",
+  // TRD Tire / Essey Tire (JMK: W08R20) — sale and return only
+  "w08r20": "w08r20", "r20w08": "w08r20",
+  // Command Trax / Export Tire (JMK: W08R25) — sale and return only
+  "w08r25": "w08r25", "r25w08": "w08r25",
+  // King Super Tire (JMK: W08R35) — sale and return only
+  "w08r35": "w08r35", "r35w08": "w08r35",
 };
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
