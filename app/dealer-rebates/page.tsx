@@ -73,12 +73,14 @@ function parsePositionalCSV(text: string): string[][] {
 
 function normalizeAcct(raw: string): string {
   let s = raw.trim().toLowerCase();
+  // Skip blank/empty accounts
+  if (!s) return "xxx";
   // Skip employee/internal E-prefix accounts (E1216, E1260, etc.)
-  if (s.match(/^e\d/)) return "";
+  if (s.match(/^e\d/)) return "xxx";
   // Check for known store account mappings (transfers, retail counter)
   if (STORE_ACCOUNTS[s]) return STORE_ACCOUNTS[s];
   // Strip leading zeros and whitespace
-  s = s.replace(/^\s+/, '').replace(/^0+/, '') || '0';
+  s = s.replace(/^\s+/, '').replace(/^0+/, '') || 'xxx';
   return s;
 }
 
@@ -282,13 +284,16 @@ function UploadTab({ isDark, userId }: { isDark: boolean; userId?: Id<"users"> }
     // Build lookup maps from Convex dealers
     const falkenByJmk: Record<string, Dealer[]> = {};
     falkenDealers.forEach(d => {
-      const key = d.jmk.toLowerCase();
+      const key = d.jmk.toLowerCase().trim();
+      if (!key) return; // Skip dealers with blank JMK
       if (!falkenByJmk[key]) falkenByJmk[key] = [];
       falkenByJmk[key].push(d);
     });
     const milestarByJmk: Record<string, Dealer> = {};
     milestarDealers.forEach(d => {
-      milestarByJmk[d.jmk.toLowerCase()] = d;
+      const key = d.jmk.toLowerCase().trim();
+      if (!key) return; // Skip dealers with blank JMK
+      milestarByJmk[key] = d;
     });
 
     const falkenOut: FalkenRow[] = [];
