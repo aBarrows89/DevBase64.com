@@ -44,8 +44,8 @@ export function useMediaStream(
     async function init() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: true,
+          audio: { echoCancellation: true, noiseSuppression: true },
+          video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" },
         });
 
         if (cancelled) {
@@ -87,6 +87,14 @@ export function useMediaStream(
             "[useMediaStream] Audio-only fallback also failed:",
             audioErr
           );
+          // Create an empty stream so the UI still renders (no camera/mic device)
+          if (!cancelled) {
+            const emptyStream = new MediaStream();
+            localStreamRef.current = emptyStream;
+            setLocalStream(emptyStream);
+            setIsAudioEnabled(false);
+            setIsVideoEnabled(false);
+          }
         }
       }
     }

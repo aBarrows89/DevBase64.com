@@ -62,7 +62,7 @@ export default function MeetingRoomPage() {
   // Peer connections — only initialize when we have the participant record
   const remoteStreams = usePeerConnections({
     localStream,
-    myParticipantId: (myParticipant?._id ?? "") as Id<"meetingParticipants">,
+    myParticipantId: (myParticipant?._id ?? null) as unknown as Id<"meetingParticipants">,
     meetingId: typedMeetingId,
     participants: (participants ?? []) as any[],
   });

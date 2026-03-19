@@ -49,9 +49,10 @@ export function usePeerConnections({
   const sendSignal = useMutation(api.meetingSignaling.sendSignal);
   const consumeSignal = useMutation(api.meetingSignaling.consumeSignal);
 
-  const incomingSignals = useQuery(api.meetingSignaling.getMySignals, {
-    participantId: myParticipantId,
-  });
+  const incomingSignals = useQuery(
+    api.meetingSignaling.getMySignals,
+    myParticipantId ? { participantId: myParticipantId } : "skip"
+  );
 
   // Peer state lives in a ref so we don't re-render on every ICE candidate.
   // We bump `streamVersion` to trigger a React re-render when remote streams change.
