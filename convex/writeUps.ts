@@ -176,22 +176,7 @@ export const create = mutation({
       createdAt: Date.now(),
     });
 
-    // Check for active ARP enrollment and auto-fail if exists
-    // ANY write-up during ARP (attendance, safety, conduct, etc.) triggers failure
-    const activeEnrollment = await ctx.db
-      .query("arpEnrollments")
-      .withIndex("by_personnel", (q) => q.eq("personnelId", args.personnelId))
-      .filter((q) => q.eq(q.field("status"), "active"))
-      .first();
 
-    if (activeEnrollment) {
-      // Auto-fail the ARP enrollment
-      await ctx.scheduler.runAfter(0, internal.arp.internalFailEnrollment, {
-        enrollmentId: activeEnrollment._id,
-        reason: `Write-up issued: ${args.category} - ${args.severity}`,
-        writeUpId: writeUpId,
-      });
-    }
 
     // Send push notification to employee
     const user = await ctx.db

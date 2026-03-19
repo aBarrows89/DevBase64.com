@@ -142,9 +142,6 @@ export interface MenuPermissions {
   scheduleTemplates: boolean;
   saturdayOvertime: boolean;
 
-  // ARP
-  arp: boolean;
-
   // Projects
   projects: boolean;
   suggestions: boolean;
@@ -232,9 +229,6 @@ export function getMenuPermissions(user: PermissionUser): MenuPermissions {
     shiftPlanning: tier >= 2, // T2+
     scheduleTemplates: tier >= 4, // T4+
     saturdayOvertime: tier >= 2, // T2+
-
-    // ARP - T2+
-    arp: tier >= 2,
 
     // Projects - T2+
     projects: tier >= 2,
@@ -582,7 +576,6 @@ export const ALL_PERMISSIONS: PermissionDefinition[] = [
   // Documents & Tools
   { key: "menu.docHub", label: "Doc Hub", description: "Access document repository", category: "documents" },
   { key: "menu.binLabels", label: "Bin Labels", description: "Generate warehouse bin labels", category: "documents" },
-  { key: "menu.arp", label: "ARP", description: "Access ARP tool", category: "documents" },
 
   // Projects
   { key: "menu.projects", label: "Projects", description: "View and manage projects", category: "projects" },
@@ -752,7 +745,6 @@ export function canAccessRoute(user: PermissionUser, route: string): boolean {
     "/documents": "menu.docHub",
     "/shifts": "menu.shiftPlanning",
     "/schedule-templates": "menu.scheduleTemplates",
-    "/arp": "menu.arp",
     "/projects": "menu.projects",
     "/suggestions": "menu.suggestions",
     "/mileage": "menu.mileage",
