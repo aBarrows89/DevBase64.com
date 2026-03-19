@@ -2840,6 +2840,19 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_meeting_status", ["meetingId", "status"]),
 
+  meetingInvites: defineTable({
+    meetingId: v.id("meetings"),
+    email: v.string(),
+    name: v.optional(v.string()),
+    inviteToken: v.string(),
+    status: v.string(), // "sent" | "opened" | "joined" | "declined"
+    sentAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_meeting", ["meetingId"])
+    .index("by_token", ["inviteToken"])
+    .index("by_email", ["email"]),
+
   meetingSignals: defineTable({
     meetingId: v.id("meetings"),
     fromParticipantId: v.id("meetingParticipants"),

@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useTheme } from "@/app/theme-context";
 import { useAuth } from "@/app/auth-context";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { useMediaStream } from "@/lib/webrtc/useMediaStream";
@@ -41,9 +41,24 @@ export default function MeetingRoomPage() {
   );
   const toggleNotedMeeting = useMutation(api.meetings.updateNotedMeeting);
 
+  // Invite action
+  const sendInviteEmail = useAction(api.meetingInviteActions.sendInviteEmail);
+  const meetingInvites = useQuery(
+    api.meetingInvites.getByMeeting,
+    meeting ? { meetingId: typedMeetingId } : "skip"
+  );
+
   // Local state
   const [hasJoined, setHasJoined] = useState(false);
   const [showParticipantList, setShowParticipantList] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteName, setInviteName] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteSending, setInviteSending] = useState(false);
+  const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [codeCopied, setCodeCopied] = useState(false);
+  const [urlCopied, setUrlCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Media
@@ -165,6 +180,45 @@ export default function MeetingRoomPage() {
       console.error("Failed to toggle noted meeting:", err);
     }
   }, [meeting, toggleNotedMeeting, typedMeetingId]);
+
+  // Handle sending email invite
+  const handleSendInvite = useCallback(async () => {
+    if (!inviteEmail.trim()) return;
+    setInviteSending(true);
+    setInviteError(null);
+    setInviteSuccess(null);
+
+    try {
+      await sendInviteEmail({
+        meetingId: typedMeetingId,
+        email: inviteEmail.trim(),
+        name: inviteName.trim() || undefined,
+      });
+      setInviteSuccess(`Invite sent to ${inviteEmail.trim()}`);
+      setInviteName("");
+      setInviteEmail("");
+    } catch (err) {
+      console.error("Failed to send invite:", err);
+      setInviteError("Failed to send invite. Please try again.");
+    } finally {
+      setInviteSending(false);
+    }
+  }, [inviteEmail, inviteName, sendInviteEmail, typedMeetingId]);
+
+  const handleCopyCode = useCallback(() => {
+    if (!meeting?.joinCode) return;
+    navigator.clipboard.writeText(meeting.joinCode);
+    setCodeCopied(true);
+    setTimeout(() => setCodeCopied(false), 2000);
+  }, [meeting?.joinCode]);
+
+  const handleCopyUrl = useCallback(() => {
+    if (!meeting?.joinCode) return;
+    const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+    navigator.clipboard.writeText(`${baseUrl}/join/${meeting.joinCode}`);
+    setUrlCopied(true);
+    setTimeout(() => setUrlCopied(false), 2000);
+  }, [meeting?.joinCode]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -299,15 +353,32 @@ export default function MeetingRoomPage() {
             </span>
           )}
         </div>
-        {meeting.joinCode && (
-          <span
-            className={`text-xs font-mono ${
-              isDark ? "text-slate-500" : "text-gray-400"
-            }`}
-          >
-            {meeting.joinCode}
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {meeting.joinCode && (
+            <span
+              className={`text-xs font-mono ${
+                isDark ? "text-slate-500" : "text-gray-400"
+              }`}
+            >
+              {meeting.joinCode}
+            </span>
+          )}
+          {isHost && (
+            <button
+              onClick={() => setShowInviteModal(true)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                isDark
+                  ? "bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30"
+                  : "bg-blue-100 text-blue-600 hover:bg-blue-200"
+              }`}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+              </svg>
+              Invite
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Video area */}
@@ -417,6 +488,421 @@ export default function MeetingRoomPage() {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Invite Modal */}
+      {showInviteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => {
+              setShowInviteModal(false);
+              setInviteSuccess(null);
+              setInviteError(null);
+            }}
+          />
+          {/* Modal */}
+          <div
+            className={`relative w-full max-w-lg rounded-2xl border shadow-2xl ${
+              isDark
+                ? "bg-slate-800 border-slate-700"
+                : "bg-white border-gray-200"
+            }`}
+          >
+            {/* Header */}
+            <div
+              className={`flex items-center justify-between px-6 py-4 border-b ${
+                isDark ? "border-slate-700" : "border-gray-200"
+              }`}
+            >
+              <h2
+                className={`text-lg font-semibold ${
+                  isDark ? "text-white" : "text-gray-900"
+                }`}
+              >
+                Invite to Meeting
+              </h2>
+              <button
+                onClick={() => {
+                  setShowInviteModal(false);
+                  setInviteSuccess(null);
+                  setInviteError(null);
+                }}
+                className={`p-1.5 rounded-lg transition-colors ${
+                  isDark
+                    ? "hover:bg-slate-700 text-slate-400"
+                    : "hover:bg-gray-100 text-gray-500"
+                }`}
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-6">
+              {/* Join Code */}
+              <div>
+                <label
+                  className={`block text-sm font-medium mb-2 ${
+                    isDark ? "text-slate-300" : "text-gray-700"
+                  }`}
+                >
+                  Join Code
+                </label>
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`flex-1 flex items-center justify-center py-3 rounded-lg font-mono text-2xl font-bold tracking-[0.3em] ${
+                      isDark
+                        ? "bg-slate-900 text-cyan-400 border border-slate-700"
+                        : "bg-gray-50 text-blue-600 border border-gray-200"
+                    }`}
+                  >
+                    {meeting.joinCode}
+                  </div>
+                  <button
+                    onClick={handleCopyCode}
+                    className={`px-4 py-3 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                      codeCopied
+                        ? "bg-emerald-500/20 text-emerald-400"
+                        : isDark
+                        ? "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    }`}
+                  >
+                    {codeCopied ? (
+                      <>
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M5 13l4 4L19 7"
+                          />
+                        </svg>
+                        Copied
+                      </>
+                    ) : (
+                      <>
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                          />
+                        </svg>
+                        Copy
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Join URL */}
+              <div>
+                <label
+                  className={`block text-sm font-medium mb-2 ${
+                    isDark ? "text-slate-300" : "text-gray-700"
+                  }`}
+                >
+                  Join URL
+                </label>
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`flex-1 px-3 py-2.5 rounded-lg text-sm truncate ${
+                      isDark
+                        ? "bg-slate-900 text-slate-300 border border-slate-700"
+                        : "bg-gray-50 text-gray-600 border border-gray-200"
+                    }`}
+                  >
+                    {typeof window !== "undefined"
+                      ? `${window.location.origin}/join/${meeting.joinCode}`
+                      : `/join/${meeting.joinCode}`}
+                  </div>
+                  <button
+                    onClick={handleCopyUrl}
+                    className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                      urlCopied
+                        ? "bg-emerald-500/20 text-emerald-400"
+                        : isDark
+                        ? "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    }`}
+                  >
+                    {urlCopied ? (
+                      <>
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M5 13l4 4L19 7"
+                          />
+                        </svg>
+                        Copied
+                      </>
+                    ) : (
+                      <>
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                          />
+                        </svg>
+                        Copy
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="relative">
+                <div
+                  className={`absolute inset-0 flex items-center ${
+                    isDark ? "border-slate-700" : "border-gray-200"
+                  }`}
+                >
+                  <div
+                    className={`w-full border-t ${
+                      isDark ? "border-slate-700" : "border-gray-200"
+                    }`}
+                  />
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span
+                    className={`px-3 ${
+                      isDark
+                        ? "bg-slate-800 text-slate-500"
+                        : "bg-white text-gray-400"
+                    }`}
+                  >
+                    or send an email invite
+                  </span>
+                </div>
+              </div>
+
+              {/* Email Invite Form */}
+              <div className="space-y-3">
+                <div>
+                  <label
+                    className={`block text-sm font-medium mb-1.5 ${
+                      isDark ? "text-slate-300" : "text-gray-700"
+                    }`}
+                  >
+                    Name{" "}
+                    <span
+                      className={`font-normal ${
+                        isDark ? "text-slate-500" : "text-gray-400"
+                      }`}
+                    >
+                      (optional)
+                    </span>
+                  </label>
+                  <input
+                    type="text"
+                    value={inviteName}
+                    onChange={(e) => setInviteName(e.target.value)}
+                    placeholder="Guest name"
+                    className={`w-full px-3 py-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 transition-colors ${
+                      isDark
+                        ? "bg-slate-900 border border-slate-700 text-white placeholder-slate-500 focus:ring-cyan-500/50 focus:border-cyan-500"
+                        : "bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:ring-blue-500/50 focus:border-blue-500"
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label
+                    className={`block text-sm font-medium mb-1.5 ${
+                      isDark ? "text-slate-300" : "text-gray-700"
+                    }`}
+                  >
+                    Email <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="guest@example.com"
+                    className={`w-full px-3 py-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 transition-colors ${
+                      isDark
+                        ? "bg-slate-900 border border-slate-700 text-white placeholder-slate-500 focus:ring-cyan-500/50 focus:border-cyan-500"
+                        : "bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:ring-blue-500/50 focus:border-blue-500"
+                    }`}
+                  />
+                </div>
+
+                {inviteSuccess && (
+                  <div className="flex items-center gap-2 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+                    <svg
+                      className="w-4 h-4 text-emerald-400 flex-shrink-0"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M5 13l4 4L19 7"
+                      />
+                    </svg>
+                    <p className="text-sm text-emerald-400">{inviteSuccess}</p>
+                  </div>
+                )}
+
+                {inviteError && (
+                  <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+                    <svg
+                      className="w-4 h-4 text-red-400 flex-shrink-0"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                    <p className="text-sm text-red-400">{inviteError}</p>
+                  </div>
+                )}
+
+                <button
+                  onClick={handleSendInvite}
+                  disabled={inviteSending || !inviteEmail.trim()}
+                  className={`w-full py-2.5 px-4 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+                    isDark
+                      ? "bg-cyan-500 hover:bg-cyan-600 disabled:bg-cyan-500/30 text-white disabled:text-cyan-300/50"
+                      : "bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white"
+                  } disabled:cursor-not-allowed`}
+                >
+                  {inviteSending ? (
+                    <>
+                      <svg
+                        className="w-4 h-4 animate-spin"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        />
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                        />
+                      </svg>
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                        />
+                      </svg>
+                      Send Email Invite
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Sent Invites List */}
+              {meetingInvites && meetingInvites.length > 0 && (
+                <div>
+                  <label
+                    className={`block text-sm font-medium mb-2 ${
+                      isDark ? "text-slate-300" : "text-gray-700"
+                    }`}
+                  >
+                    Sent Invites
+                  </label>
+                  <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                    {meetingInvites.map((inv: any) => (
+                      <div
+                        key={String(inv._id)}
+                        className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm ${
+                          isDark ? "bg-slate-900/50" : "bg-gray-50"
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <span
+                            className={`truncate block ${
+                              isDark ? "text-slate-300" : "text-gray-700"
+                            }`}
+                          >
+                            {inv.name ? `${inv.name} (${inv.email})` : inv.email}
+                          </span>
+                        </div>
+                        <span
+                          className={`ml-2 flex-shrink-0 px-2 py-0.5 rounded-full text-xs font-medium ${
+                            inv.status === "joined"
+                              ? "bg-emerald-500/20 text-emerald-400"
+                              : inv.status === "opened"
+                              ? "bg-amber-500/20 text-amber-400"
+                              : "bg-slate-500/20 text-slate-400"
+                          }`}
+                        >
+                          {inv.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
