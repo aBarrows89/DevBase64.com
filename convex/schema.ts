@@ -1107,6 +1107,11 @@ export default defineSchema({
     // Public access settings
     isPublic: v.optional(v.boolean()), // Whether document is publicly accessible
     publicSlug: v.optional(v.string()), // URL-friendly slug for public access
+    expiresAt: v.optional(v.number()), // Unix timestamp for document expiration
+    expirationAlertDays: v.optional(v.number()), // Days before expiration to alert (default 30)
+    // E-Signature settings
+    requiresSignature: v.optional(v.boolean()), // Whether this document requires e-signatures
+    signatureCount: v.optional(v.number()), // Number of signatures collected
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -1115,6 +1120,21 @@ export default defineSchema({
     .index("by_created", ["createdAt"])
     .index("by_public_slug", ["publicSlug"])
     .index("by_folder", ["folderId"]),
+
+  // ============ DOCUMENT HUB E-SIGNATURES ============
+  docHubSignatures: defineTable({
+    documentId: v.id("documents"),
+    signedBy: v.id("users"),
+    signedByName: v.string(),
+    signedByEmail: v.optional(v.string()),
+    signatureData: v.string(), // Base64 signature image from canvas
+    signedAt: v.number(),
+    ipAddress: v.optional(v.string()),
+    userAgent: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_document", ["documentId"])
+    .index("by_user", ["signedBy"]),
 
   // ============ DOCUMENT FOLDERS ============
   documentFolders: defineTable({
@@ -2891,4 +2911,38 @@ export default defineSchema({
     .index("by_recipient", ["toParticipantId", "isConsumed"])
     .index("by_meeting", ["meetingId"])
     .index("by_created", ["createdAt"]),
+
+  // ============ DOCUMENT VERSIONS ============
+  documentVersions: defineTable({
+    documentId: v.id("documents"),
+    version: v.number(),
+    fileId: v.id("_storage"),
+    fileName: v.string(),
+    fileSize: v.number(),
+    fileType: v.string(),
+    changeNotes: v.optional(v.string()),
+    uploadedBy: v.id("users"),
+    uploadedByName: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_document", ["documentId"]),
+
+  // ============ DOCUMENT TEMPLATES ============
+  documentTemplates: defineTable({
+    name: v.string(),
+    description: v.optional(v.string()),
+    category: v.string(), // "forms" | "policies" | "sops" | "templates" | "training" | "other"
+    fileId: v.id("_storage"),
+    fileName: v.string(),
+    fileType: v.string(),
+    fileSize: v.number(),
+    createdBy: v.id("users"),
+    createdByName: v.string(),
+    usageCount: v.number(),
+    isActive: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_category", ["category"])
+    .index("by_active", ["isActive"]),
 });

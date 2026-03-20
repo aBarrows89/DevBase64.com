@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import Protected from "../protected";
 import Sidebar from "@/components/Sidebar";
 import { useTheme } from "../theme-context";
@@ -44,6 +44,19 @@ function DocumentsContent() {
   const incrementDownload = useMutation(api.documents.incrementDownload);
   const getFileDownloadUrl = useAction(api.documents.getFileDownloadUrl);
   const togglePublic = useMutation(api.documents.togglePublic);
+  const uploadNewVersion = useMutation(api.documents.uploadNewVersion);
+  const restoreVersionMutation = useMutation(api.documents.restoreVersion);
+  const setExpiration = useMutation(api.documents.setExpiration);
+  const removeExpirationMutation = useMutation(api.documents.removeExpiration);
+  const expiringDocuments = useQuery(api.documents.getExpiring, { days: 90 });
+
+  // Template APIs
+  const templatesList = useQuery(api.documentTemplates.list, {});
+  const createTemplate = useMutation(api.documentTemplates.create);
+  const createTemplateFromUpload = useMutation(api.documentTemplates.createFromUpload);
+  const useTemplateMutation = useMutation(api.documentTemplates.useTemplate);
+  const archiveTemplate = useMutation(api.documentTemplates.archive);
+  const generateTemplateUploadUrl = useMutation(api.documentTemplates.generateUploadUrl);
 
   // Folder APIs
   const createFolder = useMutation(api.documentFolders.create);
@@ -129,6 +142,77 @@ function DocumentsContent() {
   // How To modal state
   const [showHowToModal, setShowHowToModal] = useState(false);
 
+  // Version History state
+  const [versionHistoryDocId, setVersionHistoryDocId] = useState<Id<"documents"> | null>(null);
+  const [showUploadVersionModal, setShowUploadVersionModal] = useState(false);
+  const [versionFile, setVersionFile] = useState<File | null>(null);
+  const [versionChangeNotes, setVersionChangeNotes] = useState("");
+  const [uploadingVersion, setUploadingVersion] = useState(false);
+  const [restoringVersion, setRestoringVersion] = useState(false);
+  const versionFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Template state
+  const [showTemplatesView, setShowTemplatesView] = useState(false);
+  const [showTemplateUploadModal, setShowTemplateUploadModal] = useState(false);
+  const [showUseTemplateModal, setShowUseTemplateModal] = useState(false);
+  const [showSaveAsTemplateModal, setShowSaveAsTemplateModal] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<Id<"documentTemplates"> | null>(null);
+  const [saveAsTemplateDocId, setSaveAsTemplateDocId] = useState<Id<"documents"> | null>(null);
+  const [templateFormData, setTemplateFormData] = useState({
+    name: "",
+    description: "",
+    category: "templates",
+  });
+  const [useTemplateName, setUseTemplateName] = useState("");
+  const [useTemplateFolderId, setUseTemplateFolderId] = useState<Id<"documentFolders"> | null>(null);
+  const [templateFile, setTemplateFile] = useState<File | null>(null);
+  const [uploadingTemplate, setUploadingTemplate] = useState(false);
+  const [usingTemplate, setUsingTemplate] = useState(false);
+  const templateFileInputRef = useRef<HTMLInputElement>(null);
+  const [templateCategoryFilter, setTemplateCategoryFilter] = useState<string | null>(null);
+
+  // Expiration state
+  const [expirationDate, setExpirationDate] = useState("");
+  const [expirationAlertDays, setExpirationAlertDays] = useState("30");
+  const [showExpirationModal, setShowExpirationModal] = useState(false);
+  const [expirationDocId, setExpirationDocId] = useState<Id<"documents"> | null>(null);
+
+  // E-Signature state
+  const [requiresSignature, setRequiresSignature] = useState(false);
+  const [showSignModal, setShowSignModal] = useState(false);
+  const [signDocumentId, setSignDocumentId] = useState<Id<"documents"> | null>(null);
+  const [showViewSignaturesModal, setShowViewSignaturesModal] = useState(false);
+  const [viewSignaturesDocId, setViewSignaturesDocId] = useState<Id<"documents"> | null>(null);
+  const [signing, setSigning] = useState(false);
+  const signCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [hasDrawn, setHasDrawn] = useState(false);
+
+  // E-Signature APIs
+  const signDocumentMutation = useMutation(api.documentSignatures.sign);
+  const unsignedDocuments = useQuery(
+    api.documentSignatures.getUnsignedForUser,
+    user ? { userId: user._id } : "skip"
+  );
+  const signModalSignatures = useQuery(
+    api.documentSignatures.getByDocument,
+    viewSignaturesDocId ? { documentId: viewSignaturesDocId } : "skip"
+  );
+  const hasCurrentUserSigned = useQuery(
+    api.documentSignatures.hasUserSigned,
+    signDocumentId && user ? { documentId: signDocumentId, userId: user._id } : "skip"
+  );
+
+  // Search APIs
+  const searchResults = useQuery(
+    api.documents.search,
+    searchQuery.trim() ? { query: searchQuery, category: selectedCategory || undefined } : "skip"
+  );
+  const folderSearchResults = useQuery(
+    api.documentFolders.search,
+    searchQuery.trim() ? { query: searchQuery } : "skip"
+  );
+
   // Load unlocked folders from sessionStorage on mount
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -187,6 +271,12 @@ function DocumentsContent() {
   const userAccessCheck = useQuery(
     api.documentFolders.checkUserAccess,
     user && currentFolderId ? { folderId: currentFolderId, userId: user._id } : "skip"
+  );
+
+  // Version history query
+  const documentVersions = useQuery(
+    api.documents.getVersions,
+    versionHistoryDocId ? { documentId: versionHistoryDocId } : "skip"
   );
 
   // Preview modal state
@@ -281,7 +371,7 @@ function DocumentsContent() {
       }
 
       // Create document record
-      await createDocument({
+      const newDocId = await createDocument({
         name: formData.name,
         description: formData.description || undefined,
         category: formData.category,
@@ -292,12 +382,25 @@ function DocumentsContent() {
         fileSize: selectedFile.size,
         uploadedBy: user._id,
         uploadedByName: user.name,
+        requiresSignature: requiresSignature || undefined,
       });
+
+      // Set expiration if date was provided
+      if (expirationDate && newDocId) {
+        await setExpiration({
+          documentId: newDocId,
+          expiresAt: new Date(expirationDate).getTime(),
+          expirationAlertDays: parseInt(expirationAlertDays) || 30,
+        });
+      }
 
       // Reset form first so modal closes
       setShowUploadModal(false);
       setSelectedFile(null);
       setFormData({ name: "", description: "", category: "forms" });
+      setExpirationDate("");
+      setExpirationAlertDays("30");
+      setRequiresSignature(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
 
       // Refresh folder documents if we're in a folder
@@ -409,6 +512,61 @@ function DocumentsContent() {
   const closePreview = () => {
     setPreviewDocument(null);
     setPreviewUrl(null);
+  };
+
+  // Version History handlers
+  const handleUploadNewVersion = async () => {
+    if (!versionFile || !versionHistoryDocId || !user) return;
+    setUploadingVersion(true);
+    setError("");
+    try {
+      const uploadUrl = await generateUploadUrl();
+      const result = await fetch(uploadUrl, {
+        method: "POST",
+        headers: { "Content-Type": versionFile.type || "application/octet-stream" },
+        body: versionFile,
+      });
+      const { storageId } = await result.json();
+
+      await uploadNewVersion({
+        documentId: versionHistoryDocId,
+        fileId: storageId,
+        fileName: versionFile.name,
+        fileType: versionFile.type || "application/octet-stream",
+        fileSize: versionFile.size,
+        changeNotes: versionChangeNotes || undefined,
+        uploadedBy: user._id,
+        uploadedByName: user.name,
+      });
+
+      setShowUploadVersionModal(false);
+      setVersionFile(null);
+      setVersionChangeNotes("");
+    } catch (err) {
+      console.error("Version upload error:", err);
+      setError(err instanceof Error ? err.message : "Version upload failed");
+    } finally {
+      setUploadingVersion(false);
+    }
+  };
+
+  const handleRestoreVersion = async (versionId: Id<"documentVersions">) => {
+    if (!versionHistoryDocId || !user) return;
+    if (!confirm("Restore this version? The current file will be archived as a new version.")) return;
+    setRestoringVersion(true);
+    try {
+      await restoreVersionMutation({
+        documentId: versionHistoryDocId,
+        versionId,
+        restoredBy: user._id,
+        restoredByName: user.name,
+      });
+    } catch (err) {
+      console.error("Restore version error:", err);
+      setError(err instanceof Error ? err.message : "Restore failed");
+    } finally {
+      setRestoringVersion(false);
+    }
   };
 
   // Share/Public link handlers
@@ -829,6 +987,270 @@ function DocumentsContent() {
     });
   };
 
+  // Template handlers
+  const handleUploadTemplate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!templateFile || !user) return;
+
+    setUploadingTemplate(true);
+    setError("");
+
+    try {
+      const uploadUrl = await generateTemplateUploadUrl();
+      if (!uploadUrl) throw new Error("Failed to generate upload URL");
+
+      const mimeType = getFileMimeType(templateFile);
+      const response = await fetch(uploadUrl, {
+        method: "POST",
+        headers: { "Content-Type": mimeType },
+        body: templateFile,
+      });
+
+      if (!response.ok) throw new Error(`Upload failed: ${response.status}`);
+
+      const result = await response.json();
+      const storageId = result.storageId;
+      if (!storageId) throw new Error("No storage ID returned");
+
+      await createTemplateFromUpload({
+        name: templateFormData.name,
+        description: templateFormData.description || undefined,
+        category: templateFormData.category,
+        fileId: storageId,
+        fileName: templateFile.name,
+        fileType: mimeType,
+        fileSize: templateFile.size,
+        createdBy: user._id,
+        createdByName: user.name,
+      });
+
+      setShowTemplateUploadModal(false);
+      setTemplateFile(null);
+      setTemplateFormData({ name: "", description: "", category: "templates" });
+      if (templateFileInputRef.current) templateFileInputRef.current.value = "";
+    } catch (err) {
+      console.error("Template upload error:", err);
+      setError(err instanceof Error ? err.message : "Template upload failed");
+    } finally {
+      setUploadingTemplate(false);
+    }
+  };
+
+  const handleSaveAsTemplate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!saveAsTemplateDocId || !user) return;
+
+    setUploadingTemplate(true);
+    setError("");
+
+    try {
+      await createTemplate({
+        name: templateFormData.name,
+        description: templateFormData.description || undefined,
+        category: templateFormData.category,
+        documentId: saveAsTemplateDocId,
+        createdBy: user._id,
+        createdByName: user.name,
+      });
+
+      setShowSaveAsTemplateModal(false);
+      setSaveAsTemplateDocId(null);
+      setTemplateFormData({ name: "", description: "", category: "templates" });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save as template");
+    } finally {
+      setUploadingTemplate(false);
+    }
+  };
+
+  const handleUseTemplate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTemplateId || !user) return;
+
+    setUsingTemplate(true);
+    setError("");
+
+    try {
+      await useTemplateMutation({
+        templateId: selectedTemplateId,
+        name: useTemplateName,
+        folderId: useTemplateFolderId || undefined,
+        uploadedBy: user._id,
+        uploadedByName: user.name,
+      });
+
+      setShowUseTemplateModal(false);
+      setSelectedTemplateId(null);
+      setUseTemplateName("");
+      setUseTemplateFolderId(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create document from template");
+    } finally {
+      setUsingTemplate(false);
+    }
+  };
+
+  const handleArchiveTemplate = async (templateId: Id<"documentTemplates">) => {
+    if (!confirm("Are you sure you want to archive this template?")) return;
+    try {
+      await archiveTemplate({ templateId });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to archive template");
+    }
+  };
+
+  // Expiration handlers
+  const handleSetExpiration = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!expirationDocId || !expirationDate) return;
+
+    try {
+      const expiresAt = new Date(expirationDate).getTime();
+      await setExpiration({
+        documentId: expirationDocId,
+        expiresAt,
+        expirationAlertDays: parseInt(expirationAlertDays) || 30,
+      });
+      setShowExpirationModal(false);
+      setExpirationDocId(null);
+      setExpirationDate("");
+      setExpirationAlertDays("30");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to set expiration");
+    }
+  };
+
+  const handleRemoveExpiration = async (docId: Id<"documents">) => {
+    try {
+      await removeExpirationMutation({ documentId: docId });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to remove expiration");
+    }
+  };
+
+  // ============ E-SIGNATURE HANDLERS ============
+
+  const initSignCanvas = useCallback(() => {
+    const canvas = signCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    // Set canvas size to match display size
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * 2;
+    canvas.height = rect.height * 2;
+    ctx.scale(2, 2);
+    ctx.strokeStyle = "#000000";
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    // Fill white background
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, rect.width, rect.height);
+  }, []);
+
+  const getCanvasPoint = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    const canvas = signCanvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    if ("touches" in e) {
+      return {
+        x: e.touches[0].clientX - rect.left,
+        y: e.touches[0].clientY - rect.top,
+      };
+    }
+    return {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    };
+  };
+
+  const handleSignCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    const canvas = signCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    setIsDrawing(true);
+    setHasDrawn(true);
+    const point = getCanvasPoint(e);
+    ctx.beginPath();
+    ctx.moveTo(point.x, point.y);
+  };
+
+  const handleSignCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    if (!isDrawing) return;
+    const canvas = signCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const point = getCanvasPoint(e);
+    ctx.lineTo(point.x, point.y);
+    ctx.stroke();
+  };
+
+  const handleSignCanvasMouseUp = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    setIsDrawing(false);
+  };
+
+  const clearSignCanvas = () => {
+    const canvas = signCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const rect = canvas.getBoundingClientRect();
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, rect.width, rect.height);
+    setHasDrawn(false);
+  };
+
+  const handleSignDocument = async () => {
+    if (!signDocumentId || !user || !signCanvasRef.current) return;
+    setSigning(true);
+    try {
+      const signatureData = signCanvasRef.current.toDataURL("image/png");
+      await signDocumentMutation({
+        documentId: signDocumentId,
+        userId: user._id,
+        signatureData,
+        userAgent: typeof navigator !== "undefined" ? navigator.userAgent : undefined,
+      });
+      setShowSignModal(false);
+      setSignDocumentId(null);
+      setHasDrawn(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to sign document");
+    } finally {
+      setSigning(false);
+    }
+  };
+
+  const openSignModal = (docId: Id<"documents">) => {
+    setSignDocumentId(docId);
+    setShowSignModal(true);
+    setHasDrawn(false);
+    // Initialize canvas after modal renders
+    setTimeout(() => initSignCanvas(), 100);
+  };
+
+  const getExpirationStatus = (doc: { expiresAt?: number; expirationAlertDays?: number }) => {
+    if (!doc.expiresAt) return null;
+    const now = Date.now();
+    const alertDays = doc.expirationAlertDays ?? 30;
+    const alertTime = doc.expiresAt - alertDays * 24 * 60 * 60 * 1000;
+
+    if (now >= doc.expiresAt) return "expired";
+    if (now >= alertTime) return "expiring_soon";
+    return "active";
+  };
+
+  const filteredTemplates = templatesList?.filter((t) => {
+    if (templateCategoryFilter && t.category !== templateCategoryFilter) return false;
+    return true;
+  });
+
   // Use archived, folder, or root documents based on view
   const sourceDocuments = showArchived
     ? archivedDocuments
@@ -939,6 +1361,26 @@ function DocumentsContent() {
                   )}
                 </button>
               )}
+              {!showArchived && !currentFolderId && (
+                <button
+                  onClick={() => setShowTemplatesView(!showTemplatesView)}
+                  className={`px-3 sm:px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
+                    showTemplatesView
+                      ? isDark ? "bg-purple-500 text-white hover:bg-purple-600" : "bg-purple-600 text-white hover:bg-purple-700"
+                      : isDark ? "bg-slate-700 text-slate-300 hover:bg-slate-600" : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                  }`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+                  </svg>
+                  <span className="hidden sm:inline">Templates</span>
+                  {templatesList && templatesList.length > 0 && (
+                    <span className={`px-1.5 py-0.5 text-xs rounded-full ${showTemplatesView ? "bg-white/20" : isDark ? "bg-purple-500/30 text-purple-300" : "bg-purple-100 text-purple-700"}`}>
+                      {templatesList.length}
+                    </span>
+                  )}
+                </button>
+              )}
               {!showArchived && (
                 <button
                   onClick={() => {
@@ -961,6 +1403,8 @@ function DocumentsContent() {
                     setEditingDocument(null);
                     setSelectedFile(null);
                     setFormData({ name: "", description: "", category: "forms" });
+                    setExpirationDate("");
+                    setExpirationAlertDays("30");
                   }}
                   className={`px-3 sm:px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${isDark ? "bg-cyan-500 text-white hover:bg-cyan-600" : "bg-blue-600 text-white hover:bg-blue-700"}`}
                 >
@@ -1015,8 +1459,322 @@ function DocumentsContent() {
             )}
           </div>
 
+          {/* Search Results - shown when search query is active */}
+          {searchQuery.trim() ? (
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className={`text-sm font-semibold flex items-center gap-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  Search Results
+                  {searchResults && folderSearchResults && (
+                    <span className={`text-xs font-normal ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                      ({(folderSearchResults?.length || 0) + (searchResults?.length || 0)} found)
+                    </span>
+                  )}
+                </h2>
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${isDark ? "bg-slate-700 text-slate-300 hover:bg-slate-600" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+                >
+                  Clear search
+                </button>
+              </div>
+              {folderSearchResults && folderSearchResults.length > 0 && (
+                <div className="mb-4">
+                  <h3 className={`text-xs font-medium mb-2 uppercase tracking-wider ${isDark ? "text-slate-500" : "text-gray-400"}`}>Folders</h3>
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                    {folderSearchResults.map((folder) => (
+                      <div
+                        key={folder._id}
+                        onClick={() => { setSearchQuery(""); handleOpenFolder(folder as any); }}
+                        className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-all ${isDark ? "bg-slate-800/50 border-slate-700 hover:border-cyan-500/50" : "bg-white border-gray-200 shadow-sm hover:border-blue-400"}`}
+                      >
+                        <div className={`p-2 rounded-lg ${isDark ? "bg-slate-700" : "bg-gray-100"}`}>
+                          <svg className={`w-5 h-5 ${isDark ? "text-cyan-400" : "text-blue-500"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                          </svg>
+                        </div>
+                        <div className="min-w-0">
+                          <p className={`font-medium truncate ${isDark ? "text-white" : "text-gray-900"}`}>{folder.name}</p>
+                          {folder.description && <p className={`text-xs truncate ${isDark ? "text-slate-400" : "text-gray-500"}`}>{folder.description}</p>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {searchResults && searchResults.length > 0 && (
+                <div>
+                  <h3 className={`text-xs font-medium mb-2 uppercase tracking-wider ${isDark ? "text-slate-500" : "text-gray-400"}`}>Documents</h3>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {searchResults.map((doc) => {
+                      const category = CATEGORIES.find((c) => c.value === doc.category);
+                      const previewable = canPreview(doc.fileType);
+                      return (
+                        <div key={doc._id} className={`border rounded-xl p-4 transition-all ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"} ${previewable ? "cursor-pointer hover:border-cyan-500/50" : ""}`} onClick={previewable ? () => handlePreview(doc) : undefined}>
+                          <div className="flex items-start gap-3">
+                            <div className={`text-2xl p-2 rounded-lg ${isDark ? "bg-slate-700" : "bg-gray-100"}`}>{category?.icon || "📄"}</div>
+                            <div className="flex-1 min-w-0">
+                              <h3 className={`font-semibold truncate ${isDark ? "text-white" : "text-gray-900"}`}>{doc.name}</h3>
+                              <p className={`text-xs mt-0.5 ${isDark ? "text-slate-500" : "text-gray-400"}`}>{doc.fileName}</p>
+                              {doc.description && <p className={`text-sm mt-1 line-clamp-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>{doc.description}</p>}
+                            </div>
+                          </div>
+                          <div className={`flex items-center gap-3 mt-3 text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                            <span className={`px-2 py-0.5 rounded ${isDark ? "bg-slate-700" : "bg-gray-100"}`}>{category?.label}</span>
+                            <span>{formatFileSize(doc.fileSize)}</span>
+                            {doc.folderId && <span className={`px-2 py-0.5 rounded ${isDark ? "bg-cyan-500/10 text-cyan-400" : "bg-blue-50 text-blue-600"}`}>In folder</span>}
+                          </div>
+                          <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-slate-700/50" onClick={(e) => e.stopPropagation()}>
+                            {previewable && <button onClick={() => handlePreview(doc)} className={`flex-1 px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center justify-center gap-1 ${isDark ? "bg-purple-500/20 text-purple-400 hover:bg-purple-500/30" : "bg-purple-100 text-purple-600 hover:bg-purple-200"}`}>Preview</button>}
+                            <button onClick={() => handleDownload(doc)} className={`flex-1 px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center justify-center gap-1 ${isDark ? "bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30" : "bg-blue-100 text-blue-600 hover:bg-blue-200"}`}>Download</button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {searchResults && folderSearchResults && searchResults.length === 0 && folderSearchResults.length === 0 && (
+                <div className={`text-center py-12 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                  <svg className="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                  <p className="font-medium">No results found</p>
+                  <p className="text-sm mt-1">Try a different search term</p>
+                </div>
+              )}
+              {(!searchResults || !folderSearchResults) && (
+                <div className={`text-center py-8 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                  <svg className="w-6 h-6 animate-spin mx-auto mb-2" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                  <p className="text-sm">Searching...</p>
+                </div>
+              )}
+            </div>
+          ) : (<>
+          {/* Needs Your Signature Alert */}
+          {!showArchived && !showTemplatesView && unsignedDocuments && unsignedDocuments.length > 0 && !currentFolderId && (
+            <div className={`mb-6 border rounded-xl p-4 ${isDark ? "bg-blue-500/5 border-blue-500/30" : "bg-blue-50 border-blue-200"}`}>
+              <h2 className={`text-sm font-semibold mb-3 flex items-center gap-2 ${isDark ? "text-blue-400" : "text-blue-700"}`}>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+                Needs Your Signature ({unsignedDocuments.length})
+              </h2>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {unsignedDocuments.map((doc) => (
+                  <div
+                    key={doc._id}
+                    className={`flex items-center gap-3 p-3 rounded-lg ${isDark ? "bg-slate-800/80" : "bg-white"}`}
+                  >
+                    <div className="px-2 py-1 text-xs font-medium rounded-full bg-blue-500/20 text-blue-400">
+                      Sign
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-medium truncate ${isDark ? "text-white" : "text-gray-900"}`}>{doc.name}</p>
+                      <p className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                        {doc.signatureCount || 0} signed
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => openSignModal(doc._id)}
+                      className={`text-xs px-3 py-1.5 rounded font-medium ${isDark ? "bg-blue-500 text-white hover:bg-blue-600" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+                    >
+                      Sign Now
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Expiring Documents Alert */}
+          {!showArchived && !showTemplatesView && expiringDocuments && expiringDocuments.length > 0 && !currentFolderId && (
+            <div className={`mb-6 border rounded-xl p-4 ${isDark ? "bg-amber-500/5 border-amber-500/30" : "bg-amber-50 border-amber-200"}`}>
+              <h2 className={`text-sm font-semibold mb-3 flex items-center gap-2 ${isDark ? "text-amber-400" : "text-amber-700"}`}>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Expiring Documents ({expiringDocuments.length})
+              </h2>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {expiringDocuments.map((doc) => {
+                  const status = getExpirationStatus(doc);
+                  const daysLeft = doc.expiresAt ? Math.ceil((doc.expiresAt - Date.now()) / (24 * 60 * 60 * 1000)) : 0;
+                  return (
+                    <div
+                      key={doc._id}
+                      className={`flex items-center gap-3 p-3 rounded-lg ${isDark ? "bg-slate-800/80" : "bg-white"}`}
+                    >
+                      <div className={`px-2 py-1 text-xs font-medium rounded-full ${
+                        status === "expired"
+                          ? "bg-red-500/20 text-red-400"
+                          : "bg-amber-500/20 text-amber-400"
+                      }`}>
+                        {status === "expired" ? "Expired" : `${daysLeft}d left`}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-medium truncate ${isDark ? "text-white" : "text-gray-900"}`}>{doc.name}</p>
+                        <p className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                          {doc.expiresAt ? new Date(doc.expiresAt).toLocaleDateString() : ""}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setExpirationDocId(doc._id);
+                          setExpirationDate(doc.expiresAt ? new Date(doc.expiresAt).toISOString().split("T")[0] : "");
+                          setExpirationAlertDays(String(doc.expirationAlertDays ?? 30));
+                          setShowExpirationModal(true);
+                        }}
+                        className={`text-xs px-2 py-1 rounded ${isDark ? "bg-slate-700 text-slate-300 hover:bg-slate-600" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Templates View */}
+          {showTemplatesView && !showArchived && !currentFolderId && (
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className={`text-lg font-semibold flex items-center gap-2 ${isDark ? "text-white" : "text-gray-900"}`}>
+                  <svg className="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+                  </svg>
+                  Document Templates
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowTemplateUploadModal(true);
+                    setTemplateFile(null);
+                    setTemplateFormData({ name: "", description: "", category: "templates" });
+                  }}
+                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${isDark ? "bg-purple-500 text-white hover:bg-purple-600" : "bg-purple-600 text-white hover:bg-purple-700"}`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Upload Template
+                </button>
+              </div>
+
+              {/* Template Category Filters */}
+              <div className="flex flex-wrap gap-2 mb-4">
+                <button
+                  onClick={() => setTemplateCategoryFilter(null)}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                    templateCategoryFilter === null
+                      ? isDark ? "bg-purple-500 text-white" : "bg-purple-600 text-white"
+                      : isDark ? "bg-slate-800 text-slate-300 hover:bg-slate-700" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
+                >
+                  All ({templatesList?.length || 0})
+                </button>
+                {CATEGORIES.map((cat) => {
+                  const count = templatesList?.filter((t) => t.category === cat.value).length || 0;
+                  if (count === 0) return null;
+                  return (
+                    <button
+                      key={cat.value}
+                      onClick={() => setTemplateCategoryFilter(cat.value)}
+                      className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors flex items-center gap-1.5 ${
+                        templateCategoryFilter === cat.value
+                          ? isDark ? "bg-purple-500 text-white" : "bg-purple-600 text-white"
+                          : isDark ? "bg-slate-800 text-slate-300 hover:bg-slate-700" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                      }`}
+                    >
+                      <span>{cat.icon}</span>
+                      {cat.label} ({count})
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Templates Grid */}
+              {!filteredTemplates || filteredTemplates.length === 0 ? (
+                <div className={`text-center py-12 border rounded-xl ${isDark ? "bg-slate-800/50 border-slate-700 text-slate-400" : "bg-white border-gray-200 text-gray-500"}`}>
+                  <div className="text-4xl mb-3">📄</div>
+                  <p>No templates yet. Upload a template or save a document as a template.</p>
+                </div>
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {filteredTemplates.map((template) => {
+                    const category = CATEGORIES.find((c) => c.value === template.category);
+                    return (
+                      <div
+                        key={template._id}
+                        className={`border rounded-xl p-4 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className={`text-2xl p-2 rounded-lg ${isDark ? "bg-purple-500/20" : "bg-purple-100"}`}>
+                            {category?.icon || "📄"}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className={`font-semibold truncate ${isDark ? "text-white" : "text-gray-900"}`}>
+                              {template.name}
+                            </h3>
+                            <p className={`text-xs mt-0.5 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                              {template.fileName}
+                            </p>
+                            {template.description && (
+                              <p className={`text-sm mt-1 line-clamp-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                                {template.description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className={`flex items-center gap-3 mt-3 text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                          <span className={`px-2 py-0.5 rounded ${isDark ? "bg-purple-500/20 text-purple-400" : "bg-purple-100 text-purple-600"}`}>
+                            {category?.label}
+                          </span>
+                          <span>{formatFileSize(template.fileSize)}</span>
+                          <span className="flex items-center gap-1">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                            </svg>
+                            Used {template.usageCount}x
+                          </span>
+                        </div>
+
+                        <div className="flex gap-2 mt-4 pt-3 border-t border-slate-700/50">
+                          <button
+                            onClick={() => {
+                              setSelectedTemplateId(template._id);
+                              setUseTemplateName(template.name);
+                              setUseTemplateFolderId(null);
+                              setShowUseTemplateModal(true);
+                            }}
+                            className={`flex-1 px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center justify-center gap-1 ${isDark ? "bg-purple-500/20 text-purple-400 hover:bg-purple-500/30" : "bg-purple-100 text-purple-600 hover:bg-purple-200"}`}
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                            Use Template
+                          </button>
+                          {isAdmin && (
+                            <button
+                              onClick={() => handleArchiveTemplate(template._id)}
+                              className="px-3 py-1.5 text-xs font-medium rounded transition-colors bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                            >
+                              Archive
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* My Folders Section - User's own folders */}
-          {!showArchived && myFolders && myFolders.length > 0 && (() => {
+          {!showArchived && !showTemplatesView && myFolders && myFolders.length > 0 && (() => {
             const sortedMyFolders = sortFoldersByUserOrder(myFolders, "myFolders");
             return (
             <div className="mb-6">
@@ -1155,7 +1913,7 @@ function DocumentsContent() {
           )})()}
 
           {/* Shared With Me Section - show at root level only */}
-          {!showArchived && !currentFolderId && sharedFoldersWithMe && sharedFoldersWithMe.length > 0 && (() => {
+          {!showArchived && !showTemplatesView && !currentFolderId && sharedFoldersWithMe && sharedFoldersWithMe.length > 0 && (() => {
             const filteredShared = sharedFoldersWithMe.filter((f): f is NonNullable<typeof f> => f !== null);
             const sortedShared = sortFoldersByUserOrder(filteredShared, "shared");
             return (
@@ -1222,7 +1980,7 @@ function DocumentsContent() {
           )})()}
 
           {/* Community Folders Section - Public folders visible to all */}
-          {!showArchived && !currentFolderId && communityFolders && communityFolders.length > 0 && (() => {
+          {!showArchived && !showTemplatesView && !currentFolderId && communityFolders && communityFolders.length > 0 && (() => {
             const sortedCommunity = sortFoldersByUserOrder(communityFolders, "community");
             return (
             <div className="mb-6">
@@ -1290,7 +2048,7 @@ function DocumentsContent() {
           )})()}
 
           {/* Loading state for folder documents */}
-          {loadingFolderDocs && (
+          {!showTemplatesView && loadingFolderDocs && (
             <div className="flex items-center justify-center py-12">
               <svg className="w-8 h-8 animate-spin text-cyan-500" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -1300,7 +2058,7 @@ function DocumentsContent() {
           )}
 
           {/* Category Filters */}
-          {!loadingFolderDocs && (
+          {!showTemplatesView && !loadingFolderDocs && (
             <div className="flex flex-wrap gap-2 mb-6">
               <button
                 onClick={() => setSelectedCategory(null)}
@@ -1330,7 +2088,7 @@ function DocumentsContent() {
           )}
 
           {/* Documents Grid */}
-          {!loadingFolderDocs && (!filteredDocuments || filteredDocuments.length === 0) ? (
+          {!showTemplatesView && !loadingFolderDocs && (!filteredDocuments || filteredDocuments.length === 0) ? (
             <div className={`text-center py-12 border rounded-xl ${isDark ? "bg-slate-800/50 border-slate-700 text-slate-400" : "bg-white border-gray-200 text-gray-500"}`}>
               <div className="text-4xl mb-3">{showArchived ? "📦" : currentFolderId ? "📁" : "📄"}</div>
               <p>
@@ -1341,7 +2099,7 @@ function DocumentsContent() {
                     : "No documents yet. Upload your first document to get started."}
               </p>
             </div>
-          ) : !loadingFolderDocs && (
+          ) : !showTemplatesView && !loadingFolderDocs && (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {filteredDocuments?.map((doc) => {
                 const category = CATEGORIES.find((c) => c.value === doc.category);
@@ -1395,6 +2153,40 @@ function DocumentsContent() {
                       {previewable && (
                         <span className={`px-2 py-0.5 rounded ${isDark ? "bg-cyan-500/20 text-cyan-400" : "bg-blue-100 text-blue-600"}`}>
                           Click to preview
+                        </span>
+                      )}
+                      {(() => {
+                        const expStatus = getExpirationStatus(doc);
+                        if (expStatus === "expired") {
+                          return (
+                            <span className="px-2 py-0.5 rounded bg-red-500/20 text-red-400 font-medium">
+                              Expired
+                            </span>
+                          );
+                        }
+                        if (expStatus === "expiring_soon") {
+                          const daysLeft = doc.expiresAt ? Math.ceil((doc.expiresAt - Date.now()) / (24 * 60 * 60 * 1000)) : 0;
+                          return (
+                            <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 font-medium">
+                              Expires in {daysLeft}d
+                            </span>
+                          );
+                        }
+                        if (doc.expiresAt) {
+                          return (
+                            <span className={`px-2 py-0.5 rounded ${isDark ? "bg-slate-700 text-slate-400" : "bg-gray-100 text-gray-500"}`}>
+                              Exp: {new Date(doc.expiresAt).toLocaleDateString()}
+                            </span>
+                          );
+                        }
+                        return null;
+                      })()}
+                      {doc.requiresSignature && (
+                        <span className={`px-2 py-0.5 rounded flex items-center gap-1 ${isDark ? "bg-blue-500/20 text-blue-400" : "bg-blue-100 text-blue-600"}`}>
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                          </svg>
+                          {doc.signatureCount || 0} signed
                         </span>
                       )}
                     </div>
@@ -1459,6 +2251,71 @@ function DocumentsContent() {
                             Edit
                           </button>
                           <button
+                            onClick={() => {
+                              setSaveAsTemplateDocId(doc._id);
+                              setTemplateFormData({ name: doc.name, description: doc.description || "", category: doc.category });
+                              setShowSaveAsTemplateModal(true);
+                            }}
+                            className={`px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1 ${isDark ? "bg-purple-500/20 text-purple-400 hover:bg-purple-500/30" : "bg-purple-100 text-purple-600 hover:bg-purple-200"}`}
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6z" />
+                            </svg>
+                            Template
+                          </button>
+                          <button
+                            onClick={() => {
+                              setExpirationDocId(doc._id);
+                              setExpirationDate(doc.expiresAt ? new Date(doc.expiresAt).toISOString().split("T")[0] : "");
+                              setExpirationAlertDays(String(doc.expirationAlertDays ?? 30));
+                              setShowExpirationModal(true);
+                            }}
+                            className={`px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1 ${
+                              doc.expiresAt
+                                ? isDark ? "bg-amber-500/20 text-amber-400 hover:bg-amber-500/30" : "bg-amber-100 text-amber-600 hover:bg-amber-200"
+                                : isDark ? "bg-slate-700 text-slate-300 hover:bg-slate-600" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                            }`}
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            {doc.expiresAt ? "Exp" : "Expire"}
+                          </button>
+                          <button
+                            onClick={() => setVersionHistoryDocId(doc._id)}
+                            className={`px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1 ${isDark ? "bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30" : "bg-indigo-100 text-indigo-600 hover:bg-indigo-200"}`}
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            Versions
+                          </button>
+                          {doc.requiresSignature && (
+                            <button
+                              onClick={() => openSignModal(doc._id)}
+                              className={`px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1 ${isDark ? "bg-blue-500/20 text-blue-400 hover:bg-blue-500/30" : "bg-blue-100 text-blue-600 hover:bg-blue-200"}`}
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                              </svg>
+                              Sign
+                            </button>
+                          )}
+                          {doc.requiresSignature && (doc.signatureCount || 0) > 0 && (
+                            <button
+                              onClick={() => {
+                                setViewSignaturesDocId(doc._id);
+                                setShowViewSignaturesModal(true);
+                              }}
+                              className={`px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1 ${isDark ? "bg-green-500/20 text-green-400 hover:bg-green-500/30" : "bg-green-100 text-green-600 hover:bg-green-200"}`}
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              {doc.signatureCount} Sig{(doc.signatureCount || 0) !== 1 ? "s" : ""}
+                            </button>
+                          )}
+                          <button
                             onClick={() => handleArchive(doc._id)}
                             className="px-3 py-1.5 text-xs font-medium rounded transition-colors bg-red-500/10 text-red-400 hover:bg-red-500/20"
                           >
@@ -1472,6 +2329,7 @@ function DocumentsContent() {
               })}
             </div>
           )}
+        </>)}
         </div>
 
         {/* Preview Modal */}
@@ -1505,6 +2363,17 @@ function DocumentsContent() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                   </svg>
                   Download
+                </button>
+                <button
+                  onClick={() => {
+                    setVersionHistoryDocId(previewDocument._id);
+                  }}
+                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${isDark ? "bg-indigo-500 text-white hover:bg-indigo-600" : "bg-indigo-600 text-white hover:bg-indigo-700"}`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Versions
                 </button>
                 <button
                   onClick={closePreview}
@@ -1778,6 +2647,59 @@ function DocumentsContent() {
                   />
                 </div>
 
+                {!editingDocument && (
+                  <div className={`p-4 rounded-lg border ${isDark ? "bg-slate-700/30 border-slate-600" : "bg-gray-50 border-gray-200"}`}>
+                    <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                      Expiration Date (optional)
+                    </label>
+                    <input
+                      type="date"
+                      value={expirationDate}
+                      onChange={(e) => setExpirationDate(e.target.value)}
+                      className={`w-full px-4 py-3 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                    />
+                    {expirationDate && (
+                      <div className="mt-2">
+                        <label className={`block text-xs font-medium mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                          Alert days before
+                        </label>
+                        <select
+                          value={expirationAlertDays}
+                          onChange={(e) => setExpirationAlertDays(e.target.value)}
+                          className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-cyan-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500"}`}
+                        >
+                          <option value="7">7 days</option>
+                          <option value="14">14 days</option>
+                          <option value="30">30 days</option>
+                          <option value="60">60 days</option>
+                          <option value="90">90 days</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {!editingDocument && (
+                  <div className={`p-4 rounded-lg border ${isDark ? "bg-slate-700/30 border-slate-600" : "bg-gray-50 border-gray-200"}`}>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={requiresSignature}
+                        onChange={(e) => setRequiresSignature(e.target.checked)}
+                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <div>
+                        <span className={`text-sm font-medium ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                          Requires Signature
+                        </span>
+                        <p className={`text-xs mt-0.5 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                          Users will be prompted to e-sign this document
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                )}
+
                 <div className="flex gap-3 pt-4">
                   <button
                     type="button"
@@ -1786,6 +2708,7 @@ function DocumentsContent() {
                       setEditingDocument(null);
                       setSelectedFile(null);
                       setFormData({ name: "", description: "", category: "forms" });
+                      setRequiresSignature(false);
                     }}
                     className={`flex-1 px-4 py-3 font-medium rounded-lg transition-colors ${isDark ? "bg-slate-700 text-white hover:bg-slate-600" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
                   >
@@ -2185,6 +3108,161 @@ function DocumentsContent() {
           </div>
         )}
 
+        {/* Version History Modal */}
+        {versionHistoryDocId && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className={`border rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200"}`}>
+              <div className={`flex items-center justify-between p-4 border-b ${isDark ? "border-slate-700" : "border-gray-200"}`}>
+                <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  Version History
+                </h2>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setShowUploadVersionModal(true);
+                    }}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors flex items-center gap-1 ${isDark ? "bg-cyan-500 text-white hover:bg-cyan-600" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                    Upload New Version
+                  </button>
+                  <button
+                    onClick={() => setVersionHistoryDocId(null)}
+                    className={`p-2 rounded-lg transition-colors ${isDark ? "hover:bg-slate-700 text-slate-400" : "hover:bg-gray-100 text-gray-500"}`}
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4">
+                {!documentVersions ? (
+                  <div className={`text-center py-8 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    <svg className="w-6 h-6 animate-spin mx-auto mb-2" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    <p className="text-sm">Loading versions...</p>
+                  </div>
+                ) : documentVersions.length === 0 ? (
+                  <div className={`text-center py-8 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    <svg className="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <p className="font-medium">No version history</p>
+                    <p className="text-sm mt-1">Upload a new version to start tracking changes</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {documentVersions.map((version) => (
+                      <div
+                        key={version._id}
+                        className={`border rounded-lg p-4 ${isDark ? "bg-slate-700/50 border-slate-600" : "bg-gray-50 border-gray-200"}`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className={`inline-flex items-center px-2 py-0.5 text-xs font-semibold rounded ${isDark ? "bg-indigo-500/20 text-indigo-400" : "bg-indigo-100 text-indigo-700"}`}>
+                                v{version.version}
+                              </span>
+                              <span className={`text-sm font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                                {version.fileName}
+                              </span>
+                            </div>
+                            <div className={`flex items-center gap-3 mt-1.5 text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                              <span>By {version.uploadedByName}</span>
+                              <span>{new Date(version.createdAt).toLocaleDateString()} {new Date(version.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                              <span>{formatFileSize(version.fileSize)}</span>
+                            </div>
+                            {version.changeNotes && (
+                              <p className={`text-sm mt-2 ${isDark ? "text-slate-300" : "text-gray-600"}`}>
+                                {version.changeNotes}
+                              </p>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => handleRestoreVersion(version._id)}
+                            disabled={restoringVersion}
+                            className={`ml-3 px-3 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1 disabled:opacity-50 ${isDark ? "bg-amber-500/20 text-amber-400 hover:bg-amber-500/30" : "bg-amber-100 text-amber-600 hover:bg-amber-200"}`}
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            Restore
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Upload New Version Modal */}
+        {showUploadVersionModal && versionHistoryDocId && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+            <div className={`border rounded-xl p-6 w-full max-w-md ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200"}`}>
+              <h2 className={`text-lg font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
+                Upload New Version
+              </h2>
+              <div className="space-y-4">
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                    File
+                  </label>
+                  <input
+                    ref={versionFileInputRef}
+                    type="file"
+                    onChange={(e) => setVersionFile(e.target.files?.[0] || null)}
+                    className={`w-full text-sm border rounded-lg p-2 ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-white border-gray-300 text-gray-900"}`}
+                  />
+                  {versionFile && (
+                    <p className={`text-xs mt-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                      {versionFile.name} ({formatFileSize(versionFile.size)})
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                    Change Notes (optional)
+                  </label>
+                  <textarea
+                    value={versionChangeNotes}
+                    onChange={(e) => setVersionChangeNotes(e.target.value)}
+                    placeholder="Describe what changed in this version..."
+                    rows={3}
+                    className={`w-full border rounded-lg p-2.5 text-sm focus:outline-none focus:ring-2 ${isDark ? "bg-slate-700 border-slate-600 text-white placeholder-slate-500 focus:ring-cyan-500/50" : "bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:ring-blue-500/50"}`}
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => {
+                    setShowUploadVersionModal(false);
+                    setVersionFile(null);
+                    setVersionChangeNotes("");
+                  }}
+                  className={`flex-1 px-4 py-2.5 text-sm font-medium rounded-lg transition-colors ${isDark ? "bg-slate-700 text-slate-300 hover:bg-slate-600" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUploadNewVersion}
+                  disabled={!versionFile || uploadingVersion}
+                  className={`flex-1 px-4 py-2.5 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 ${isDark ? "bg-cyan-500 text-white hover:bg-cyan-600" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+                >
+                  {uploadingVersion ? "Uploading..." : "Upload Version"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* How To Modal */}
         {showHowToModal && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -2349,6 +3427,598 @@ function DocumentsContent() {
               >
                 Got it!
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* Template Upload Modal */}
+        {showTemplateUploadModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className={`border rounded-xl p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200"}`}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className={`text-xl font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  Upload Template
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowTemplateUploadModal(false);
+                    setTemplateFile(null);
+                    setTemplateFormData({ name: "", description: "", category: "templates" });
+                  }}
+                  className={`p-2 rounded-lg transition-colors ${isDark ? "hover:bg-slate-700 text-slate-400" : "hover:bg-gray-100 text-gray-500"}`}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <form onSubmit={handleUploadTemplate} className="space-y-4">
+                <div>
+                  <span className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                    Template File *
+                  </span>
+                  <label
+                    htmlFor="template-file-upload"
+                    className={`block border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+                      templateFile
+                        ? isDark ? "border-purple-500 bg-purple-500/10" : "border-purple-500 bg-purple-50"
+                        : isDark ? "border-slate-600 hover:border-slate-500" : "border-gray-300 hover:border-gray-400"
+                    }`}
+                  >
+                    <input
+                      id="template-file-upload"
+                      ref={templateFileInputRef}
+                      type="file"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setTemplateFile(file);
+                          if (!templateFormData.name) {
+                            setTemplateFormData({ ...templateFormData, name: file.name.replace(/\.[^/.]+$/, "") });
+                          }
+                        }
+                      }}
+                      className="sr-only"
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.png,.jpg,.jpeg"
+                    />
+                    {templateFile ? (
+                      <div>
+                        <div className="text-2xl mb-2">📄</div>
+                        <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>{templateFile.name}</p>
+                        <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>{formatFileSize(templateFile.size)}</p>
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="text-2xl mb-2">📤</div>
+                        <p className={isDark ? "text-slate-400" : "text-gray-500"}>Click to select a template file</p>
+                      </div>
+                    )}
+                  </label>
+                </div>
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                    Template Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={templateFormData.name}
+                    onChange={(e) => setTemplateFormData({ ...templateFormData, name: e.target.value })}
+                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-purple-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-purple-500"}`}
+                    required
+                    placeholder="e.g., New Hire Onboarding Checklist"
+                  />
+                </div>
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                    Category *
+                  </label>
+                  <select
+                    value={templateFormData.category}
+                    onChange={(e) => setTemplateFormData({ ...templateFormData, category: e.target.value })}
+                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-purple-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-purple-500"}`}
+                  >
+                    {CATEGORIES.map((cat) => (
+                      <option key={cat.value} value={cat.value}>
+                        {cat.icon} {cat.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                    Description
+                  </label>
+                  <textarea
+                    value={templateFormData.description}
+                    onChange={(e) => setTemplateFormData({ ...templateFormData, description: e.target.value })}
+                    rows={3}
+                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none resize-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-purple-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-purple-500"}`}
+                    placeholder="Brief description of this template..."
+                  />
+                </div>
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowTemplateUploadModal(false);
+                      setTemplateFile(null);
+                      setTemplateFormData({ name: "", description: "", category: "templates" });
+                    }}
+                    className={`flex-1 px-4 py-3 font-medium rounded-lg transition-colors ${isDark ? "bg-slate-700 text-white hover:bg-slate-600" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={uploadingTemplate || !templateFile}
+                    className={`flex-1 px-4 py-3 font-medium rounded-lg transition-colors disabled:opacity-50 ${isDark ? "bg-purple-500 text-white hover:bg-purple-600" : "bg-purple-600 text-white hover:bg-purple-700"}`}
+                  >
+                    {uploadingTemplate ? "Uploading..." : "Upload Template"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Save as Template Modal */}
+        {showSaveAsTemplateModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className={`border rounded-xl p-4 sm:p-6 w-full max-w-md ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200"}`}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className={`text-xl font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  Save as Template
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowSaveAsTemplateModal(false);
+                    setSaveAsTemplateDocId(null);
+                  }}
+                  className={`p-2 rounded-lg transition-colors ${isDark ? "hover:bg-slate-700 text-slate-400" : "hover:bg-gray-100 text-gray-500"}`}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <form onSubmit={handleSaveAsTemplate} className="space-y-4">
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                    Template Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={templateFormData.name}
+                    onChange={(e) => setTemplateFormData({ ...templateFormData, name: e.target.value })}
+                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-purple-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-purple-500"}`}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                    Category *
+                  </label>
+                  <select
+                    value={templateFormData.category}
+                    onChange={(e) => setTemplateFormData({ ...templateFormData, category: e.target.value })}
+                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-purple-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-purple-500"}`}
+                  >
+                    {CATEGORIES.map((cat) => (
+                      <option key={cat.value} value={cat.value}>
+                        {cat.icon} {cat.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                    Description
+                  </label>
+                  <textarea
+                    value={templateFormData.description}
+                    onChange={(e) => setTemplateFormData({ ...templateFormData, description: e.target.value })}
+                    rows={3}
+                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none resize-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-purple-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-purple-500"}`}
+                    placeholder="Brief description..."
+                  />
+                </div>
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowSaveAsTemplateModal(false);
+                      setSaveAsTemplateDocId(null);
+                    }}
+                    className={`flex-1 px-4 py-3 font-medium rounded-lg transition-colors ${isDark ? "bg-slate-700 text-white hover:bg-slate-600" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={uploadingTemplate || !templateFormData.name}
+                    className={`flex-1 px-4 py-3 font-medium rounded-lg transition-colors disabled:opacity-50 ${isDark ? "bg-purple-500 text-white hover:bg-purple-600" : "bg-purple-600 text-white hover:bg-purple-700"}`}
+                  >
+                    {uploadingTemplate ? "Saving..." : "Save as Template"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Use Template Modal */}
+        {showUseTemplateModal && selectedTemplateId && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className={`border rounded-xl p-4 sm:p-6 w-full max-w-md ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200"}`}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className={`text-xl font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  Create from Template
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowUseTemplateModal(false);
+                    setSelectedTemplateId(null);
+                  }}
+                  className={`p-2 rounded-lg transition-colors ${isDark ? "hover:bg-slate-700 text-slate-400" : "hover:bg-gray-100 text-gray-500"}`}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <form onSubmit={handleUseTemplate} className="space-y-4">
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                    Document Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={useTemplateName}
+                    onChange={(e) => setUseTemplateName(e.target.value)}
+                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-purple-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-purple-500"}`}
+                    required
+                    placeholder="Name for the new document"
+                  />
+                </div>
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                    Folder (optional)
+                  </label>
+                  <select
+                    value={useTemplateFolderId || ""}
+                    onChange={(e) => setUseTemplateFolderId(e.target.value ? e.target.value as Id<"documentFolders"> : null)}
+                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-purple-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-purple-500"}`}
+                  >
+                    <option value="">No folder (root)</option>
+                    {folders?.map((folder) => (
+                      <option key={folder._id} value={folder._id}>
+                        {folder.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowUseTemplateModal(false);
+                      setSelectedTemplateId(null);
+                    }}
+                    className={`flex-1 px-4 py-3 font-medium rounded-lg transition-colors ${isDark ? "bg-slate-700 text-white hover:bg-slate-600" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={usingTemplate || !useTemplateName}
+                    className={`flex-1 px-4 py-3 font-medium rounded-lg transition-colors disabled:opacity-50 ${isDark ? "bg-purple-500 text-white hover:bg-purple-600" : "bg-purple-600 text-white hover:bg-purple-700"}`}
+                  >
+                    {usingTemplate ? "Creating..." : "Create Document"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Expiration Modal */}
+        {showExpirationModal && expirationDocId && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className={`border rounded-xl p-4 sm:p-6 w-full max-w-md ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200"}`}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className={`text-xl font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  Set Expiration
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowExpirationModal(false);
+                    setExpirationDocId(null);
+                  }}
+                  className={`p-2 rounded-lg transition-colors ${isDark ? "hover:bg-slate-700 text-slate-400" : "hover:bg-gray-100 text-gray-500"}`}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <form onSubmit={handleSetExpiration} className="space-y-4">
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                    Expiration Date *
+                  </label>
+                  <input
+                    type="date"
+                    value={expirationDate}
+                    onChange={(e) => setExpirationDate(e.target.value)}
+                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-amber-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-amber-500"}`}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                    Alert Days Before Expiration
+                  </label>
+                  <select
+                    value={expirationAlertDays}
+                    onChange={(e) => setExpirationAlertDays(e.target.value)}
+                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none ${isDark ? "bg-slate-900/50 border-slate-600 text-white focus:border-amber-500" : "bg-gray-50 border-gray-300 text-gray-900 focus:border-amber-500"}`}
+                  >
+                    <option value="7">7 days</option>
+                    <option value="14">14 days</option>
+                    <option value="30">30 days</option>
+                    <option value="60">60 days</option>
+                    <option value="90">90 days</option>
+                  </select>
+                  <p className={`text-xs mt-1 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                    Document will show a warning badge this many days before expiring.
+                  </p>
+                </div>
+                <div className="flex gap-3 pt-4">
+                  {expirationDate && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleRemoveExpiration(expirationDocId);
+                        setShowExpirationModal(false);
+                        setExpirationDocId(null);
+                        setExpirationDate("");
+                      }}
+                      className="px-4 py-3 font-medium rounded-lg transition-colors bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                    >
+                      Remove
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowExpirationModal(false);
+                      setExpirationDocId(null);
+                    }}
+                    className={`flex-1 px-4 py-3 font-medium rounded-lg transition-colors ${isDark ? "bg-slate-700 text-white hover:bg-slate-600" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!expirationDate}
+                    className={`flex-1 px-4 py-3 font-medium rounded-lg transition-colors disabled:opacity-50 ${isDark ? "bg-amber-500 text-white hover:bg-amber-600" : "bg-amber-600 text-white hover:bg-amber-700"}`}
+                  >
+                    Set Expiration
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Sign Document Modal */}
+        {showSignModal && signDocumentId && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className={`border rounded-xl p-4 sm:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200"}`}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className={`text-xl font-semibold flex items-center gap-2 ${isDark ? "text-white" : "text-gray-900"}`}>
+                  <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                  Sign Document
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowSignModal(false);
+                    setSignDocumentId(null);
+                    setHasDrawn(false);
+                  }}
+                  className={`p-2 rounded-lg transition-colors ${isDark ? "hover:bg-slate-700 text-slate-400" : "hover:bg-gray-100 text-gray-500"}`}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Document info */}
+              {(() => {
+                const doc = documents?.find(d => d._id === signDocumentId) ||
+                           folderDocuments?.find(d => d._id === signDocumentId) ||
+                           unsignedDocuments?.find(d => d._id === signDocumentId);
+                return doc ? (
+                  <div className={`p-3 rounded-lg mb-4 ${isDark ? "bg-slate-700/50" : "bg-gray-50"}`}>
+                    <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>{doc.name}</p>
+                    {doc.description && (
+                      <p className={`text-sm mt-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>{doc.description}</p>
+                    )}
+                    <p className={`text-xs mt-1 ${isDark ? "text-slate-500" : "text-gray-400"}`}>{doc.fileName}</p>
+                  </div>
+                ) : null;
+              })()}
+
+              {hasCurrentUserSigned ? (
+                <div className={`p-4 rounded-lg text-center ${isDark ? "bg-green-500/10 border border-green-500/30" : "bg-green-50 border border-green-200"}`}>
+                  <svg className="w-8 h-8 mx-auto mb-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p className={`font-medium ${isDark ? "text-green-400" : "text-green-700"}`}>You have already signed this document</p>
+                </div>
+              ) : (
+                <>
+                  <div className="mb-4">
+                    <label className={`block text-sm font-medium mb-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                      Draw your signature below
+                    </label>
+                    <div className={`border-2 rounded-lg overflow-hidden ${isDark ? "border-slate-600" : "border-gray-300"}`}>
+                      <canvas
+                        ref={signCanvasRef}
+                        className="w-full bg-white cursor-crosshair touch-none"
+                        style={{ height: "150px" }}
+                        onMouseDown={handleSignCanvasMouseDown}
+                        onMouseMove={handleSignCanvasMouseMove}
+                        onMouseUp={handleSignCanvasMouseUp}
+                        onMouseLeave={handleSignCanvasMouseUp}
+                        onTouchStart={handleSignCanvasMouseDown}
+                        onTouchMove={handleSignCanvasMouseMove}
+                        onTouchEnd={handleSignCanvasMouseUp}
+                      />
+                    </div>
+                    <div className="flex justify-end mt-2">
+                      <button
+                        type="button"
+                        onClick={clearSignCanvas}
+                        className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${isDark ? "bg-slate-700 text-slate-300 hover:bg-slate-600" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+
+                  <p className={`text-xs mb-4 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                    By clicking &quot;Sign Document&quot; below, you acknowledge that you have read and agree to the contents of this document. Your signature will be recorded with a timestamp.
+                  </p>
+
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowSignModal(false);
+                        setSignDocumentId(null);
+                        setHasDrawn(false);
+                      }}
+                      className={`flex-1 px-4 py-3 font-medium rounded-lg transition-colors ${isDark ? "bg-slate-700 text-white hover:bg-slate-600" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSignDocument}
+                      disabled={!hasDrawn || signing}
+                      className={`flex-1 px-4 py-3 font-medium rounded-lg transition-colors disabled:opacity-50 ${isDark ? "bg-blue-500 text-white hover:bg-blue-600" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+                    >
+                      {signing ? "Signing..." : "Sign Document"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* View Signatures Modal */}
+        {showViewSignaturesModal && viewSignaturesDocId && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className={`border rounded-xl p-4 sm:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200"}`}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className={`text-xl font-semibold flex items-center gap-2 ${isDark ? "text-white" : "text-gray-900"}`}>
+                  <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Signatures
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowViewSignaturesModal(false);
+                    setViewSignaturesDocId(null);
+                  }}
+                  className={`p-2 rounded-lg transition-colors ${isDark ? "hover:bg-slate-700 text-slate-400" : "hover:bg-gray-100 text-gray-500"}`}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Document info */}
+              {(() => {
+                const doc = documents?.find(d => d._id === viewSignaturesDocId) ||
+                           folderDocuments?.find(d => d._id === viewSignaturesDocId);
+                return doc ? (
+                  <div className={`p-3 rounded-lg mb-4 ${isDark ? "bg-slate-700/50" : "bg-gray-50"}`}>
+                    <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>{doc.name}</p>
+                    <p className={`text-xs mt-1 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                      {doc.signatureCount || 0} signature{(doc.signatureCount || 0) !== 1 ? "s" : ""} collected
+                    </p>
+                  </div>
+                ) : null;
+              })()}
+
+              {!signModalSignatures ? (
+                <div className={`text-center py-8 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                  <svg className="w-6 h-6 animate-spin mx-auto mb-2" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  <p className="text-sm">Loading signatures...</p>
+                </div>
+              ) : signModalSignatures.length === 0 ? (
+                <div className={`text-center py-8 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                  <p className="text-sm">No signatures yet.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {signModalSignatures.map((sig) => (
+                    <div
+                      key={sig._id}
+                      className={`p-3 rounded-lg border ${isDark ? "bg-slate-700/30 border-slate-600" : "bg-gray-50 border-gray-200"}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"}`}>
+                            {sig.signedByName}
+                          </p>
+                          {sig.signedByEmail && (
+                            <p className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                              {sig.signedByEmail}
+                            </p>
+                          )}
+                        </div>
+                        <p className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                          {new Date(sig.signedAt).toLocaleString()}
+                        </p>
+                      </div>
+                      {sig.signatureData && (
+                        <div className="mt-2 p-2 bg-white rounded border border-gray-200">
+                          <img
+                            src={sig.signatureData}
+                            alt={`Signature by ${sig.signedByName}`}
+                            className="h-12 object-contain mx-auto"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-4 pt-4 border-t border-slate-700/50">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowViewSignaturesModal(false);
+                    setViewSignaturesDocId(null);
+                  }}
+                  className={`w-full px-4 py-3 font-medium rounded-lg transition-colors ${isDark ? "bg-slate-700 text-white hover:bg-slate-600" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         )}

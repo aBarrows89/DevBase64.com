@@ -100,6 +100,28 @@ async function verifyPasswordHash(
   return result === 0;
 }
 
+// Full-text search across folders
+export const search = query({
+  args: { query: v.string() },
+  handler: async (ctx, args) => {
+    if (!args.query.trim()) return [];
+    const searchTerm = args.query.toLowerCase();
+
+    const folders = await ctx.db
+      .query("documentFolders")
+      .withIndex("by_active", (q) => q.eq("isActive", true))
+      .collect();
+
+    return folders
+      .filter(
+        (f) =>
+          f.name.toLowerCase().includes(searchTerm) ||
+          (f.description && f.description.toLowerCase().includes(searchTerm))
+      )
+      .slice(0, 20);
+  },
+});
+
 // ============ QUERIES ============
 
 // HIPAA-compliant folder visibility helper

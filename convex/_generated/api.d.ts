@@ -29,6 +29,8 @@ import type * as dealerInquiries from "../dealerInquiries.js";
 import type * as dealerRebates from "../dealerRebates.js";
 import type * as deletedRecords from "../deletedRecords.js";
 import type * as documentFolders from "../documentFolders.js";
+import type * as documentSignatures from "../documentSignatures.js";
+import type * as documentTemplates from "../documentTemplates.js";
 import type * as documents from "../documents.js";
 import type * as email_accountActions from "../email/accountActions.js";
 import type * as email_accounts from "../email/accounts.js";
@@ -128,6 +130,8 @@ declare const fullApi: ApiFromModules<{
   dealerRebates: typeof dealerRebates;
   deletedRecords: typeof deletedRecords;
   documentFolders: typeof documentFolders;
+  documentSignatures: typeof documentSignatures;
+  documentTemplates: typeof documentTemplates;
   documents: typeof documents;
   "email/accountActions": typeof email_accountActions;
   "email/accounts": typeof email_accounts;
