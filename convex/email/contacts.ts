@@ -20,35 +20,59 @@ export const search = query({
   },
   handler: async (ctx, args) => {
     const limit = args.limit || 10;
-    const queryLower = args.query.toLowerCase();
+    const queryLower = args.query.toLowerCase().trim();
 
-    if (!queryLower.trim()) {
-      // Return most frequently contacted
-      const contacts = await ctx.db
-        .query("emailContacts")
-        .withIndex("by_user", (q) => q.eq("userId", args.userId))
-        .take(limit * 2);
-
-      return contacts
-        .sort((a, b) => (b.sendCount + b.receiveCount) - (a.sendCount + a.receiveCount))
-        .slice(0, limit);
-    }
-
-    // Search by email or name
+    // Search email contacts
     const contacts = await ctx.db
       .query("emailContacts")
       .withIndex("by_user", (q) => q.eq("userId", args.userId))
       .collect();
 
-    const filtered = contacts.filter(
-      (c) =>
-        c.email.toLowerCase().includes(queryLower) ||
-        c.name?.toLowerCase().includes(queryLower)
-    );
+    let filtered = queryLower
+      ? contacts.filter(
+          (c) =>
+            c.email.toLowerCase().includes(queryLower) ||
+            c.name?.toLowerCase().includes(queryLower)
+        )
+      : contacts;
 
-    return filtered
+    const contactResults = filtered
       .sort((a, b) => (b.sendCount + b.receiveCount) - (a.sendCount + a.receiveCount))
-      .slice(0, limit);
+      .slice(0, limit)
+      .map((c) => ({
+        email: c.email,
+        name: c.name || null,
+        sendCount: c.sendCount,
+        receiveCount: c.receiveCount,
+        source: "contact" as const,
+      }));
+
+    // Also search IECentral users (for internal email suggestions)
+    const allUsers = await ctx.db.query("users").collect();
+    const contactEmails = new Set(contactResults.map((c) => c.email.toLowerCase()));
+
+    const userResults = allUsers
+      .filter((u) => {
+        if (!u.email || !u.isActive) return false;
+        if (String(u._id) === String(args.userId)) return false; // Exclude self
+        if (contactEmails.has(u.email.toLowerCase())) return false; // Already in contacts
+        if (!queryLower) return true; // Show all users when no query
+        return (
+          u.email.toLowerCase().includes(queryLower) ||
+          u.name.toLowerCase().includes(queryLower)
+        );
+      })
+      .slice(0, limit)
+      .map((u) => ({
+        email: u.email!,
+        name: u.name || null,
+        sendCount: 0,
+        receiveCount: 0,
+        source: "user" as const,
+      }));
+
+    // Contacts first, then users, limited total
+    return [...contactResults, ...userResults].slice(0, limit);
   },
 });
 
