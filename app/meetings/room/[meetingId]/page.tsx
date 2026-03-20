@@ -9,9 +9,11 @@ import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { useMediaStream } from "@/lib/webrtc/useMediaStream";
 import { usePeerConnections } from "@/lib/webrtc/usePeerConnections";
+import { useRemoteControl } from "@/lib/webrtc/useRemoteControl";
 import { useMediaRecorder } from "@/lib/webrtc/useMediaRecorder";
 import VideoGrid from "@/components/meetings/VideoGrid";
 import MeetingControls from "@/components/meetings/MeetingControls";
+import { ControlRequestModal, ControlGrantedNotification } from "@/components/meetings/ControlRequestModal";
 
 export default function MeetingRoomPage() {
   const params = useParams();
@@ -83,7 +85,7 @@ export default function MeetingRoomPage() {
   } = useMediaStream();
 
   // Peer connections — only initialize when we have the participant record
-  const remoteStreams = usePeerConnections({
+  const { remoteStreams, peerConnections } = usePeerConnections({
     localStream,
     myParticipantId: (myParticipant?._id ?? null) as unknown as Id<"meetingParticipants">,
     meetingId: typedMeetingId,
@@ -94,6 +96,26 @@ export default function MeetingRoomPage() {
   const [isNotedRecording, setIsNotedRecording] = useState(false);
   const [meetingNotesId, setMeetingNotesId] = useState<Id<"meetingNotes"> | null>(null);
   const [isUploadingAudio, setIsUploadingAudio] = useState(false);
+
+  // Remote control
+  const myDisplayName =
+    myParticipant?.displayName || user?.name || "Participant";
+
+  const remoteControl = useRemoteControl({
+    peerConnections,
+    myParticipantId: String(myParticipant?._id ?? ""),
+    myDisplayName,
+    isScreenSharing,
+  });
+
+  const [showControlGranted, setShowControlGranted] = useState(false);
+
+  // Show notification when control is granted to the viewer
+  useEffect(() => {
+    if (remoteControl.controlGranted) {
+      setShowControlGranted(true);
+    }
+  }, [remoteControl.controlGranted]);
 
   // Media recorder for noted meetings
   const { audioBlob, recordingDuration } = useMediaRecorder({
@@ -425,6 +447,12 @@ export default function MeetingRoomPage() {
       p.displayName || p.guestName || (p.userId === user?._id ? user?.name : "Participant"),
   }));
 
+  // Remote control: find the screen sharer (if it is someone else)
+  const screenSharer = enrichedParticipants.find(
+    (p: any) => p.isScreenSharing && String(p._id) !== String(myParticipant?._id)
+  );
+  const someoneElseIsScreenSharing = !!screenSharer;
+
   return (
     <div
       className={`h-screen flex flex-col ${
@@ -497,6 +525,23 @@ export default function MeetingRoomPage() {
           remoteStreams={remoteStreams}
           participants={enrichedParticipants}
           myParticipantId={String(myParticipant?._id ?? "")}
+          remoteControl={{
+            hasControl: remoteControl.hasControl,
+            controlTarget: remoteControl.controlTarget,
+            onMouseMove: remoteControl.onMouseMove,
+            onMouseDown: remoteControl.onMouseDown,
+            onMouseUp: remoteControl.onMouseUp,
+            onKeyDown: remoteControl.onKeyDown,
+            onKeyUp: remoteControl.onKeyUp,
+            onWheel: remoteControl.onWheel,
+            releaseControl: remoteControl.releaseControl,
+            activeController: remoteControl.activeController,
+            activeControllerName: remoteControl.activeControllerName,
+            remoteCursorPosition: remoteControl.remoteCursorPosition,
+            incomingRemoteEvents: remoteControl.incomingRemoteEvents,
+            revokeControl: remoteControl.revokeControl,
+            isScreenSharing,
+          }}
         />
       </div>
 
@@ -1034,7 +1079,30 @@ export default function MeetingRoomPage() {
           setShowParticipantList(!showParticipantList)
         }
         showParticipantList={showParticipantList}
+        someoneElseIsScreenSharing={someoneElseIsScreenSharing}
+        screenSharerParticipantId={screenSharer ? String(screenSharer._id) : null}
+        hasRemoteControl={remoteControl.hasControl}
+        activeControllerName={remoteControl.activeControllerName}
+        onRequestControl={remoteControl.requestControl}
+        onReleaseControl={remoteControl.releaseControl}
+        onRevokeControl={remoteControl.revokeControl}
       />
+
+      {/* Remote Control: Request modals for the screen sharer */}
+      {remoteControl.controlRequests.length > 0 && (
+        <ControlRequestModal
+          request={remoteControl.controlRequests[0]}
+          onGrant={remoteControl.grantControl}
+          onDeny={remoteControl.denyControl}
+        />
+      )}
+
+      {/* Remote Control: Granted notification for the viewer */}
+      {showControlGranted && remoteControl.controlGranted && (
+        <ControlGrantedNotification
+          onDismiss={() => setShowControlGranted(false)}
+        />
+      )}
     </div>
   );
 }

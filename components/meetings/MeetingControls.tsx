@@ -18,6 +18,14 @@ interface MeetingControlsProps {
   participantCount: number;
   onToggleParticipantList?: () => void;
   showParticipantList?: boolean;
+  // Remote control props
+  someoneElseIsScreenSharing?: boolean;
+  screenSharerParticipantId?: string | null;
+  hasRemoteControl?: boolean;
+  activeControllerName?: string | null;
+  onRequestControl?: (targetParticipantId: string) => void;
+  onReleaseControl?: () => void;
+  onRevokeControl?: () => void;
 }
 
 function ControlButton({
@@ -78,6 +86,13 @@ export default function MeetingControls({
   participantCount,
   onToggleParticipantList,
   showParticipantList,
+  someoneElseIsScreenSharing,
+  screenSharerParticipantId,
+  hasRemoteControl,
+  activeControllerName,
+  onRequestControl,
+  onReleaseControl,
+  onRevokeControl,
 }: MeetingControlsProps) {
   const { theme } = useTheme();
   const isDark = theme === "dark";
@@ -152,6 +167,46 @@ export default function MeetingControls({
           {isNotedMeeting && (
             <span className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full animate-pulse" />
           )}
+        </ControlButton>
+      )}
+
+      {/* Remote Control: Request / Release / Revoke */}
+      {someoneElseIsScreenSharing && !hasRemoteControl && screenSharerParticipantId && onRequestControl && (
+        <ControlButton
+          onClick={() => onRequestControl(screenSharerParticipantId)}
+          tooltip="Request remote control"
+        >
+          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.042 21.672L13.684 16.6m0 0l-2.51 2.225.569-9.47 5.227 7.917-3.286-.672zM12 2.25V4.5m5.834.166l-1.591 1.591M20.25 10.5H18M7.757 14.743l-1.59 1.59M6 10.5H3.75m4.007-4.243l-1.59-1.59" />
+          </svg>
+        </ControlButton>
+      )}
+
+      {hasRemoteControl && onReleaseControl && (
+        <ControlButton
+          onClick={onReleaseControl}
+          active={true}
+          tooltip="Release remote control"
+        >
+          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.042 21.672L13.684 16.6m0 0l-2.51 2.225.569-9.47 5.227 7.917-3.286-.672zM12 2.25V4.5m5.834.166l-1.591 1.591M20.25 10.5H18M7.757 14.743l-1.59 1.59M6 10.5H3.75m4.007-4.243l-1.59-1.59" />
+          </svg>
+          <span className="absolute top-0 right-0 w-3 h-3 bg-cyan-400 rounded-full animate-pulse" />
+        </ControlButton>
+      )}
+
+      {isScreenSharing && activeControllerName && onRevokeControl && (
+        <ControlButton
+          onClick={onRevokeControl}
+          active={true}
+          tooltip={`${activeControllerName} controlling — click to revoke`}
+        >
+          <div className="relative">
+            <svg className="w-6 h-6 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.042 21.672L13.684 16.6m0 0l-2.51 2.225.569-9.47 5.227 7.917-3.286-.672zM12 2.25V4.5m5.834.166l-1.591 1.591M20.25 10.5H18M7.757 14.743l-1.59 1.59M6 10.5H3.75m4.007-4.243l-1.59-1.59" />
+            </svg>
+            <span className="absolute top-0 right-0 w-3 h-3 bg-orange-400 rounded-full animate-pulse" />
+          </div>
         </ControlButton>
       )}
 

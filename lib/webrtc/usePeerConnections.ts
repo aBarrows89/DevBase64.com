@@ -34,18 +34,22 @@ interface UsePeerConnectionsOptions {
   participants: Participant[];
 }
 
+export interface UsePeerConnectionsReturn {
+  remoteStreams: Map<string, MediaStream>;
+  peerConnections: Map<string, RTCPeerConnection>;
+}
+
 /**
  * Manages a full-mesh of RTCPeerConnections — one per remote participant.
  *
- * Returns a `Map<string, MediaStream>` keyed by remote participant ID so the
- * UI can render each remote video.
+ * Returns remote streams and peer connections maps keyed by remote participant ID.
  */
 export function usePeerConnections({
   localStream,
   myParticipantId,
   meetingId,
   participants,
-}: UsePeerConnectionsOptions): Map<string, MediaStream> {
+}: UsePeerConnectionsOptions): UsePeerConnectionsReturn {
   const sendSignal = useMutation(api.meetingSignaling.sendSignal);
   const consumeSignal = useMutation(api.meetingSignaling.consumeSignal);
 
@@ -318,7 +322,7 @@ export function usePeerConnections({
     }
   }, [incomingSignals, myParticipantId, send, consume]);
 
-  // ---------- Build the return Map ----------
+  // ---------- Build the return Maps ----------
 
   const remoteStreams = useMemo(() => {
     // `streamVersion` is in the dependency array purely to trigger
@@ -334,5 +338,14 @@ export function usePeerConnections({
     return map;
   }, [streamVersion]);
 
-  return remoteStreams;
+  const peerConnectionsMap = useMemo(() => {
+    void streamVersion;
+    const map = new Map<string, RTCPeerConnection>();
+    for (const [id, peer] of peersRef.current) {
+      map.set(id, peer.pc);
+    }
+    return map;
+  }, [streamVersion]);
+
+  return { remoteStreams, peerConnections: peerConnectionsMap };
 }

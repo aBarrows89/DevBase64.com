@@ -2,7 +2,9 @@
 
 import { useTheme } from "@/app/theme-context";
 import VideoTile from "./VideoTile";
+import { ViewerControlOverlay, SharerControlOverlay } from "./RemoteControlOverlay";
 import { Id } from "@/convex/_generated/dataModel";
+import type { IncomingRemoteEvent } from "@/lib/webrtc/useRemoteControl";
 
 interface Participant {
   _id: Id<"meetingParticipants">;
@@ -14,11 +16,32 @@ interface Participant {
   isScreenSharing?: boolean;
 }
 
+interface RemoteControlProps {
+  // Viewer: I have control of the sharer's screen
+  hasControl: boolean;
+  controlTarget: string | null;
+  onMouseMove: (e: React.MouseEvent) => void;
+  onMouseDown: (e: React.MouseEvent) => void;
+  onMouseUp: (e: React.MouseEvent) => void;
+  onKeyDown: (e: React.KeyboardEvent) => void;
+  onKeyUp: (e: React.KeyboardEvent) => void;
+  onWheel: (e: React.WheelEvent) => void;
+  releaseControl: () => void;
+  // Sharer: someone is controlling my screen
+  activeController: string | null;
+  activeControllerName: string | null;
+  remoteCursorPosition: { x: number; y: number } | null;
+  incomingRemoteEvents: IncomingRemoteEvent[];
+  revokeControl: () => void;
+  isScreenSharing: boolean;
+}
+
 interface VideoGridProps {
   localStream: MediaStream | null;
   remoteStreams: Map<string, MediaStream>;
   participants: Participant[];
   myParticipantId: string;
+  remoteControl?: RemoteControlProps;
 }
 
 export default function VideoGrid({
@@ -26,6 +49,7 @@ export default function VideoGrid({
   remoteStreams,
   participants,
   myParticipantId,
+  remoteControl,
 }: VideoGridProps) {
   const { theme } = useTheme();
   const isDark = theme === "dark";
@@ -67,10 +91,23 @@ export default function VideoGrid({
       ? localStream
       : remoteStreams.get(String(screenSharer._id)) || null;
 
+    // Determine if remote control overlay should show on the screen share tile
+    const showViewerOverlay =
+      remoteControl &&
+      remoteControl.hasControl &&
+      !isLocalScreenSharing &&
+      remoteControl.controlTarget === String(screenSharer._id);
+
+    const showSharerOverlay =
+      remoteControl &&
+      remoteControl.isScreenSharing &&
+      isLocalScreenSharing &&
+      remoteControl.activeController != null;
+
     return (
       <div className="flex flex-col h-full gap-2">
         {/* Main screen share area */}
-        <div className="flex-1 min-h-0">
+        <div className="flex-1 min-h-0 relative">
           <VideoTile
             stream={screenShareStream}
             displayName={`${getName(screenSharer)}'s Screen`}
@@ -79,6 +116,29 @@ export default function VideoGrid({
             isLocal={isLocalScreenSharing ?? false}
             isScreenSharing={true}
           />
+
+          {/* Viewer control overlay — captures mouse/keyboard */}
+          {showViewerOverlay && remoteControl && (
+            <ViewerControlOverlay
+              onMouseMove={remoteControl.onMouseMove}
+              onMouseDown={remoteControl.onMouseDown}
+              onMouseUp={remoteControl.onMouseUp}
+              onKeyDown={remoteControl.onKeyDown}
+              onKeyUp={remoteControl.onKeyUp}
+              onWheel={remoteControl.onWheel}
+              onRelease={remoteControl.releaseControl}
+            />
+          )}
+
+          {/* Sharer control overlay — shows remote cursor */}
+          {showSharerOverlay && remoteControl && (
+            <SharerControlOverlay
+              controllerName={remoteControl.activeControllerName || "Participant"}
+              remoteCursorPosition={remoteControl.remoteCursorPosition}
+              incomingRemoteEvents={remoteControl.incomingRemoteEvents}
+              onRevoke={remoteControl.revokeControl}
+            />
+          )}
         </div>
 
         {/* Participant filmstrip */}
