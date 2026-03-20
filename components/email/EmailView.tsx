@@ -111,8 +111,8 @@ export default function EmailView({
 
   // Detect dates and event info from email
   const emailContent = email.bodyHtml || email.bodyText || email.snippet || "";
-  const detectedDates = useMemo(() => detectDates(emailContent), [emailContent]);
-  const eventInfo = useMemo(() => extractEventInfo(email.subject || "", emailContent), [email.subject, emailContent]);
+  const detectedDates = useMemo(() => detectDates(emailContent, email.date), [emailContent, email.date]);
+  const eventInfo = useMemo(() => extractEventInfo(email.subject || "", emailContent, email.date), [email.subject, emailContent, email.date]);
   const showCalendarHint = hasEventKeywords(emailContent) || detectedDates.length > 0;
 
   // Find users matching email addresses in the email

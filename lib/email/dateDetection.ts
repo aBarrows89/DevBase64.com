@@ -83,41 +83,41 @@ function parseMonth(month: string): number {
 }
 
 /**
- * Get the next occurrence of a day of week from today
+ * Get the next occurrence of a day of week from a reference date
  */
-function getNextDayOfWeek(day: string, fromToday: boolean = false): Date {
+function getNextDayOfWeek(day: string, referenceDate: Date, fromSameDay: boolean = false): Date {
   const targetDay = DAYS[day.toLowerCase()];
-  if (targetDay === undefined) return new Date();
+  if (targetDay === undefined) return new Date(referenceDate);
 
-  const today = new Date();
-  today.setHours(9, 0, 0, 0); // Default to 9 AM
+  const ref = new Date(referenceDate);
+  ref.setHours(9, 0, 0, 0);
 
-  const currentDay = today.getDay();
+  const currentDay = ref.getDay();
   let daysUntil = targetDay - currentDay;
 
-  if (daysUntil <= 0 && !fromToday) {
+  if (daysUntil <= 0 && !fromSameDay) {
     daysUntil += 7;
   }
 
-  const result = new Date(today);
+  const result = new Date(ref);
   result.setDate(result.getDate() + daysUntil);
   return result;
 }
 
 /**
- * Parse relative date expressions
+ * Parse relative date expressions relative to the email's send date
  */
-function parseRelativeDate(text: string): Date | null {
+function parseRelativeDate(text: string, referenceDate: Date): Date | null {
   const lower = text.toLowerCase().trim();
-  const today = new Date();
-  today.setHours(9, 0, 0, 0);
+  const ref = new Date(referenceDate);
+  ref.setHours(9, 0, 0, 0);
 
   if (lower === "today") {
-    return today;
+    return ref;
   }
 
   if (lower === "tomorrow") {
-    const tomorrow = new Date(today);
+    const tomorrow = new Date(ref);
     tomorrow.setDate(tomorrow.getDate() + 1);
     return tomorrow;
   }
@@ -125,20 +125,18 @@ function parseRelativeDate(text: string): Date | null {
   if (lower.startsWith("next ")) {
     const target = lower.replace("next ", "");
     if (target === "week") {
-      const nextWeek = new Date(today);
+      const nextWeek = new Date(ref);
       nextWeek.setDate(nextWeek.getDate() + 7);
       return nextWeek;
     }
     if (target === "month") {
-      const nextMonth = new Date(today);
+      const nextMonth = new Date(ref);
       nextMonth.setMonth(nextMonth.getMonth() + 1);
       return nextMonth;
     }
-    // Next [day of week]
     if (DAYS[target] !== undefined) {
-      const result = getNextDayOfWeek(target);
-      // "Next Monday" should be at least 1 week away
-      const daysAhead = (result.getTime() - today.getTime()) / (1000 * 60 * 60 * 24);
+      const result = getNextDayOfWeek(target, ref);
+      const daysAhead = (result.getTime() - ref.getTime()) / (1000 * 60 * 60 * 24);
       if (daysAhead < 7) {
         result.setDate(result.getDate() + 7);
       }
@@ -149,10 +147,10 @@ function parseRelativeDate(text: string): Date | null {
   if (lower.startsWith("this ")) {
     const target = lower.replace("this ", "");
     if (target === "weekend") {
-      return getNextDayOfWeek("saturday", true);
+      return getNextDayOfWeek("saturday", ref, true);
     }
     if (DAYS[target] !== undefined) {
-      return getNextDayOfWeek(target, true);
+      return getNextDayOfWeek(target, ref, true);
     }
   }
 
@@ -193,10 +191,13 @@ function applyTimeToDate(date: Date, timeText: string): { date: Date; hasTime: b
 
 /**
  * Detect all dates in email content
+ * @param content - Email HTML or text content
+ * @param emailDate - The date the email was sent (for resolving relative dates like "tomorrow")
  */
-export function detectDates(content: string): DetectedDate[] {
+export function detectDates(content: string, emailDate?: Date | number): DetectedDate[] {
   const detected: DetectedDate[] = [];
   const plainText = stripHtml(content);
+  const refDate = emailDate ? new Date(emailDate) : new Date();
 
   // US Date format (MM/DD/YYYY)
   let match;
@@ -289,7 +290,7 @@ export function detectDates(content: string): DetectedDate[] {
   const relativeRegex = new RegExp(DATE_PATTERNS.relative.source, "gi");
   while ((match = relativeRegex.exec(plainText)) !== null) {
     const [fullMatch] = match;
-    const parsedDate = parseRelativeDate(fullMatch);
+    const parsedDate = parseRelativeDate(fullMatch, refDate);
     if (parsedDate) {
       const contextStart = Math.max(0, match.index - 20);
       const contextEnd = Math.min(plainText.length, match.index + fullMatch.length + 30);
@@ -316,7 +317,15 @@ export function detectDates(content: string): DetectedDate[] {
     );
     if (alreadyMatched) continue;
 
-    const parsedDate = getNextDayOfWeek(day);
+    // Skip generic day mentions that aren't event-like (check surrounding context)
+    const surroundStart = Math.max(0, match.index - 40);
+    const surroundEnd = Math.min(plainText.length, match.index + fullMatch.length + 40);
+    const surrounding = plainText.slice(surroundStart, surroundEnd).toLowerCase();
+    const hasEventContext = EVENT_KEYWORDS.some(kw => surrounding.includes(kw)) ||
+      /\bat\b|\bby\b|\bon\b|\buntil\b|\bbefore\b|\bafter\b/.test(surrounding);
+    if (!hasEventContext) continue; // Skip standalone day mentions
+
+    const parsedDate = getNextDayOfWeek(day, refDate);
     const contextStart = Math.max(0, match.index - 20);
     const contextEnd = Math.min(plainText.length, match.index + fullMatch.length + 30);
     const context = plainText.slice(contextStart, contextEnd);
@@ -365,9 +374,9 @@ export function hasEventKeywords(content: string): boolean {
 /**
  * Extract potential event information from email
  */
-export function extractEventInfo(subject: string, content: string): DetectedEvent {
+export function extractEventInfo(subject: string, content: string, emailDate?: Date | number): DetectedEvent {
   const plainText = stripHtml(content);
-  const dates = detectDates(content);
+  const dates = detectDates(content, emailDate);
 
   // Try to extract location
   let location: string | undefined;

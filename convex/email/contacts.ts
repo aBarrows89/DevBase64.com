@@ -38,14 +38,7 @@ export const search = query({
 
     const contactResults = filtered
       .sort((a, b) => (b.sendCount + b.receiveCount) - (a.sendCount + a.receiveCount))
-      .slice(0, limit)
-      .map((c) => ({
-        email: c.email,
-        name: c.name || null,
-        sendCount: c.sendCount,
-        receiveCount: c.receiveCount,
-        source: "contact" as const,
-      }));
+      .slice(0, limit);
 
     // Also search IECentral users (for internal email suggestions)
     const allUsers = await ctx.db.query("users").collect();
@@ -54,9 +47,9 @@ export const search = query({
     const userResults = allUsers
       .filter((u) => {
         if (!u.email || !u.isActive) return false;
-        if (String(u._id) === String(args.userId)) return false; // Exclude self
-        if (contactEmails.has(u.email.toLowerCase())) return false; // Already in contacts
-        if (!queryLower) return true; // Show all users when no query
+        if (String(u._id) === String(args.userId)) return false;
+        if (contactEmails.has(u.email.toLowerCase())) return false;
+        if (!queryLower) return true;
         return (
           u.email.toLowerCase().includes(queryLower) ||
           u.name.toLowerCase().includes(queryLower)
@@ -64,11 +57,17 @@ export const search = query({
       })
       .slice(0, limit)
       .map((u) => ({
+        _id: u._id as any,
+        userId: args.userId,
         email: u.email!,
-        name: u.name || null,
+        name: u.name || undefined,
         sendCount: 0,
         receiveCount: 0,
-        source: "user" as const,
+        lastContactedAt: 0,
+        isFavorite: false,
+        isBlocked: false,
+        createdAt: 0,
+        updatedAt: 0,
       }));
 
     // Contacts first, then users, limited total
