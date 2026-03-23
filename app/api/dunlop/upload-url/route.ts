@@ -12,19 +12,12 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { filename, month } = body;
 
-    if (!filename || !month) {
-      return NextResponse.json(
-        { error: "filename and month are required" },
-        { status: 400 }
-      );
-    }
-
+    // Pass the full body through — Lambda handles both upload and download actions
     const res = await fetch(`${API_GATEWAY_URL}/dunlop/upload-url`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ filename, month }),
+      body: JSON.stringify(body),
     });
 
     if (!res.ok) {

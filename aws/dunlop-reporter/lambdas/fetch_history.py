@@ -15,7 +15,7 @@ s3 = boto3.client("s3")
 
 
 def handler(event, context):
-    http_method = event.get("httpMethod", "GET")
+    http_method = event.get("httpMethod") or event.get("requestContext", {}).get("http", {}).get("method", "GET")
 
     if http_method == "DELETE":
         return _handle_delete(event)
@@ -57,32 +57,21 @@ def _handle_delete(event):
         if not month or not timestamp:
             return _response(400, {"error": "month and timestamp are required"})
 
-        # Normalize timestamp for comparison (strip trailing Z, normalize +00:00)
-        norm_ts = timestamp.replace("Z", "+00:00").strip()
+        # Build the expected S3 key directly from the timestamp
+        safe_ts = timestamp.replace(":", "-")
+        expected_key = f"run-logs/{month}_{safe_ts}.json"
 
-        paginator = s3.get_paginator("list_objects_v2")
-        deleted = False
+        # Direct delete by constructed key
+        s3.delete_object(Bucket=S3_BUCKET, Key=expected_key)
 
-        for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=f"run-logs/{month}_"):
-            for obj in page.get("Contents", []):
-                key = obj["Key"]
-                try:
-                    resp = s3.get_object(Bucket=S3_BUCKET, Key=key)
-                    log_data = json.loads(resp["Body"].read().decode("utf-8"))
-                    log_ts = (log_data.get("timestamp") or "").replace("Z", "+00:00").strip()
-                    if log_ts == norm_ts:
-                        s3.delete_object(Bucket=S3_BUCKET, Key=key)
-                        deleted = True
-                        break
-                except Exception:
-                    continue
-            if deleted:
-                break
-
-        if deleted:
-            return _response(200, {"success": True})
-        else:
-            return _response(404, {"error": f"Run log not found for {month} at {timestamp}"})
+        # Verify it was deleted (delete_object succeeds even if key doesn't exist)
+        try:
+            s3.head_object(Bucket=S3_BUCKET, Key=expected_key)
+            # If we get here, the key still exists — shouldn't happen
+            return _response(500, {"error": f"Delete failed for key: {expected_key}"})
+        except s3.exceptions.ClientError:
+            # Key no longer exists — success
+            return _response(200, {"success": True, "key": expected_key})
 
     except Exception as e:
         return _response(500, {"error": str(e)})
