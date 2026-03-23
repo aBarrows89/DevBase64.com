@@ -46,8 +46,11 @@ export const listUpcoming = query({
       .withIndex("by_host", (q) => q.eq("hostId", args.userId))
       .collect();
 
+    const now = Date.now();
     const activeHosted = hostedMeetings.filter(
-      (m) => m.status === "scheduled" || m.status === "lobby" || m.status === "active"
+      (m) =>
+        (m.status === "lobby" || m.status === "active") ||
+        (m.status === "scheduled" && (m.scheduledStart === undefined || m.scheduledStart > now - 3600000)) // 1hr grace period
     );
 
     // Get meetings where user is a participant
@@ -65,7 +68,8 @@ export const listUpcoming = query({
     const activeParticipant = participantMeetings.filter(
       (m) =>
         m &&
-        (m.status === "scheduled" || m.status === "lobby" || m.status === "active") &&
+        ((m.status === "lobby" || m.status === "active") ||
+          (m.status === "scheduled" && (m.scheduledStart === undefined || m.scheduledStart > now - 3600000))) &&
         m.hostId !== args.userId // Avoid duplicates with hosted
     );
 
