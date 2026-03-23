@@ -57,9 +57,8 @@ def _handle_delete(event):
         if not month or not timestamp:
             return _response(400, {"error": "month and timestamp are required"})
 
-        # Find the matching log file by scanning keys
-        safe_ts = timestamp.replace(":", "-")
-        target_prefix = f"run-logs/{month}_{safe_ts}"
+        # Normalize timestamp for comparison (strip trailing Z, normalize +00:00)
+        norm_ts = timestamp.replace("Z", "+00:00").strip()
 
         paginator = s3.get_paginator("list_objects_v2")
         deleted = False
@@ -67,11 +66,11 @@ def _handle_delete(event):
         for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=f"run-logs/{month}_"):
             for obj in page.get("Contents", []):
                 key = obj["Key"]
-                # Match by reading the log and comparing timestamp
                 try:
                     resp = s3.get_object(Bucket=S3_BUCKET, Key=key)
                     log_data = json.loads(resp["Body"].read().decode("utf-8"))
-                    if log_data.get("timestamp") == timestamp:
+                    log_ts = (log_data.get("timestamp") or "").replace("Z", "+00:00").strip()
+                    if log_ts == norm_ts:
                         s3.delete_object(Bucket=S3_BUCKET, Key=key)
                         deleted = True
                         break
@@ -83,7 +82,7 @@ def _handle_delete(event):
         if deleted:
             return _response(200, {"success": True})
         else:
-            return _response(404, {"error": "Run log not found"})
+            return _response(404, {"error": f"Run log not found for {month} at {timestamp}"})
 
     except Exception as e:
         return _response(500, {"error": str(e)})

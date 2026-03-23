@@ -629,7 +629,32 @@ function RunHistoryTab({ isDark, canDelete }: { isDark: boolean; canDelete: bool
                 <tr key={`${i}-detail`}>
                   <td colSpan={7} className={`px-6 py-4 ${isDark ? "bg-slate-800/30" : "bg-gray-50"}`}>
                     <div className={`text-xs space-y-2 ${isDark ? "text-slate-400" : "text-gray-600"}`}>
-                      <p><span className="font-semibold">Output file:</span> {run.outputFile}</p>
+                      <p>
+                        <span className="font-semibold">Output file:</span>{" "}
+                        {run.outputFile && run.rows > 0 ? (
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              try {
+                                const res = await fetch(`${API_BASE}/upload-url`, {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ action: "download", filename: run.outputFile }),
+                                });
+                                if (res.ok) {
+                                  const { url } = await res.json();
+                                  window.open(url, "_blank");
+                                }
+                              } catch { /* ignore */ }
+                            }}
+                            className={`underline font-mono ${isDark ? "text-blue-400 hover:text-blue-300" : "text-blue-600 hover:text-blue-500"}`}
+                          >
+                            {run.outputFile}
+                          </button>
+                        ) : (
+                          <span className="font-mono">{run.outputFile}</span>
+                        )}
+                      </p>
                       {run.filterSummary && (
                         <div>
                           <span className="font-semibold">Filter pipeline:</span>

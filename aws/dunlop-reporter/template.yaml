@@ -288,6 +288,7 @@ Resources:
       Environment:
         Variables:
           S3_JMK_UPLOADS_BUCKET: !Ref JmkUploadsBucket
+          S3_OUTPUT_CSVS_BUCKET: !Ref OutputCsvsBucket
       Events:
         Api:
           Type: Api
