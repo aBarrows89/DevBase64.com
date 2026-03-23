@@ -9,6 +9,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import Link from "next/link";
 import { Id } from "@/convex/_generated/dataModel";
+import { useWebPush } from "@/lib/useWebPush";
 
 const typeIcons: Record<string, React.ReactNode> = {
   tenure_check_in: (
@@ -60,6 +61,7 @@ function NotificationsContent() {
   const isDark = theme === "dark";
 
   const [filter, setFilter] = useState<"all" | "unread">("all");
+  const { isSupported: pushSupported, isSubscribed: pushSubscribed, subscribeToPush, unsubscribeFromPush, isLoading: pushLoading } = useWebPush(user?._id);
 
   const notifications = useQuery(
     api.notifications.getByUser,
@@ -108,18 +110,36 @@ function NotificationsContent() {
                 {unreadCount > 0 ? `${unreadCount} unread` : "All caught up!"}
               </p>
             </div>
-            {unreadCount > 0 && (
-              <button
-                onClick={handleMarkAllAsRead}
-                className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                  isDark
-                    ? "text-cyan-400 hover:bg-cyan-500/20"
-                    : "text-blue-600 hover:bg-blue-50"
-                }`}
-              >
-                Mark all as read
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {unreadCount > 0 && (
+                <button
+                  onClick={handleMarkAllAsRead}
+                  className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
+                    isDark
+                      ? "text-cyan-400 hover:bg-cyan-500/20"
+                      : "text-blue-600 hover:bg-blue-50"
+                  }`}
+                >
+                  Mark all as read
+                </button>
+              )}
+              {pushSupported && (
+                <button
+                  onClick={pushSubscribed ? unsubscribeFromPush : subscribeToPush}
+                  disabled={pushLoading}
+                  className={`p-2 rounded-lg transition-colors ${
+                    pushSubscribed
+                      ? isDark ? "text-cyan-400 bg-cyan-500/20" : "text-blue-600 bg-blue-50"
+                      : isDark ? "text-slate-400 hover:text-white hover:bg-slate-700" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+                  }`}
+                  title={pushSubscribed ? "Push notifications enabled" : "Enable push notifications"}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                  </svg>
+                </button>
+              )}
+            </div>
           </div>
         </header>
 

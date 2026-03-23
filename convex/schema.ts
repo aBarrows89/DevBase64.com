@@ -2945,4 +2945,16 @@ export default defineSchema({
   })
     .index("by_category", ["category"])
     .index("by_active", ["isActive"]),
+
+  // ============ WEB PUSH SUBSCRIPTIONS ============
+  webPushSubscriptions: defineTable({
+    userId: v.id("users"),
+    endpoint: v.string(),
+    p256dh: v.string(), // Public key
+    auth: v.string(), // Auth secret
+    userAgent: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_endpoint", ["endpoint"]),
 });

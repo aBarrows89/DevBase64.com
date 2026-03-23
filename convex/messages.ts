@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query, action } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 
 // Get all conversations for a user
 export const getConversations = query({
@@ -271,6 +271,30 @@ export const sendMessage = mutation({
     await ctx.db.patch(args.conversationId, {
       lastMessageAt: Date.now(),
     });
+
+    // Send web push to other participants
+    const conversation = await ctx.db.get(args.conversationId);
+    if (conversation) {
+      const sender = await ctx.db.get(args.senderId);
+      const senderName = sender?.name || "Someone";
+      const messagePreview = args.content.startsWith("[GIF]")
+        ? "sent a GIF"
+        : args.content.length > 80
+          ? args.content.substring(0, 80) + "..."
+          : args.content;
+
+      for (const participantId of conversation.participants) {
+        if (participantId !== args.senderId) {
+          await ctx.scheduler.runAfter(0, internal.webPush.sendToUser, {
+            userId: participantId,
+            title: senderName,
+            body: messagePreview,
+            url: "/messages",
+            tag: "message",
+          });
+        }
+      }
+    }
 
     return messageId;
   },

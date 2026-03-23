@@ -7,6 +7,7 @@ import { SidebarProvider } from "./sidebar-context";
 import GlobalSearch from "@/components/GlobalSearch";
 import KeyboardShortcuts from "@/components/KeyboardShortcuts";
 import SystemBanner from "@/components/SystemBanner";
+import PushNotificationPrompt from "@/components/PushNotificationPrompt";
 
 // Production deployment
 const convex = new ConvexReactClient(
@@ -23,6 +24,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
             {children}
             <GlobalSearch />
             <KeyboardShortcuts />
+            <PushNotificationPrompt />
           </AuthProvider>
         </SidebarProvider>
       </ThemeProvider>

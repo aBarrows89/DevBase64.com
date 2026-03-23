@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
+import { internal } from "./_generated/api";
 
 // ============ QUERIES ============
 
@@ -57,6 +58,15 @@ export const create = mutation({
       isRead: false,
       isDismissed: false,
       createdAt: Date.now(),
+    });
+
+    // Send web push notification
+    await ctx.scheduler.runAfter(0, internal.webPush.sendToUser, {
+      userId: args.userId,
+      title: args.title,
+      body: args.message,
+      url: args.link,
+      tag: args.type,
     });
 
     return notificationId;
