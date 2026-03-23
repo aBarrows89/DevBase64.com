@@ -42,7 +42,7 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
 function ProjectsContent() {
   const { user } = useAuth();
   const projects = useQuery(api.projects.getAll, user?._id ? { userId: user._id } : {}) || [];
-  const stats = useQuery(api.projects.getStats);
+  const stats = useQuery(api.projects.getStats, user?._id ? { userId: user._id } : {});
   const users = useQuery(api.auth.getAllUsers) || [];
 
   // Get tasks assigned to me from other users' projects

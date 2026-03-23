@@ -20,28 +20,24 @@ export const getAll = query({
       projects = projects.filter((p) => p.status !== "archived");
     }
 
-    // Apply access control filtering if userId provided
+    // Apply access control filtering - projects are private by default
+    // Everyone only sees their own + shared + assigned projects
     if (args.userId) {
-      const currentUser = await ctx.db.get(args.userId);
+      projects = projects.filter((project) => {
+        // User owns the project
+        if (project.createdBy === args.userId) return true;
 
-      // Admins and super_admins can see all projects
-      if (currentUser && !["super_admin", "admin"].includes(currentUser.role)) {
-        projects = projects.filter((project) => {
-          // User owns the project
-          if (project.createdBy === args.userId) return true;
+        // User is assigned to the project
+        if (project.assignedTo === args.userId) return true;
 
-          // User is assigned to the project
-          if (project.assignedTo === args.userId) return true;
+        // Project is explicitly shared with user
+        if (project.sharedWith?.includes(args.userId!)) return true;
 
-          // Project is explicitly shared with user
-          if (project.sharedWith?.includes(args.userId!)) return true;
+        // Project is public (visible to all)
+        if (project.visibility === "public") return true;
 
-          // Project is public (visible to all)
-          if (project.visibility === "public") return true;
-
-          return false;
-        });
-      }
+        return false;
+      });
     }
 
     // Get task counts for each project
@@ -334,9 +330,20 @@ export const getWithTasks = query({
 
 // Get project statistics
 export const getStats = query({
-  args: {},
-  handler: async (ctx) => {
-    const allProjects = await ctx.db.query("projects").collect();
+  args: { userId: v.optional(v.id("users")) },
+  handler: async (ctx, args) => {
+    let allProjects = await ctx.db.query("projects").collect();
+
+    // Filter to user's accessible projects
+    if (args.userId) {
+      allProjects = allProjects.filter((project) => {
+        if (project.createdBy === args.userId) return true;
+        if (project.assignedTo === args.userId) return true;
+        if (project.sharedWith?.includes(args.userId!)) return true;
+        if (project.visibility === "public") return true;
+        return false;
+      });
+    }
 
     const now = Date.now();
     const oneWeekAgo = now - (7 * 24 * 60 * 60 * 1000);
