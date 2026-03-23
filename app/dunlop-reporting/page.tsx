@@ -312,10 +312,10 @@ function UploadRunTab({ isDark, env, userName }: { isDark: boolean; env: "dev" |
     if (fileRef.current) fileRef.current.value = "";
   };
 
-  // Month picker options — generate last 36 months, exclude already submitted
+  // Month picker options — current month + last 36 months, exclude already submitted
   const monthOptions: string[] = [];
   const now = new Date();
-  for (let i = 1; i <= 36; i++) {
+  for (let i = 0; i <= 36; i++) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const m = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
     if (!submittedMonths.has(m)) monthOptions.push(m);
