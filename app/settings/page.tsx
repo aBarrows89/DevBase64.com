@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Protected from "../protected";
-import Sidebar from "@/components/Sidebar";
+import Sidebar, { MobileHeader } from "@/components/Sidebar";
 import { useAuth } from "../auth-context";
 import { useTheme } from "../theme-context";
 import { useMutation, useQuery } from "convex/react";
@@ -160,10 +160,11 @@ function SettingsContent() {
   };
 
   return (
-    <div className={`flex h-screen ${isDark ? "bg-slate-900" : "bg-gray-50"}`}>
+    <div className="flex h-screen theme-bg-primary">
       <Sidebar />
 
       <main className="flex-1 overflow-y-auto">
+        <MobileHeader />
         {/* Header */}
         <header className={`sticky top-0 z-10 backdrop-blur-sm border-b px-4 sm:px-8 py-4 ${isDark ? "bg-slate-900/80 border-slate-700" : "bg-white/80 border-gray-200"}`}>
           <h1 className={`text-xl sm:text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>Settings</h1>

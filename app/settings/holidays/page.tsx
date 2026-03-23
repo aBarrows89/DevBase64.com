@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import Protected from "@/app/protected";
-import Sidebar from "@/components/Sidebar";
+import Sidebar, { MobileHeader } from "@/components/Sidebar";
 import { useTheme } from "@/app/theme-context";
 import { useAuth } from "@/app/auth-context";
 import { useQuery, useMutation } from "convex/react";
@@ -134,20 +135,31 @@ function HolidaysContent() {
   };
 
   return (
-    <div className={`flex min-h-screen ${isDark ? "bg-slate-900" : "bg-gray-50"}`}>
+    <div className="flex min-h-screen theme-bg-primary">
       <Sidebar />
 
       <main className="flex-1 p-4 sm:p-6 lg:p-8">
+        <MobileHeader />
         <div className="max-w-5xl mx-auto">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-            <div>
+            <div className="flex items-center gap-3">
+              <Link
+                href="/settings"
+                className={`p-2 -ml-2 rounded-lg transition-colors ${isDark ? "text-slate-400 hover:text-white hover:bg-slate-700" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"}`}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </Link>
+              <div>
               <h1 className={`text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
                 Holidays & Schedule Overrides
               </h1>
               <p className={`mt-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                 Manage company holidays to prevent false no-call-no-show triggers
               </p>
+              </div>
             </div>
 
             <div className="flex items-center gap-3">

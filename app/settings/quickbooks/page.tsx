@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Sidebar from "@/components/Sidebar";
+import Sidebar, { MobileHeader } from "@/components/Sidebar";
 import Protected from "../../protected";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -169,10 +169,11 @@ function QuickBooksSettingsContent() {
   };
 
   return (
-    <div className={`flex h-screen ${isDark ? "bg-slate-900" : "bg-[#f2f2f7]"}`}>
+    <div className="flex h-screen theme-bg-primary">
       <Sidebar />
 
       <main className="flex-1 overflow-y-auto">
+        <MobileHeader />
         <header className={`sticky top-0 z-10 border-b px-4 sm:px-8 py-4 sm:py-6 ${isDark ? "bg-slate-800/95 border-slate-700 backdrop-blur-sm" : "bg-white/95 border-gray-200 backdrop-blur-sm"}`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">

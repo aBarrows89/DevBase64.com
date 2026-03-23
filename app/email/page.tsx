@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import Protected from "../protected";
-import Sidebar from "@/components/Sidebar";
+import Sidebar, { MobileHeader } from "@/components/Sidebar";
 import { useAuth } from "../auth-context";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -46,6 +46,7 @@ export default function EmailPage() {
   const [selectedFolderId, setSelectedFolderId] = useState<Id<"emailFolders"> | null>(null);
   const [selectedEmailId, setSelectedEmailId] = useState<Id<"emails"> | null>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [showEmailSidebar, setShowEmailSidebar] = useState(false);
   const [showComposeModal, setShowComposeModal] = useState(false);
   const [composeMode, setComposeMode] = useState<"compose" | "reply" | "reply_all" | "forward">("compose");
 
@@ -283,7 +284,11 @@ export default function EmailPage() {
     <Protected requireFlag="hasEmailAccess">
       <div className="h-screen theme-bg-primary flex overflow-hidden">
         <Sidebar />
-        <main className="flex-1 flex overflow-hidden h-full">
+        <main className="flex-1 flex flex-col overflow-hidden h-full">
+          {/* Mobile Header */}
+          <MobileHeader />
+
+          <div className="flex-1 flex overflow-hidden">
           {/* Sync Error Banner */}
           {(selectedAccount?.syncError || syncError) && (
             <div className="absolute top-0 left-0 right-0 z-40 bg-red-500/10 border-b border-red-500/20 p-3 flex items-center justify-center gap-2 text-red-400 text-sm">
@@ -318,23 +323,71 @@ export default function EmailPage() {
             </div>
           )}
 
-          {/* Email Sidebar */}
-          <EmailSidebar
-            accounts={accounts || []}
-            selectedAccountId={selectedAccountId}
-            onAccountSelect={setSelectedAccountId}
-            folders={folders || []}
-            selectedFolderId={selectedFolderId}
-            onFolderSelect={handleFolderSelect}
-            onCompose={handleCompose}
-            onSync={handleSync}
-            isCollapsed={isSidebarCollapsed}
-            onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-            userId={user?._id as Id<"users">}
-          />
+          {/* Email Sidebar - hidden on mobile */}
+          <div className="hidden lg:block">
+            <EmailSidebar
+              accounts={accounts || []}
+              selectedAccountId={selectedAccountId}
+              onAccountSelect={setSelectedAccountId}
+              folders={folders || []}
+              selectedFolderId={selectedFolderId}
+              onFolderSelect={handleFolderSelect}
+              onCompose={handleCompose}
+              onSync={handleSync}
+              isCollapsed={isSidebarCollapsed}
+              onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+              userId={user?._id as Id<"users">}
+            />
+          </div>
+
+          {/* Mobile Email Sidebar Overlay */}
+          {showEmailSidebar && (
+            <div className="lg:hidden fixed inset-0 z-50">
+              <div className="absolute inset-0 bg-black/50" onClick={() => setShowEmailSidebar(false)} />
+              <div className="relative z-10 h-full w-72">
+                <EmailSidebar
+                  accounts={accounts || []}
+                  selectedAccountId={selectedAccountId}
+                  onAccountSelect={(id) => { setSelectedAccountId(id); setShowEmailSidebar(false); }}
+                  folders={folders || []}
+                  selectedFolderId={selectedFolderId}
+                  onFolderSelect={(id) => { handleFolderSelect(id); setShowEmailSidebar(false); }}
+                  onCompose={() => { handleCompose(); setShowEmailSidebar(false); }}
+                  onSync={handleSync}
+                  isCollapsed={false}
+                  onToggleCollapse={() => setShowEmailSidebar(false)}
+                  userId={user?._id as Id<"users">}
+                />
+              </div>
+            </div>
+          )}
 
           {/* Email List */}
           <div className={`${selectedEmailId ? 'hidden lg:flex' : 'flex'} flex-col w-full lg:w-96 h-full border-r theme-border flex-shrink-0`}>
+            {/* Mobile toolbar for email list */}
+            <div className="lg:hidden flex items-center gap-2 p-3 border-b theme-border">
+              <button
+                onClick={() => setShowEmailSidebar(true)}
+                className="p-2 rounded-lg theme-text-tertiary hover:theme-text-primary hover:theme-bg-hover transition-colors"
+                title="Folders"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                </svg>
+              </button>
+              <span className="font-medium theme-text-primary text-sm flex-1">
+                {folders?.find(f => f._id === selectedFolderId)?.name || "Inbox"}
+              </span>
+              <button
+                onClick={handleCompose}
+                className="p-2 rounded-lg text-blue-500 hover:bg-blue-500/10 transition-colors"
+                title="Compose"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              </button>
+            </div>
             <EmailList
               emails={displayEmails}
               selectedEmailId={selectedEmailId}
@@ -415,6 +468,7 @@ export default function EmailPage() {
               }}
             />
           )}
+          </div>
         </main>
       </div>
     </Protected>

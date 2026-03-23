@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Protected from "../../protected";
-import Sidebar from "@/components/Sidebar";
+import Sidebar, { MobileHeader } from "@/components/Sidebar";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
@@ -487,16 +487,19 @@ function PersonnelDetailContent() {
   // Redirect if user doesn't have permission
   if (!canViewPersonnel) {
     return (
-      <div className={`flex h-screen ${isDark ? "bg-slate-900" : "bg-[#f2f2f7]"}`}>
+      <div className={`flex h-screen theme-bg-primary`}>
         <Sidebar />
-        <main className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <h1 className={`text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
-              Access Denied
-            </h1>
-            <p className={`mt-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-              You don&apos;t have permission to view this page.
-            </p>
+        <main className="flex-1 flex flex-col">
+          <MobileHeader />
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <h1 className={`text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
+                Access Denied
+              </h1>
+              <p className={`mt-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                You don&apos;t have permission to view this page.
+              </p>
+            </div>
           </div>
         </main>
       </div>
@@ -505,11 +508,14 @@ function PersonnelDetailContent() {
 
   if (!personnel) {
     return (
-      <div className={`flex h-screen ${isDark ? "bg-slate-900" : "bg-[#f2f2f7]"}`}>
+      <div className={`flex h-screen theme-bg-primary`}>
         <Sidebar />
-        <main className="flex-1 flex items-center justify-center">
-          <div className={`animate-pulse ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-            Loading...
+        <main className="flex-1 flex flex-col">
+          <MobileHeader />
+          <div className="flex-1 flex items-center justify-center">
+            <div className={`animate-pulse ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+              Loading...
+            </div>
           </div>
         </main>
       </div>
@@ -861,10 +867,11 @@ function PersonnelDetailContent() {
   const milestones = tenure ? getTenureMilestones(tenure.totalDays) : null;
 
   return (
-    <div className={`flex h-screen ${isDark ? "bg-slate-900" : "bg-[#f2f2f7]"}`}>
+    <div className={`flex h-screen theme-bg-primary`}>
       <Sidebar />
 
       <main className="flex-1 overflow-y-auto">
+        <MobileHeader />
         {/* Header */}
         <header className={`sticky top-0 z-10 backdrop-blur-sm border-b px-8 py-4 ${isDark ? "bg-slate-900/80 border-slate-700" : "bg-white/80 border-gray-200"}`}>
           <div className="flex items-center justify-between">

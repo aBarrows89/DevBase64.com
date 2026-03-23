@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Protected from "../../protected";
-import Sidebar from "@/components/Sidebar";
+import Sidebar, { MobileHeader } from "@/components/Sidebar";
 import { useAuth } from "../../auth-context";
 import { useTheme } from "../../theme-context";
 import { useMutation, useQuery } from "convex/react";
@@ -190,6 +190,7 @@ function SharedMailboxesContent() {
     <div className="h-screen theme-bg-primary flex overflow-hidden">
       <Sidebar />
       <main className="flex-1 overflow-auto p-8">
+        <MobileHeader />
         <div className="max-w-6xl mx-auto">
           {/* Header */}
           <div className="flex items-center justify-between mb-8">

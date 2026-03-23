@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import Protected from "../../protected";
-import Sidebar from "@/components/Sidebar";
+import Sidebar, { MobileHeader } from "@/components/Sidebar";
 import { useTheme } from "../../theme-context";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -352,20 +353,31 @@ function ManagerContent() {
   };
 
   return (
-    <div className={`flex h-screen ${isDark ? "bg-slate-900" : "bg-gray-50"}`}>
+    <div className={`flex h-screen theme-bg-primary`}>
       <Sidebar />
 
       <main className="flex-1 overflow-y-auto">
+        <MobileHeader />
         {/* Header */}
         <header className={`sticky top-0 z-10 backdrop-blur-sm border-b px-4 sm:px-8 py-4 ${isDark ? "bg-slate-900/80 border-slate-700" : "bg-white/80 border-gray-200"}`}>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
+            <div className="flex items-center gap-3">
+              <Link
+                href="/equipment"
+                className={`p-2 -ml-2 rounded-lg transition-colors ${isDark ? "text-slate-400 hover:text-white hover:bg-slate-700" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"}`}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </Link>
+              <div>
               <h1 className={`text-xl sm:text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
                 Safety Check Manager
               </h1>
               <p className={`text-xs sm:text-sm mt-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                 Monitor and verify safety checklist compliance
               </p>
+              </div>
             </div>
             {completions && completions.length > 0 && (
               <button

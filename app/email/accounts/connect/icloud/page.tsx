@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Protected from "@/app/protected";
-import Sidebar from "@/components/Sidebar";
+import Sidebar, { MobileHeader } from "@/components/Sidebar";
 import { useAuth } from "@/app/auth-context";
 import { useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -53,6 +53,7 @@ export default function ICloudSetupPage() {
       <div className="min-h-screen theme-bg-primary flex">
         <Sidebar />
         <main className="flex-1 p-6 overflow-auto">
+          <MobileHeader />
           <div className="max-w-xl mx-auto">
             {/* Back button */}
             <button

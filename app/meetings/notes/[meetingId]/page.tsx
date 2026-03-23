@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Protected from "@/app/protected";
-import Sidebar from "@/components/Sidebar";
+import Sidebar, { MobileHeader } from "@/components/Sidebar";
 import { useTheme } from "@/app/theme-context";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -59,9 +59,10 @@ export default function MeetingNotesPage() {
   if (meeting === undefined || notes === undefined) {
     return (
       <Protected>
-        <div className={`flex h-screen ${isDark ? "bg-slate-900" : "bg-[#f2f2f7]"}`}>
+        <div className={`flex h-screen theme-bg-primary`}>
           <Sidebar />
           <main className="flex-1 overflow-y-auto">
+            <MobileHeader />
             <div className="max-w-4xl mx-auto p-4 sm:p-6 lg:p-8">
               <div className="flex justify-center py-20">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500" />
@@ -76,9 +77,10 @@ export default function MeetingNotesPage() {
   if (!meeting) {
     return (
       <Protected>
-        <div className={`flex h-screen ${isDark ? "bg-slate-900" : "bg-[#f2f2f7]"}`}>
+        <div className={`flex h-screen theme-bg-primary`}>
           <Sidebar />
           <main className="flex-1 overflow-y-auto">
+            <MobileHeader />
             <div className="max-w-4xl mx-auto p-4 sm:p-6 lg:p-8">
               <div className="text-center py-20">
                 <h2 className={`text-xl font-semibold mb-2 ${isDark ? "text-white" : "text-gray-900"}`}>
@@ -110,9 +112,10 @@ export default function MeetingNotesPage() {
 
   return (
     <Protected>
-      <div className={`flex h-screen ${isDark ? "bg-slate-900" : "bg-[#f2f2f7]"}`}>
+      <div className={`flex h-screen theme-bg-primary`}>
         <Sidebar />
         <main className="flex-1 overflow-y-auto">
+          <MobileHeader />
           <div className="max-w-4xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
             {/* Header */}
             <div className="flex items-center gap-3">

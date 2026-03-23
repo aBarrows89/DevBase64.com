@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useMemo } from "react";
 import Protected from "../protected";
-import Sidebar from "@/components/Sidebar";
+import Sidebar, { MobileHeader } from "@/components/Sidebar";
 import { useTheme } from "../theme-context";
 import { useAuth } from "../auth-context";
 import { useQuery, useMutation } from "convex/react";
@@ -174,9 +174,10 @@ export default function DealerRebatesPage() {
 
   return (
     <Protected>
-      <div className={`flex h-screen ${isDark ? "bg-slate-900" : "bg-[#f2f2f7]"}`}>
+      <div className={`flex h-screen theme-bg-primary`}>
         <Sidebar />
         <main className="flex-1 overflow-y-auto">
+          <MobileHeader />
           {/* Header */}
           <header className={`sticky top-0 z-10 border-b px-6 py-4 ${isDark ? "bg-slate-900/95 backdrop-blur border-slate-700" : "bg-white/95 backdrop-blur border-gray-200"}`}>
             <div className="flex items-center gap-3">

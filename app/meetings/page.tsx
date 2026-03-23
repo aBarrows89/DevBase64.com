@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Protected from "../protected";
-import Sidebar from "@/components/Sidebar";
+import Sidebar, { MobileHeader } from "@/components/Sidebar";
 import { useTheme } from "../theme-context";
 import { useAuth } from "../auth-context";
 import { useQuery, useMutation } from "convex/react";
@@ -121,9 +121,11 @@ export default function MeetingsPage() {
 
   return (
     <Protected>
-      <div className={`flex h-screen ${isDark ? "bg-slate-900" : "bg-[#f2f2f7]"}`}>
+      <div className="flex h-screen theme-bg-primary">
         <Sidebar />
         <main className="flex-1 overflow-y-auto">
+          {/* Mobile Header */}
+          <MobileHeader />
           <div className="max-w-4xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
             {/* Header */}
             <div className="flex items-center justify-between">

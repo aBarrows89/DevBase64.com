@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useRef } from "react";
 import Protected from "../protected";
-import Sidebar from "@/components/Sidebar";
+import Sidebar, { MobileHeader } from "@/components/Sidebar";
 import { useTheme } from "../theme-context";
 import { useAuth } from "../auth-context";
 import { useMutation, useQuery } from "convex/react";
@@ -284,10 +284,11 @@ function MileageContent() {
   };
 
   return (
-    <div className={`flex h-screen ${isDark ? "bg-slate-900" : "bg-gray-50"}`}>
+    <div className={`flex h-screen theme-bg-primary`}>
       <Sidebar />
 
       <main className="flex-1 overflow-y-auto">
+        <MobileHeader />
         {/* Print styles */}
         <style jsx global>{`
           @media print {

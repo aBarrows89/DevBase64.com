@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Protected from "../protected";
-import Sidebar from "@/components/Sidebar";
+import Sidebar, { MobileHeader } from "@/components/Sidebar";
 import { useTheme } from "../theme-context";
 import { useAuth } from "../auth-context";
 import { useQuery, useMutation } from "convex/react";
@@ -91,9 +91,11 @@ export default function TechWizardPage() {
   if (!hasAccess) {
     return (
       <Protected>
-        <div className={`flex h-screen ${isDark ? "bg-slate-900" : "bg-[#f2f2f7]"}`}>
+        <div className={`flex h-screen theme-bg-primary`}>
           <Sidebar />
-          <main className="flex-1 flex items-center justify-center">
+          <main className="flex-1 flex flex-col">
+            <MobileHeader />
+            <div className="flex-1 flex items-center justify-center">
             <div className={`text-center p-8 rounded-xl ${isDark ? "bg-slate-800" : "bg-white shadow-sm"}`}>
               <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-500/20 flex items-center justify-center">
                 <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -106,6 +108,7 @@ export default function TechWizardPage() {
               <p className={`${isDark ? "text-slate-400" : "text-gray-500"}`}>
                 Tech Wizard is only available to the Technology department.
               </p>
+            </div>
             </div>
           </main>
         </div>
@@ -292,9 +295,11 @@ export default function TechWizardPage() {
 
   return (
     <Protected>
-      <div className={`flex h-screen ${isDark ? "bg-slate-900" : "bg-[#f2f2f7]"}`}>
+      <div className={`flex h-screen theme-bg-primary`}>
         <Sidebar />
-        <main className="flex-1 flex overflow-hidden">
+        <main className="flex-1 flex flex-col overflow-hidden">
+          <MobileHeader />
+          <div className="flex-1 flex overflow-hidden">
           {/* Chat History Sidebar */}
           <div
             className={`${showHistory ? "w-72" : "w-0"} transition-all duration-300 overflow-hidden flex-shrink-0 border-r ${isDark ? "bg-slate-850 border-slate-700" : "bg-white border-gray-200"}`}
@@ -568,6 +573,7 @@ export default function TechWizardPage() {
                 </p>
               </div>
             </div>
+          </div>
           </div>
         </main>
       </div>

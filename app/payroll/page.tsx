@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Protected from "../protected";
-import Sidebar from "@/components/Sidebar";
+import Sidebar, { MobileHeader } from "@/components/Sidebar";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
@@ -189,9 +189,10 @@ function PayrollContent() {
     : null;
 
   return (
-    <div className={`flex h-screen ${isDark ? "bg-slate-900" : "bg-[#f2f2f7]"}`}>
+    <div className={`flex h-screen theme-bg-primary`}>
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
+        <MobileHeader />
         {/* Header */}
         <div
           className={`sticky top-0 z-10 backdrop-blur-md ${

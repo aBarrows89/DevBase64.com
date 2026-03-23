@@ -7,7 +7,7 @@ import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import Protected from "../../protected";
-import Sidebar from "@/components/Sidebar";
+import Sidebar, { MobileHeader } from "@/components/Sidebar";
 import { useAuth } from "@/app/auth-context";
 
 const STATUS_OPTIONS = [
@@ -317,10 +317,13 @@ function ApplicationDetailContent({ id }: { id: string }) {
 
   if (!application) {
     return (
-      <div className="flex h-screen bg-slate-900">
+      <div className="flex h-screen theme-bg-primary">
         <Sidebar />
-        <main className="flex-1 flex items-center justify-center">
-          <div className="text-slate-400">Loading...</div>
+        <main className="flex-1 flex flex-col">
+          <MobileHeader />
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-slate-400">Loading...</div>
+          </div>
         </main>
       </div>
     );
@@ -498,9 +501,10 @@ function ApplicationDetailContent({ id }: { id: string }) {
   };
 
   return (
-    <div className="flex h-screen bg-slate-900">
+    <div className="flex h-screen theme-bg-primary">
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
+        <MobileHeader />
         {/* Header */}
         <header className="sticky top-0 z-10 bg-slate-900/80 backdrop-blur-sm border-b border-slate-700 px-8 py-4">
           <div className="flex items-center justify-between">
