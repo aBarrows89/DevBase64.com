@@ -572,7 +572,7 @@ function ProjectsContent() {
         </header>
 
         {/* Kanban Board */}
-        <div className="flex-1 p-3 sm:p-6 overflow-hidden">
+        <div className="flex-1 p-3 sm:p-6 overflow-auto pb-24 sm:pb-6">
           <KanbanBoard
             projects={projects}
             users={users}
@@ -714,8 +714,8 @@ function ProjectsContent() {
 
       {/* Project Detail Modal */}
       {selectedProjectId && projectWithTasks && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-2 sm:p-4">
-          <div className="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-slate-800 border border-slate-700 rounded-t-xl sm:rounded-xl w-full sm:max-w-4xl max-h-[90vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
             {/* Header */}
             <div className="p-4 sm:p-6 border-b border-slate-700 flex-shrink-0">
               <div className="flex items-start justify-between">

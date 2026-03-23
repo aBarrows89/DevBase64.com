@@ -638,8 +638,8 @@ export default function JobsPage() {
 
           {/* Add/Edit Modal */}
           {showModal && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-              <div className={`rounded-lg p-4 sm:p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto ${isDark ? "bg-slate-800 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
+            <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+              <div className={`rounded-t-xl sm:rounded-lg p-4 sm:p-6 w-full sm:max-w-2xl max-h-[85vh] sm:max-h-[90vh] overflow-y-auto ${isDark ? "bg-slate-800 border border-slate-700" : "bg-white border border-gray-200 shadow-sm"}`}>
                 <h2 className="text-lg sm:text-xl font-bold mb-4 sm:mb-6">
                   {editingJob ? "Edit Job" : "Add New Job"}
                 </h2>
