@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const API_GATEWAY_URL = process.env.DUNLOP_API_GATEWAY_URL;
+const API_GATEWAY_URL = process.env.DUNLOP_API_GATEWAY_URL || "https://jzdhz2de88.execute-api.us-east-1.amazonaws.com/prod";
 
 export async function POST(request: NextRequest) {
   if (!API_GATEWAY_URL) {
