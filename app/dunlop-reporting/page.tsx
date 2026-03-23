@@ -166,11 +166,28 @@ function UploadRunTab({ isDark, env, userName }: { isDark: boolean; env: "dev" |
   const [file, setFile] = useState<File | null>(null);
   const [state, setState] = useState<UploadState>("idle");
   const [result, setResult] = useState<RunLog | null>(null);
+  const [batchResults, setBatchResults] = useState<RunLog[]>([]);
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
   const [error, setError] = useState("");
   const [dragOver, setDragOver] = useState(false);
+  const [submittedMonths, setSubmittedMonths] = useState<Set<string>>(new Set());
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const isBatchMode = month === "ALL";
   const canRun = file && month && state === "idle";
+
+  // Fetch submitted months on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/history`);
+        if (!res.ok) return;
+        const data: RunLog[] = await res.json();
+        const done = new Set(data.filter(r => r.sftpStatus === "success").map(r => r.month));
+        setSubmittedMonths(done);
+      } catch { /* ignore */ }
+    })();
+  }, []);
 
   const handleFile = useCallback((f: File | null) => {
     if (!f) return;
@@ -182,48 +199,103 @@ function UploadRunTab({ isDark, env, userName }: { isDark: boolean; env: "dev" |
     setFile(f);
     setError("");
     setResult(null);
+    setBatchResults([]);
+    setBatchProgress(null);
     setState("idle");
   }, []);
+
+  const uploadFileToS3 = async (file: File, monthKey: string): Promise<string> => {
+    const urlRes = await fetch(`${API_BASE}/upload-url`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filename: file.name, month: monthKey }),
+    });
+    if (!urlRes.ok) throw new Error("Failed to get upload URL");
+    const { url, key } = await urlRes.json();
+
+    const uploadRes = await fetch(url, {
+      method: "PUT",
+      body: file,
+      headers: { "Content-Type": file.type || "application/octet-stream" },
+    });
+    if (!uploadRes.ok) throw new Error("Failed to upload file to S3");
+    return key;
+  };
+
+  const runTransform = async (s3Key: string, monthKey: string): Promise<RunLog> => {
+    const runRes = await fetch(`${API_BASE}/run`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ s3_key: s3Key, month: monthKey, env, runBy: userName }),
+    });
+    if (!runRes.ok) {
+      const errBody = await runRes.json().catch(() => ({}));
+      throw new Error(errBody.error || "Transform/upload failed");
+    }
+    return await runRes.json();
+  };
 
   const handleUploadAndRun = async () => {
     if (!file || !month) return;
     setError("");
     setResult(null);
+    setBatchResults([]);
+    setBatchProgress(null);
 
     try {
-      // Step 1: Get presigned URL
+      // Step 1: Upload file to S3 once
       setState("uploading");
-      const urlRes = await fetch(`${API_BASE}/upload-url`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filename: file.name, month }),
-      });
-      if (!urlRes.ok) throw new Error("Failed to get upload URL");
-      const { url, key } = await urlRes.json();
+      const s3Key = await uploadFileToS3(file, isBatchMode ? "backfill" : month);
 
-      // Step 2: Upload file directly to S3
-      const uploadRes = await fetch(url, {
-        method: "PUT",
-        body: file,
-        headers: { "Content-Type": file.type || "application/octet-stream" },
-      });
-      if (!uploadRes.ok) throw new Error("Failed to upload file to S3");
+      if (isBatchMode) {
+        // Batch mode: run transform for each unsubmitted backfill month
+        setState("processing");
+        const pendingMonths = BACKFILL_MONTHS.filter(m => !submittedMonths.has(m));
+        if (pendingMonths.length === 0) {
+          setError("All backfill months have already been submitted.");
+          setState("error");
+          return;
+        }
+        setBatchProgress({ current: 0, total: pendingMonths.length });
+        const results: RunLog[] = [];
 
-      // Step 3: Trigger transform + SFTP
-      setState("processing");
-      const runRes = await fetch(`${API_BASE}/run`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ s3_key: key, month, env, runBy: userName }),
-      });
-      if (!runRes.ok) {
-        const errBody = await runRes.json().catch(() => ({}));
-        throw new Error(errBody.error || "Transform/upload failed");
+        for (let i = 0; i < pendingMonths.length; i++) {
+          setBatchProgress({ current: i + 1, total: pendingMonths.length });
+          try {
+            const runData = await runTransform(s3Key, pendingMonths[i]);
+            results.push(runData);
+            if (runData.sftpStatus === "success") {
+              setSubmittedMonths(prev => new Set([...prev, pendingMonths[i]]));
+            }
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : "Unknown error";
+            results.push({
+              month: pendingMonths[i],
+              fileName: file.name,
+              outputFile: "",
+              rows: 0,
+              sftpStatus: "failed",
+              env,
+              runBy: userName,
+              timestamp: new Date().toISOString(),
+              errors: [msg],
+            });
+          }
+        }
+
+        setBatchResults(results);
+        setBatchProgress(null);
+        setState("complete");
+      } else {
+        // Single month mode
+        setState("processing");
+        const runData = await runTransform(s3Key, month);
+        setResult(runData);
+        if (runData.sftpStatus === "success") {
+          setSubmittedMonths(prev => new Set([...prev, month]));
+        }
+        setState("complete");
       }
-
-      const runData: RunLog = await runRes.json();
-      setResult(runData);
-      setState("complete");
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Unknown error";
       setError(message);
@@ -235,17 +307,23 @@ function UploadRunTab({ isDark, env, userName }: { isDark: boolean; env: "dev" |
     setFile(null);
     setState("idle");
     setResult(null);
+    setBatchResults([]);
+    setBatchProgress(null);
     setError("");
     if (fileRef.current) fileRef.current.value = "";
   };
 
-  // Month picker options — generate last 36 months
+  // Month picker options — generate last 36 months, exclude already submitted
   const monthOptions: string[] = [];
   const now = new Date();
   for (let i = 1; i <= 36; i++) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    monthOptions.push(`${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`);
+    const m = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
+    if (!submittedMonths.has(m)) monthOptions.push(m);
   }
+
+  // Check if there are pending backfill months
+  const pendingBackfillCount = BACKFILL_MONTHS.filter(m => !submittedMonths.has(m)).length;
 
   return (
     <div className="space-y-6">
@@ -267,10 +345,18 @@ function UploadRunTab({ isDark, env, userName }: { isDark: boolean; env: "dev" |
               isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-white border-gray-300 text-gray-900"
             }`}
           >
+            {pendingBackfillCount > 0 && (
+              <option value="ALL">All Pending Months — Backfill ({pendingBackfillCount} months)</option>
+            )}
             {monthOptions.map(m => (
               <option key={m} value={m}>{formatMonth(m)}</option>
             ))}
           </select>
+          {monthOptions.length === 0 && !pendingBackfillCount && (
+            <p className={`text-xs mt-1 ${isDark ? "text-emerald-400" : "text-emerald-600"}`}>
+              All months have been submitted.
+            </p>
+          )}
         </div>
 
         {/* File drop zone */}
@@ -338,7 +424,10 @@ function UploadRunTab({ isDark, env, userName }: { isDark: boolean; env: "dev" |
             <div className="flex items-center gap-3">
               <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
               <span className={`text-sm font-medium ${isDark ? "text-blue-400" : "text-blue-600"}`}>
-                {state === "uploading" ? "Uploading to S3..." : "Processing & sending to SFTP..."}
+                {state === "uploading" ? "Uploading to S3..." :
+                  batchProgress
+                    ? `Processing month ${batchProgress.current} of ${batchProgress.total}...`
+                    : "Processing & sending to SFTP..."}
               </span>
             </div>
           )}
@@ -390,6 +479,47 @@ function UploadRunTab({ isDark, env, userName }: { isDark: boolean; env: "dev" |
             )}
           </div>
         )}
+        {/* Batch results */}
+        {batchResults.length > 0 && state === "complete" && (
+          <div className={`mt-4 p-4 rounded-lg border ${isDark ? "bg-slate-800/30 border-slate-700" : "bg-gray-50 border-gray-200"}`}>
+            <p className={`text-sm font-semibold mb-3 ${isDark ? "text-white" : "text-gray-900"}`}>
+              Backfill Results — {batchResults.filter(r => r.sftpStatus === "success").length} of {batchResults.length} months succeeded
+            </p>
+            <div className="space-y-1">
+              {batchResults.map((r, i) => (
+                <div key={i} className={`flex items-center justify-between text-sm px-3 py-1.5 rounded ${
+                  r.sftpStatus === "success"
+                    ? isDark ? "bg-emerald-500/10" : "bg-emerald-50"
+                    : isDark ? "bg-red-500/10" : "bg-red-50"
+                }`}>
+                  <span className={isDark ? "text-slate-300" : "text-gray-700"}>{formatMonth(r.month)}</span>
+                  <div className="flex items-center gap-3">
+                    <span className={`font-mono text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>{r.rows} rows</span>
+                    <StatusBadge status={r.sftpStatus} isDark={isDark} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* SFTP Info Card */}
+      <div className={`rounded-xl border p-4 ${isDark ? "bg-slate-800/30 border-slate-700" : "bg-gray-50 border-gray-200"}`}>
+        <div className={`flex items-center gap-4 text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+          <div>
+            <span className="font-semibold">Static IP (for SFTP whitelist):</span>
+            <span className={`ml-2 font-mono font-bold ${isDark ? "text-blue-400" : "text-blue-600"}`}>54.163.176.67</span>
+          </div>
+          <div className={`border-l pl-4 ${isDark ? "border-slate-600" : "border-gray-300"}`}>
+            <span className="font-semibold">SFTP Host:</span>
+            <span className="ml-2 font-mono">{env === "prod" ? "landp.srnatire.com" : "landpdev.srnatire.com"}:22</span>
+          </div>
+          <div className={`border-l pl-4 ${isDark ? "border-slate-600" : "border-gray-300"}`}>
+            <span className="font-semibold">Directory:</span>
+            <span className="ml-2 font-mono">inbound</span>
+          </div>
+        </div>
       </div>
     </div>
   );
