@@ -177,6 +177,7 @@ export interface MenuPermissions {
 
   // Tools
   dealerRebates: boolean;
+  dunlopReporting: boolean;
   tireTrackAdmin: boolean;
   iePriceSystem: boolean;
 }
@@ -265,6 +266,7 @@ export function getMenuPermissions(user: PermissionUser): MenuPermissions {
 
     // Tools - T2+
     dealerRebates: tier >= 2,
+    dunlopReporting: tier >= 4, // T4+ (Admin: full access, Manager: via override)
     tireTrackAdmin: tier >= 2,
     iePriceSystem: tier >= 2,
   };
@@ -598,6 +600,10 @@ export const ALL_PERMISSIONS: PermissionDefinition[] = [
 
   // Tools
   { key: "menu.dealerRebates", label: "Dealer Rebates", description: "Access dealer rebate upload tool", category: "documents" },
+  { key: "menu.dunlopReporting", label: "Dunlop Reporting", description: "Access Dunlop sellout reporting tool", category: "documents" },
+  { key: "dunlopReporting.envToggle", label: "Dunlop Env Toggle", description: "Switch between dev and prod SFTP environments", category: "documents" },
+  { key: "dunlopReporting.rerun", label: "Dunlop Re-run", description: "Re-run a previous Dunlop sellout submission", category: "documents" },
+  { key: "dunlopReporting.deleteHistory", label: "Dunlop Delete History", description: "Delete Dunlop run history entries", category: "documents" },
   { key: "menu.tireTrackAdmin", label: "TireTrack Admin", description: "Access TireTrack admin panel", category: "documents" },
   { key: "menu.iePriceSystem", label: "IE Price System", description: "Access IE Price System tool", category: "documents" },
   { key: "dealerRebates.deactivateDealers", label: "Deactivate Dealers", description: "Deactivate or reactivate dealers in the rebate tool", category: "documents" },
@@ -674,6 +680,11 @@ export function getRoleDefaults(user: PermissionUser): Record<string, boolean> {
   defaults["dealerRebates.deactivateDealers"] = tier >= 4;
   defaults["dealerRebates.deleteUploads"] = tier >= 5; // super admin only
   defaults["dealerRebates.viewStats"] = tier >= 3; // director+
+
+  // Dunlop Reporting permissions
+  defaults["dunlopReporting.envToggle"] = tier >= 5; // super admin only
+  defaults["dunlopReporting.rerun"] = tier >= 4; // admin+
+  defaults["dunlopReporting.deleteHistory"] = tier >= 5; // super admin only
 
   return defaults;
 }
@@ -761,6 +772,7 @@ export function canAccessRoute(user: PermissionUser, route: string): boolean {
     "/website-messages": "menu.websiteMessages",
     "/time-off": "menu.timeCorrections",
     "/dealer-rebates": "menu.dealerRebates",
+    "/dunlop-reporting": "menu.dunlopReporting",
   };
 
   // Check exact match first

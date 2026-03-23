@@ -1,0 +1,623 @@
+"use client";
+
+import { useState, useRef, useCallback, useEffect } from "react";
+import Protected from "../protected";
+import Sidebar, { MobileHeader } from "@/components/Sidebar";
+import { useTheme } from "../theme-context";
+import { useAuth } from "../auth-context";
+import { usePermissions } from "@/lib/usePermissions";
+
+// ─── CONSTANTS ───────────────────────────────────────────────────────────────
+
+const API_BASE = "/api/dunlop";
+
+// Backfill months: Jan 2024 through Jan 2026 (25 months)
+const BACKFILL_MONTHS: string[] = [];
+for (let y = 2024; y <= 2025; y++) {
+  for (let m = 1; m <= 12; m++) {
+    BACKFILL_MONTHS.push(`${y}${String(m).padStart(2, "0")}`);
+  }
+}
+BACKFILL_MONTHS.push("202601"); // Jan 2026
+
+function formatMonth(yyyymm: string): string {
+  const y = yyyymm.slice(0, 4);
+  const m = parseInt(yyyymm.slice(4, 6), 10);
+  const names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${names[m - 1]} ${y}`;
+}
+
+function getDefaultMonth(): string {
+  const now = new Date();
+  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  return `${prev.getFullYear()}${String(prev.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function formatTimestamp(ts: string): string {
+  return new Date(ts).toLocaleString("en-US", {
+    month: "short", day: "numeric", year: "numeric",
+    hour: "numeric", minute: "2-digit",
+  });
+}
+
+// ─── TYPES ───────────────────────────────────────────────────────────────────
+
+interface RunLog {
+  month: string;
+  fileName: string;
+  outputFile: string;
+  rows: number;
+  sftpStatus: "success" | "failed" | "partial";
+  env: "dev" | "prod";
+  runBy: string;
+  timestamp: string;
+  errors: string[];
+  filterSummary?: {
+    totalInput: number;
+    afterBrandFilter: number;
+    afterLocationFilter: number;
+    afterExclusions: number;
+    finalOutput: number;
+  };
+}
+
+type UploadState = "idle" | "uploading" | "processing" | "complete" | "error";
+
+// ─── TABS ────────────────────────────────────────────────────────────────────
+
+const TABS = ["Upload & Run", "Run History", "Backfill Status"] as const;
+type TabType = (typeof TABS)[number];
+
+// ─── MAIN PAGE ───────────────────────────────────────────────────────────────
+
+export default function DunlopReportingPage() {
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
+  const { user } = useAuth();
+  const permissions = usePermissions();
+
+  const [activeTab, setActiveTab] = useState<TabType>("Upload & Run");
+  const [env, setEnv] = useState<"dev" | "prod">("dev");
+
+  const canToggleEnv = permissions.hasPermission("dunlopReporting.envToggle");
+
+  return (
+    <Protected minTier={4}>
+      <div className="flex h-screen theme-bg-primary">
+        <Sidebar />
+        <main className="flex-1 overflow-y-auto">
+          <MobileHeader />
+          {/* Header */}
+          <header className={`sticky top-0 z-10 border-b px-6 py-4 ${isDark ? "bg-slate-900/95 backdrop-blur border-slate-700" : "bg-white/95 backdrop-blur border-gray-200"}`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDark ? "bg-gradient-to-br from-blue-500/20 to-cyan-600/20" : "bg-gradient-to-br from-blue-100 to-cyan-100"}`}>
+                  <svg className={`w-5 h-5 ${isDark ? "text-blue-400" : "text-blue-600"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                </div>
+                <div>
+                  <h1 className={`text-xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
+                    Dunlop Sellout Reporter
+                  </h1>
+                  <p className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                    Monthly sellout reporting to SRNA via SFTP
+                  </p>
+                </div>
+              </div>
+              {/* Env toggle — admin only */}
+              {canToggleEnv && (
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Environment:</span>
+                  <button
+                    onClick={() => setEnv(env === "dev" ? "prod" : "dev")}
+                    className={`px-3 py-1 rounded-full text-xs font-bold transition-colors ${
+                      env === "prod"
+                        ? "bg-red-500/20 text-red-400 border border-red-500/40"
+                        : isDark ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40" : "bg-emerald-100 text-emerald-700 border border-emerald-300"
+                    }`}
+                  >
+                    {env.toUpperCase()}
+                  </button>
+                </div>
+              )}
+            </div>
+            {/* Tabs */}
+            <div className="flex gap-1 mt-4">
+              {TABS.map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    activeTab === tab
+                      ? isDark ? "bg-blue-500/20 text-blue-400 border border-blue-500/40" : "bg-blue-100 text-blue-700 border border-blue-300"
+                      : isDark ? "text-slate-400 hover:text-slate-300 hover:bg-slate-800" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+          </header>
+
+          <div className="max-w-5xl mx-auto px-6 py-6">
+            {activeTab === "Upload & Run" && (
+              <UploadRunTab isDark={isDark} env={env} userName={user?.name ?? "Unknown"} />
+            )}
+            {activeTab === "Run History" && (
+              <RunHistoryTab isDark={isDark} />
+            )}
+            {activeTab === "Backfill Status" && (
+              <BackfillTab isDark={isDark} />
+            )}
+          </div>
+        </main>
+      </div>
+    </Protected>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TAB 1: UPLOAD & RUN
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function UploadRunTab({ isDark, env, userName }: { isDark: boolean; env: "dev" | "prod"; userName: string }) {
+  const [month, setMonth] = useState(getDefaultMonth());
+  const [file, setFile] = useState<File | null>(null);
+  const [state, setState] = useState<UploadState>("idle");
+  const [result, setResult] = useState<RunLog | null>(null);
+  const [error, setError] = useState("");
+  const [dragOver, setDragOver] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const canRun = file && month && state === "idle";
+
+  const handleFile = useCallback((f: File | null) => {
+    if (!f) return;
+    const ext = f.name.split(".").pop()?.toLowerCase();
+    if (ext !== "csv" && ext !== "xlsx") {
+      setError("Only .csv and .xlsx files are accepted.");
+      return;
+    }
+    setFile(f);
+    setError("");
+    setResult(null);
+    setState("idle");
+  }, []);
+
+  const handleUploadAndRun = async () => {
+    if (!file || !month) return;
+    setError("");
+    setResult(null);
+
+    try {
+      // Step 1: Get presigned URL
+      setState("uploading");
+      const urlRes = await fetch(`${API_BASE}/upload-url`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: file.name, month }),
+      });
+      if (!urlRes.ok) throw new Error("Failed to get upload URL");
+      const { url, key } = await urlRes.json();
+
+      // Step 2: Upload file directly to S3
+      const uploadRes = await fetch(url, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": file.type || "application/octet-stream" },
+      });
+      if (!uploadRes.ok) throw new Error("Failed to upload file to S3");
+
+      // Step 3: Trigger transform + SFTP
+      setState("processing");
+      const runRes = await fetch(`${API_BASE}/run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ s3_key: key, month, env, runBy: userName }),
+      });
+      if (!runRes.ok) {
+        const errBody = await runRes.json().catch(() => ({}));
+        throw new Error(errBody.error || "Transform/upload failed");
+      }
+
+      const runData: RunLog = await runRes.json();
+      setResult(runData);
+      setState("complete");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      setError(message);
+      setState("error");
+    }
+  };
+
+  const reset = () => {
+    setFile(null);
+    setState("idle");
+    setResult(null);
+    setError("");
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
+  // Month picker options — generate last 36 months
+  const monthOptions: string[] = [];
+  const now = new Date();
+  for (let i = 1; i <= 36; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    monthOptions.push(`${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`);
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Upload Card */}
+      <div className={`rounded-xl border p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200"}`}>
+        <h2 className={`text-lg font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
+          Upload JMK Export & Send to Dunlop
+        </h2>
+
+        {/* Month picker */}
+        <div className="mb-4">
+          <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+            Reporting Month
+          </label>
+          <select
+            value={month}
+            onChange={(e) => setMonth(e.target.value)}
+            className={`w-full max-w-xs px-3 py-2 rounded-lg border text-sm ${
+              isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-white border-gray-300 text-gray-900"
+            }`}
+          >
+            {monthOptions.map(m => (
+              <option key={m} value={m}>{formatMonth(m)}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* File drop zone */}
+        <div
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFile(e.dataTransfer.files[0] ?? null); }}
+          onClick={() => fileRef.current?.click()}
+          className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
+            dragOver
+              ? isDark ? "border-blue-400 bg-blue-500/10" : "border-blue-400 bg-blue-50"
+              : file
+                ? isDark ? "border-emerald-500/40 bg-emerald-500/5" : "border-emerald-300 bg-emerald-50"
+                : isDark ? "border-slate-600 hover:border-slate-500" : "border-gray-300 hover:border-gray-400"
+          }`}
+        >
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".csv,.xlsx"
+            className="hidden"
+            onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
+          />
+          {file ? (
+            <div>
+              <svg className={`w-8 h-8 mx-auto mb-2 ${isDark ? "text-emerald-400" : "text-emerald-600"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>{file.name}</p>
+              <p className={`text-xs mt-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                {(file.size / 1024).toFixed(1)} KB — Click to change
+              </p>
+            </div>
+          ) : (
+            <div>
+              <svg className={`w-8 h-8 mx-auto mb-2 ${isDark ? "text-slate-500" : "text-gray-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              <p className={`font-medium ${isDark ? "text-slate-300" : "text-gray-600"}`}>
+                Drop JMK export here, or click to browse
+              </p>
+              <p className={`text-xs mt-1 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+                Accepts .csv and .xlsx files
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Action button */}
+        <div className="mt-4 flex items-center gap-3">
+          {state === "idle" && (
+            <button
+              onClick={handleUploadAndRun}
+              disabled={!canRun}
+              className={`px-6 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+                canRun
+                  ? "bg-blue-600 hover:bg-blue-700 text-white"
+                  : isDark ? "bg-slate-700 text-slate-500 cursor-not-allowed" : "bg-gray-200 text-gray-400 cursor-not-allowed"
+              }`}
+            >
+              Upload & Run
+            </button>
+          )}
+          {(state === "uploading" || state === "processing") && (
+            <div className="flex items-center gap-3">
+              <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+              <span className={`text-sm font-medium ${isDark ? "text-blue-400" : "text-blue-600"}`}>
+                {state === "uploading" ? "Uploading to S3..." : "Processing & sending to SFTP..."}
+              </span>
+            </div>
+          )}
+          {(state === "complete" || state === "error") && (
+            <button
+              onClick={reset}
+              className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                isDark ? "bg-slate-700 hover:bg-slate-600 text-slate-300" : "bg-gray-100 hover:bg-gray-200 text-gray-700"
+              }`}
+            >
+              Run Another
+            </button>
+          )}
+          {env === "prod" && state === "idle" && (
+            <span className={`text-xs font-medium px-2 py-1 rounded ${isDark ? "bg-red-500/20 text-red-400" : "bg-red-100 text-red-600"}`}>
+              PROD
+            </span>
+          )}
+        </div>
+
+        {/* Error */}
+        {error && (
+          <div className={`mt-4 p-4 rounded-lg border ${isDark ? "bg-red-500/10 border-red-500/30 text-red-400" : "bg-red-50 border-red-200 text-red-700"}`}>
+            <p className="text-sm font-medium">Error</p>
+            <p className="text-sm mt-1">{error}</p>
+          </div>
+        )}
+
+        {/* Success */}
+        {result && state === "complete" && (
+          <div className={`mt-4 p-4 rounded-lg border ${isDark ? "bg-emerald-500/10 border-emerald-500/30" : "bg-emerald-50 border-emerald-200"}`}>
+            <p className={`text-sm font-semibold ${isDark ? "text-emerald-400" : "text-emerald-700"}`}>
+              Successfully sent to Dunlop ({env.toUpperCase()})
+            </p>
+            <div className={`mt-2 grid grid-cols-2 gap-2 text-sm ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+              <div>Rows reported: <span className="font-mono font-semibold">{result.rows}</span></div>
+              <div>File: <span className="font-mono text-xs">{result.outputFile}</span></div>
+              <div>SFTP status: <StatusBadge status={result.sftpStatus} isDark={isDark} /></div>
+              <div>Timestamp: {formatTimestamp(result.timestamp)}</div>
+            </div>
+            {result.filterSummary && (
+              <div className={`mt-3 pt-3 border-t text-xs space-y-1 ${isDark ? "border-slate-700 text-slate-400" : "border-gray-200 text-gray-500"}`}>
+                <p>Total input rows: {result.filterSummary.totalInput}</p>
+                <p>After brand filter (FAL/DUN): {result.filterSummary.afterBrandFilter}</p>
+                <p>After location filter (W07/W08/R10): {result.filterSummary.afterLocationFilter}</p>
+                <p>After exclusions: {result.filterSummary.afterExclusions}</p>
+                <p>Final output: {result.filterSummary.finalOutput}</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TAB 2: RUN HISTORY
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function RunHistoryTab({ isDark }: { isDark: boolean }) {
+  const [history, setHistory] = useState<RunLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/history`);
+        if (!res.ok) throw new Error("Failed to fetch history");
+        const data = await res.json();
+        setHistory(data);
+      } catch {
+        setHistory([]);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (history.length === 0) {
+    return (
+      <div className={`text-center py-16 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+        <svg className="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <p className="font-medium">No runs yet</p>
+        <p className="text-sm mt-1">Upload a JMK file to get started.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`rounded-xl border overflow-hidden ${isDark ? "border-slate-700" : "border-gray-200"}`}>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className={isDark ? "bg-slate-800/80" : "bg-gray-50"}>
+            {["Month", "File Uploaded", "Rows", "SFTP", "Env", "Run By", "Timestamp"].map(h => (
+              <th key={h} className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {history.map((run, i) => (
+            <>
+              <tr
+                key={i}
+                onClick={() => setExpandedIdx(expandedIdx === i ? null : i)}
+                className={`cursor-pointer transition-colors ${
+                  isDark ? "hover:bg-slate-800/50 border-t border-slate-700/50" : "hover:bg-gray-50 border-t border-gray-100"
+                }`}
+              >
+                <td className={`px-4 py-3 font-medium ${isDark ? "text-white" : "text-gray-900"}`}>{formatMonth(run.month)}</td>
+                <td className={`px-4 py-3 font-mono text-xs ${isDark ? "text-slate-300" : "text-gray-600"}`}>{run.fileName}</td>
+                <td className={`px-4 py-3 font-mono ${isDark ? "text-slate-300" : "text-gray-700"}`}>{run.rows}</td>
+                <td className="px-4 py-3"><StatusBadge status={run.sftpStatus} isDark={isDark} /></td>
+                <td className="px-4 py-3">
+                  <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${
+                    run.env === "prod"
+                      ? isDark ? "bg-red-500/20 text-red-400" : "bg-red-100 text-red-600"
+                      : isDark ? "bg-emerald-500/20 text-emerald-400" : "bg-emerald-100 text-emerald-700"
+                  }`}>
+                    {run.env.toUpperCase()}
+                  </span>
+                </td>
+                <td className={`px-4 py-3 ${isDark ? "text-slate-300" : "text-gray-700"}`}>{run.runBy}</td>
+                <td className={`px-4 py-3 text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>{formatTimestamp(run.timestamp)}</td>
+              </tr>
+              {expandedIdx === i && (
+                <tr key={`${i}-detail`}>
+                  <td colSpan={7} className={`px-6 py-4 ${isDark ? "bg-slate-800/30" : "bg-gray-50"}`}>
+                    <div className={`text-xs space-y-2 ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                      <p><span className="font-semibold">Output file:</span> {run.outputFile}</p>
+                      {run.filterSummary && (
+                        <div>
+                          <span className="font-semibold">Filter pipeline:</span>
+                          <span className="ml-2">
+                            {run.filterSummary.totalInput} total
+                            → {run.filterSummary.afterBrandFilter} brand
+                            → {run.filterSummary.afterLocationFilter} location
+                            → {run.filterSummary.afterExclusions} exclusions
+                            → {run.filterSummary.finalOutput} output
+                          </span>
+                        </div>
+                      )}
+                      {run.errors.length > 0 && (
+                        <div>
+                          <span className="font-semibold text-red-400">Errors:</span>
+                          <ul className="ml-4 mt-1 list-disc">
+                            {run.errors.map((e, j) => <li key={j}>{e}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TAB 3: BACKFILL STATUS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function BackfillTab({ isDark }: { isDark: boolean }) {
+  const [history, setHistory] = useState<RunLog[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/history`);
+        if (!res.ok) throw new Error("Failed to fetch history");
+        const data = await res.json();
+        setHistory(data);
+      } catch {
+        setHistory([]);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const completedMonths = new Set(
+    history.filter(r => r.sftpStatus === "success").map(r => r.month)
+  );
+  const completedCount = BACKFILL_MONTHS.filter(m => completedMonths.has(m)).length;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Progress bar */}
+      <div className={`rounded-xl border p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200"}`}>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+            Backfill Progress
+          </h2>
+          <span className={`text-sm font-mono font-bold ${isDark ? "text-blue-400" : "text-blue-600"}`}>
+            {completedCount} / {BACKFILL_MONTHS.length}
+          </span>
+        </div>
+        <div className={`w-full h-3 rounded-full overflow-hidden ${isDark ? "bg-slate-700" : "bg-gray-200"}`}>
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-500 transition-all duration-500"
+            style={{ width: `${(completedCount / BACKFILL_MONTHS.length) * 100}%` }}
+          />
+        </div>
+        <p className={`text-xs mt-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+          Jan 2024 – Jan 2026 ({BACKFILL_MONTHS.length} months required by Dunlop)
+        </p>
+      </div>
+
+      {/* Month grid */}
+      <div className={`rounded-xl border p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200"}`}>
+        <h3 className={`text-sm font-semibold mb-4 ${isDark ? "text-slate-300" : "text-gray-700"}`}>Month Status</h3>
+        <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-12 gap-2">
+          {BACKFILL_MONTHS.map(m => {
+            const done = completedMonths.has(m);
+            return (
+              <div
+                key={m}
+                className={`px-2 py-2 rounded-lg text-center text-xs font-medium border transition-colors ${
+                  done
+                    ? isDark ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400" : "bg-emerald-100 border-emerald-300 text-emerald-700"
+                    : isDark ? "bg-slate-700/50 border-slate-600 text-slate-400" : "bg-gray-100 border-gray-200 text-gray-500"
+                }`}
+                title={formatMonth(m)}
+              >
+                <div className="text-[10px] opacity-70">{m.slice(0, 4)}</div>
+                <div>{["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(m.slice(4, 6), 10) - 1]}</div>
+                {done && (
+                  <svg className="w-3 h-3 mx-auto mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SHARED COMPONENTS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function StatusBadge({ status, isDark }: { status: "success" | "failed" | "partial"; isDark: boolean }) {
+  const colors = {
+    success: isDark ? "bg-emerald-500/20 text-emerald-400" : "bg-emerald-100 text-emerald-700",
+    failed: isDark ? "bg-red-500/20 text-red-400" : "bg-red-100 text-red-700",
+    partial: isDark ? "bg-amber-500/20 text-amber-400" : "bg-amber-100 text-amber-700",
+  };
+  return (
+    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${colors[status]}`}>
+      {status.charAt(0).toUpperCase() + status.slice(1)}
+    </span>
+  );
+}

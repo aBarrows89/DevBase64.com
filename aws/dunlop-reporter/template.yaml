@@ -1,0 +1,451 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Dunlop Sellout Reporter — S3, Lambda, API Gateway, NAT Gateway, EventBridge, CloudWatch
+
+Parameters:
+  Stage:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, prod]
+  AlertEmail:
+    Type: String
+    Default: andy@ietires.com
+    Description: Email for CloudWatch alarm notifications
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 300
+    MemorySize: 512
+    Tags:
+      Project: DunlopReporter
+
+Resources:
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # S3 BUCKETS
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  JmkUploadsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: ietires-dunlop-jmk-uploads
+      Tags:
+        - Key: Project
+          Value: DunlopReporter
+
+  OutputCsvsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: ietires-dunlop-output-csvs
+      Tags:
+        - Key: Project
+          Value: DunlopReporter
+
+  RunLogsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: ietires-dunlop-run-logs
+      Tags:
+        - Key: Project
+          Value: DunlopReporter
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # SECRETS MANAGER
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  SftpCredentials:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: dunlop-reporter/sftp-credentials
+      Description: SFTP credentials for Dunlop dev and prod environments
+      SecretString: !Sub |
+        {
+          "sftp_dev": {
+            "host": "landpdev.srnatire.com",
+            "port": 22,
+            "username": "dealer_sellout",
+            "password": "KIp6Kzybr9klfgqm8rH2",
+            "directory": "inbound"
+          },
+          "sftp_prod": {
+            "host": "landp.srnatire.com",
+            "port": 22,
+            "username": "TBD",
+            "password": "TBD",
+            "directory": "inbound"
+          }
+        }
+      Tags:
+        - Key: Project
+          Value: DunlopReporter
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # VPC + NAT GATEWAY (Static IP for SFTP whitelist)
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: dunlop-reporter-vpc
+        - Key: Project
+          Value: DunlopReporter
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: dunlop-public-subnet
+
+  PrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: dunlop-private-subnet
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: dunlop-private-subnet-2
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: dunlop-igw
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  ElasticIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: dunlop-nat-eip
+        - Key: Project
+          Value: DunlopReporter
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt ElasticIP.AllocationId
+      SubnetId: !Ref PublicSubnet
+      Tags:
+        - Key: Name
+          Value: dunlop-nat-gateway
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: dunlop-public-rt
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetRouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: dunlop-private-rt
+
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  PrivateSubnetRouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnet2RouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Dunlop Lambda functions
+      VpcId: !Ref VPC
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: HTTPS to S3 and Secrets Manager
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+          Description: SSH/SFTP to Dunlop
+      Tags:
+        - Key: Name
+          Value: dunlop-lambda-sg
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # IAM ROLES
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: dunlop-reporter-lambda-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: DunlopReporterS3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub "arn:aws:s3:::${JmkUploadsBucket}/*"
+                  - !Sub "arn:aws:s3:::${OutputCsvsBucket}/*"
+                  - !Sub "arn:aws:s3:::${RunLogsBucket}/*"
+                  - !Sub "arn:aws:s3:::${JmkUploadsBucket}"
+                  - !Sub "arn:aws:s3:::${OutputCsvsBucket}"
+                  - !Sub "arn:aws:s3:::${RunLogsBucket}"
+        - PolicyName: DunlopReporterSecretsAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref SftpCredentials
+      Tags:
+        - Key: Project
+          Value: DunlopReporter
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # LAMBDA FUNCTIONS
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  GeneratePresignedUrlFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: dunlop-generate-presigned-url
+      Handler: generate_presigned_url.handler
+      CodeUri: lambdas/
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          S3_JMK_UPLOADS_BUCKET: !Ref JmkUploadsBucket
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /dunlop/upload-url
+            Method: post
+            RestApiId: !Ref DunlopApi
+
+  TransformAndUploadFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: dunlop-transform-and-upload
+      Handler: transform_and_upload.handler
+      CodeUri: lambdas/
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 600
+      MemorySize: 1024
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds:
+          - !Ref PrivateSubnet
+          - !Ref PrivateSubnet2
+      Environment:
+        Variables:
+          S3_JMK_UPLOADS_BUCKET: !Ref JmkUploadsBucket
+          S3_OUTPUT_CSVS_BUCKET: !Ref OutputCsvsBucket
+          S3_RUN_LOGS_BUCKET: !Ref RunLogsBucket
+          SFTP_SECRETS_ARN: !Ref SftpCredentials
+      Layers:
+        - !Ref ParamikoLayer
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /dunlop/run
+            Method: post
+            RestApiId: !Ref DunlopApi
+
+  FetchHistoryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: dunlop-fetch-history
+      Handler: fetch_history.handler
+      CodeUri: lambdas/
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          S3_RUN_LOGS_BUCKET: !Ref RunLogsBucket
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /dunlop/history
+            Method: get
+            RestApiId: !Ref DunlopApi
+
+  # Paramiko Lambda layer (for SFTP)
+  ParamikoLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: paramiko-layer
+      Description: paramiko SSH library for SFTP uploads
+      ContentUri: layers/paramiko/
+      CompatibleRuntimes:
+        - python3.12
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # API GATEWAY
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  DunlopApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: dunlop-reporter-api
+      StageName: !Ref Stage
+      Cors:
+        AllowOrigin: "'*'"
+        AllowHeaders: "'Content-Type'"
+        AllowMethods: "'GET,POST,OPTIONS'"
+      Tags:
+        Project: DunlopReporter
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # EVENTBRIDGE — Monthly Cron (1st of month, 6 AM ET)
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  MonthlyTriggerRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: dunlop-monthly-report
+      Description: Trigger Dunlop sellout report on 1st of each month
+      ScheduleExpression: "cron(0 10 1 * ? *)"  # 10 UTC = 6 AM ET
+      State: DISABLED  # Enable after backfill is complete
+      Targets:
+        - Arn: !GetAtt TransformAndUploadFunction.Arn
+          Id: dunlop-monthly-target
+          Input: !Sub |
+            {
+              "s3_key": "jmk-uploads/LATEST/latest.csv",
+              "month": "AUTO",
+              "env": "prod",
+              "runBy": "EventBridge (monthly cron)"
+            }
+      Tags:
+        - Key: Project
+          Value: DunlopReporter
+
+  MonthlyTriggerPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref TransformAndUploadFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt MonthlyTriggerRule.Arn
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # CLOUDWATCH ALARMS
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  AlarmTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: dunlop-reporter-alarms
+      Subscription:
+        - Protocol: email
+          Endpoint: !Ref AlertEmail
+      Tags:
+        - Key: Project
+          Value: DunlopReporter
+
+  TransformErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: dunlop-transform-errors
+      AlarmDescription: Alert when Dunlop transform Lambda has errors
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref TransformAndUploadFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions:
+        - !Ref AlarmTopic
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway URL for Dunlop Reporter
+    Value: !Sub "https://${DunlopApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}"
+
+  ElasticIpAddress:
+    Description: Static IP for SFTP whitelist — provide to Eusebio Castaneda
+    Value: !Ref ElasticIP
+
+  SftpSecretsArn:
+    Description: ARN for SFTP credentials in Secrets Manager
+    Value: !Ref SftpCredentials

@@ -40,3 +40,8 @@ public/workbox-*.js
 public/workbox-*.js.map
 companion-app/dist/
 companion-app/node_modules/
+
+# AWS SAM build artifacts
+.aws-sam/
+aws/dunlop-reporter/layers/paramiko/python/
+aws/dunlop-reporter/samconfig.toml
