@@ -167,7 +167,11 @@ export default function DunlopReportingPage() {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function UploadRunTab({ isDark, env, userName }: { isDark: boolean; env: "dev" | "prod"; userName: string }) {
-  const [month, setMonth] = useState(getDefaultMonth());
+  const defaultMonth = getDefaultMonth();
+  const [selYear, setSelYear] = useState(defaultMonth.slice(0, 4));
+  const [selMonth, setSelMonth] = useState(defaultMonth.slice(4, 6));
+  const [batchMode, setBatchMode] = useState(false);
+  const month = batchMode ? "ALL" : selYear + selMonth;
   const [file, setFile] = useState<File | null>(null);
   const [state, setState] = useState<UploadState>("idle");
   const [result, setResult] = useState<RunLog | null>(null);
@@ -317,13 +321,12 @@ function UploadRunTab({ isDark, env, userName }: { isDark: boolean; env: "dev" |
     if (fileRef.current) fileRef.current.value = "";
   };
 
-  // Month picker options — current month + last 36 months
-  const monthOptions: string[] = [];
-  const now = new Date();
-  for (let i = 0; i <= 36; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    monthOptions.push(`${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`);
-  }
+  // Year options: 2024 through current year
+  const currentYear = new Date().getFullYear();
+  const yearOptions: string[] = [];
+  for (let y = currentYear; y >= 2024; y--) yearOptions.push(String(y));
+
+  const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
   // Check if there are pending backfill months
   const pendingBackfillCount = BACKFILL_MONTHS.filter(m => !submittedMonths.has(m)).length;
@@ -336,29 +339,67 @@ function UploadRunTab({ isDark, env, userName }: { isDark: boolean; env: "dev" |
           Upload JMK Export & Send to Dunlop
         </h2>
 
-        {/* Month picker */}
+        {/* Month + Year picker */}
         <div className="mb-4">
           <label className={`block text-sm font-medium mb-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
             Reporting Month
           </label>
-          <select
-            value={month}
-            onChange={(e) => setMonth(e.target.value)}
-            className={`w-full max-w-xs px-3 py-2 rounded-lg border text-sm ${
-              isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-white border-gray-300 text-gray-900"
-            }`}
-          >
-            {pendingBackfillCount > 0 && (
-              <option value="ALL">All Pending Months — Backfill ({pendingBackfillCount} months)</option>
+          <div className="flex items-center gap-2">
+            <select
+              value={selMonth}
+              onChange={(e) => setSelMonth(e.target.value)}
+              className={`px-3 py-2 rounded-lg border text-sm ${
+                isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-white border-gray-300 text-gray-900"
+              }`}
+            >
+              {MONTH_NAMES.map((name, i) => {
+                const mm = String(i + 1).padStart(2, "0");
+                const combo = selYear + mm;
+                return (
+                  <option key={mm} value={mm}>{name}{submittedMonths.has(combo) ? " \u2714" : ""}</option>
+                );
+              })}
+            </select>
+            <select
+              value={selYear}
+              onChange={(e) => setSelYear(e.target.value)}
+              className={`px-3 py-2 rounded-lg border text-sm ${
+                isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-white border-gray-300 text-gray-900"
+              }`}
+            >
+              {yearOptions.map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+            {submittedMonths.has(month) && (
+              <span className={`text-xs font-medium px-2 py-1 rounded ${isDark ? "bg-emerald-500/20 text-emerald-400" : "bg-emerald-100 text-emerald-700"}`}>
+                Already submitted
+              </span>
             )}
-            {monthOptions.map(m => (
-              <option key={m} value={m}>{formatMonth(m)}{submittedMonths.has(m) ? " \u2714" : ""}</option>
-            ))}
-          </select>
-          {monthOptions.length === 0 && !pendingBackfillCount && (
-            <p className={`text-xs mt-1 ${isDark ? "text-emerald-400" : "text-emerald-600"}`}>
-              All months have been submitted.
-            </p>
+          </div>
+          {pendingBackfillCount > 0 && (
+            <div className="mt-2">
+              {batchMode ? (
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs font-semibold px-2 py-1 rounded ${isDark ? "bg-blue-500/20 text-blue-400" : "bg-blue-100 text-blue-700"}`}>
+                    Backfill mode: {pendingBackfillCount} months
+                  </span>
+                  <button
+                    onClick={() => setBatchMode(false)}
+                    className={`text-xs ${isDark ? "text-slate-400 hover:text-slate-300" : "text-gray-500 hover:text-gray-700"}`}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setBatchMode(true)}
+                  className={`text-xs font-medium ${isDark ? "text-blue-400 hover:text-blue-300" : "text-blue-600 hover:text-blue-500"}`}
+                >
+                  Run all pending backfill months ({pendingBackfillCount} remaining)
+                </button>
+              )}
+            </div>
           )}
         </div>
 
