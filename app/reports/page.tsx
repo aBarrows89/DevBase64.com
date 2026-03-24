@@ -7,6 +7,11 @@ import Sidebar, { MobileHeader } from "@/components/Sidebar";
 import { useTheme } from "../theme-context";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { useMemo } from "react";
+import {
+  BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+} from "recharts";
 
 // CSV export utility
 function exportToCSV(data: Record<string, unknown>[], filename: string) {
@@ -36,7 +41,7 @@ function exportToCSV(data: Record<string, unknown>[], filename: string) {
   link.click();
 }
 
-type ReportType = "personnel" | "applications" | "hiring" | "attendance" | "equipment" | "weekly";
+type ReportType = "personnel" | "applications" | "hiring" | "attendance" | "equipment" | "weekly" | "sales";
 
 function ReportsContent() {
   const { theme } = useTheme();
@@ -138,6 +143,12 @@ function ReportsContent() {
       label: "Weekly Overview",
       icon: "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z",
       description: "Weekly summary of daily activity logs for stakeholders",
+    },
+    {
+      id: "sales",
+      label: "Sales Dashboard",
+      icon: "M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z",
+      description: "Visual sales analytics from JMK data — revenue, brands, locations, trends",
     },
   ];
 
@@ -892,9 +903,246 @@ function ReportsContent() {
                 )}
               </div>
             )}
+
+            {activeReport === "sales" && (
+              <SalesDashboard isDark={isDark} />
+            )}
           </div>
         </div>
       </main>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SALES DASHBOARD COMPONENT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const CHART_COLORS = ["#06b6d4", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#ec4899", "#3b82f6", "#f97316", "#14b8a6", "#6366f1", "#84cc16", "#e11d48"];
+const LOC_NAMES: Record<string, string> = {
+  W07: "Uniontown (W07)", W08: "Latrobe (W08)", W09: "Chestnut Ridge (W09)",
+  R10: "Everson (R10)", R20: "TRD/Essey (R20)", R25: "Command Trax (R25)", R35: "King Super (R35)", R15: "R15",
+};
+
+interface SalesRow {
+  date: string; item_id: string; description: string; product_type: string;
+  brand: string; mfg_item: string; loc: string; trn: string;
+  qty: number; price: number; ext_sell: number; account: string; customer: string;
+}
+
+function fmtCurrency(n: number) {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n);
+}
+
+function fmtMonth(yyyymm: string) {
+  const names = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return `${names[parseInt(yyyymm.slice(4,6),10)-1]} ${yyyymm.slice(0,4)}`;
+}
+
+function SalesDashboard({ isDark }: { isDark: boolean }) {
+  const [availableMonths, setAvailableMonths] = useState<string[]>([]);
+  const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
+  const [data, setData] = useState<{ month: string; rows: SalesRow[] }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [locFilter, setLocFilter] = useState("all");
+  const [trnFilter, setTrnFilter] = useState("Sld");
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/sales");
+        if (res.ok) {
+          const { available } = await res.json();
+          setAvailableMonths(available || []);
+          if (available?.length > 0) setSelectedMonths([available[0]]);
+        }
+      } catch {} finally { setLoading(false); }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (selectedMonths.length === 0) return;
+    (async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/sales?months=${selectedMonths.join(",")}`);
+        if (res.ok) setData(await res.json());
+      } catch {} finally { setLoading(false); }
+    })();
+  }, [selectedMonths]);
+
+  const allRows = useMemo(() => {
+    let rows = data.flatMap(d => d.rows);
+    if (locFilter !== "all") rows = rows.filter(r => r.loc === locFilter);
+    if (trnFilter !== "all") rows = rows.filter(r => r.trn === trnFilter);
+    return rows;
+  }, [data, locFilter, trnFilter]);
+
+  const salesRows = useMemo(() => allRows.filter(r => r.trn === "Sld"), [allRows]);
+  const totalRevenue = salesRows.reduce((s, r) => s + Math.abs(r.ext_sell), 0);
+  const totalUnits = salesRows.reduce((s, r) => s + Math.abs(r.qty), 0);
+  const avgPrice = totalUnits > 0 ? totalRevenue / totalUnits : 0;
+  const uniqueCustomers = new Set(salesRows.map(r => r.account).filter(Boolean)).size;
+
+  const byLocation = useMemo(() => {
+    const m: Record<string, { units: number; revenue: number }> = {};
+    for (const r of salesRows) { const l = r.loc || "Other"; if (!m[l]) m[l] = { units: 0, revenue: 0 }; m[l].units += Math.abs(r.qty); m[l].revenue += Math.abs(r.ext_sell); }
+    return Object.entries(m).map(([loc, d]) => ({ name: LOC_NAMES[loc] || loc, ...d })).sort((a, b) => b.revenue - a.revenue);
+  }, [salesRows]);
+
+  const byBrand = useMemo(() => {
+    const m: Record<string, { units: number; revenue: number }> = {};
+    for (const r of salesRows) { const b = r.brand || "Other"; if (!m[b]) m[b] = { units: 0, revenue: 0 }; m[b].units += Math.abs(r.qty); m[b].revenue += Math.abs(r.ext_sell); }
+    return Object.entries(m).map(([name, d]) => ({ name, ...d })).sort((a, b) => b.revenue - a.revenue).slice(0, 15);
+  }, [salesRows]);
+
+  const dailyTrend = useMemo(() => {
+    const m: Record<string, { units: number; revenue: number }> = {};
+    for (const r of salesRows) { if (!m[r.date]) m[r.date] = { units: 0, revenue: 0 }; m[r.date].units += Math.abs(r.qty); m[r.date].revenue += Math.abs(r.ext_sell); }
+    return Object.entries(m).map(([date, d]) => ({ date: date.slice(5), ...d })).sort((a, b) => a.date.localeCompare(b.date));
+  }, [salesRows]);
+
+  const byTrnType = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const r of allRows) { m[r.trn || "Other"] = (m[r.trn || "Other"] || 0) + 1; }
+    return Object.entries(m).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+  }, [allRows]);
+
+  const topCustomers = useMemo(() => {
+    const m: Record<string, { name: string; units: number; revenue: number; txns: number }> = {};
+    for (const r of salesRows) { const a = r.account || "Walk-in"; if (!m[a]) m[a] = { name: r.customer || a, units: 0, revenue: 0, txns: 0 }; m[a].units += Math.abs(r.qty); m[a].revenue += Math.abs(r.ext_sell); m[a].txns++; }
+    return Object.values(m).sort((a, b) => b.revenue - a.revenue).slice(0, 20);
+  }, [salesRows]);
+
+  const uniqueLocs = useMemo(() => Array.from(new Set(data.flatMap(d => d.rows.map(r => r.loc)))).sort(), [data]);
+
+  const cardClass = `rounded-xl border p-5 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200"}`;
+
+  if (loading) return <div className="flex justify-center py-16"><div className="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" /></div>;
+
+  if (availableMonths.length === 0) return (
+    <div className={`text-center py-16 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+      <p className="text-lg font-medium">No sales data yet</p>
+      <p className="text-sm mt-1">Upload a JMK report through the Dunlop Reporting tool to populate the dashboard.</p>
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-3">
+        <select value={selectedMonths[0] || ""} onChange={(e) => setSelectedMonths([e.target.value])} className={`px-3 py-1.5 rounded-lg border text-sm ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-white border-gray-300 text-gray-900"}`}>
+          {availableMonths.map(m => <option key={m} value={m}>{fmtMonth(m)}</option>)}
+        </select>
+        <select value={locFilter} onChange={(e) => setLocFilter(e.target.value)} className={`px-3 py-1.5 rounded-lg border text-sm ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-white border-gray-300 text-gray-900"}`}>
+          <option value="all">All Locations</option>
+          {uniqueLocs.map(l => <option key={l} value={l}>{LOC_NAMES[l] || l}</option>)}
+        </select>
+        <select value={trnFilter} onChange={(e) => setTrnFilter(e.target.value)} className={`px-3 py-1.5 rounded-lg border text-sm ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-white border-gray-300 text-gray-900"}`}>
+          <option value="all">All Transactions</option>
+          <option value="Sld">Sales Only</option>
+          <option value="ReS">Resale</option>
+          <option value="TrO">Transfer Out</option>
+          <option value="TrI">Transfer In</option>
+        </select>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className={cardClass}><p className={`text-xs font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Total Revenue</p><p className={`text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{fmtCurrency(totalRevenue)}</p></div>
+        <div className={cardClass}><p className={`text-xs font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Units Sold</p><p className={`text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{totalUnits.toLocaleString()}</p></div>
+        <div className={cardClass}><p className={`text-xs font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Avg Price / Unit</p><p className={`text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{fmtCurrency(avgPrice)}</p></div>
+        <div className={cardClass}><p className={`text-xs font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Unique Customers</p><p className={`text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{uniqueCustomers.toLocaleString()}</p></div>
+      </div>
+
+      {/* Daily Trend */}
+      <div className={cardClass}>
+        <h3 className={`text-sm font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>Daily Revenue</h3>
+        <ResponsiveContainer width="100%" height={280}>
+          <LineChart data={dailyTrend}>
+            <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#334155" : "#e5e7eb"} />
+            <XAxis dataKey="date" stroke={isDark ? "#94a3b8" : "#6b7280"} fontSize={12} />
+            <YAxis stroke={isDark ? "#94a3b8" : "#6b7280"} fontSize={12} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
+            <Tooltip contentStyle={{ backgroundColor: isDark ? "#1e293b" : "#fff", border: `1px solid ${isDark ? "#334155" : "#e5e7eb"}`, borderRadius: 8 }} formatter={(value) => [fmtCurrency(Number(value)), "Revenue"]} />
+            <Line type="monotone" dataKey="revenue" stroke="#06b6d4" strokeWidth={2} dot={{ fill: "#06b6d4", r: 4 }} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Two column charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className={cardClass}>
+          <h3 className={`text-sm font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>Revenue by Location</h3>
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={byLocation} layout="vertical">
+              <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#334155" : "#e5e7eb"} />
+              <XAxis type="number" stroke={isDark ? "#94a3b8" : "#6b7280"} fontSize={12} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
+              <YAxis type="category" dataKey="name" stroke={isDark ? "#94a3b8" : "#6b7280"} fontSize={11} width={130} />
+              <Tooltip contentStyle={{ backgroundColor: isDark ? "#1e293b" : "#fff", border: `1px solid ${isDark ? "#334155" : "#e5e7eb"}`, borderRadius: 8 }} formatter={(value) => [fmtCurrency(Number(value)), "Revenue"]} />
+              <Bar dataKey="revenue" fill="#06b6d4" radius={[0, 4, 4, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <div className={cardClass}>
+          <h3 className={`text-sm font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>Top Brands by Revenue</h3>
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={byBrand} layout="vertical">
+              <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#334155" : "#e5e7eb"} />
+              <XAxis type="number" stroke={isDark ? "#94a3b8" : "#6b7280"} fontSize={12} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
+              <YAxis type="category" dataKey="name" stroke={isDark ? "#94a3b8" : "#6b7280"} fontSize={11} width={60} />
+              <Tooltip contentStyle={{ backgroundColor: isDark ? "#1e293b" : "#fff", border: `1px solid ${isDark ? "#334155" : "#e5e7eb"}`, borderRadius: 8 }} formatter={(value) => [fmtCurrency(Number(value)), "Revenue"]} />
+              <Bar dataKey="revenue" radius={[0, 4, 4, 0]}>{byBrand.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}</Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <div className={cardClass}>
+          <h3 className={`text-sm font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>Transaction Types</h3>
+          <ResponsiveContainer width="100%" height={280}>
+            <PieChart>
+              <Pie data={byTrnType} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}>
+                {byTrnType.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+              </Pie>
+              <Tooltip />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        <div className={cardClass}>
+          <h3 className={`text-sm font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>Units by Location</h3>
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={byLocation}>
+              <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#334155" : "#e5e7eb"} />
+              <XAxis dataKey="name" stroke={isDark ? "#94a3b8" : "#6b7280"} fontSize={10} angle={-20} textAnchor="end" height={60} />
+              <YAxis stroke={isDark ? "#94a3b8" : "#6b7280"} fontSize={12} />
+              <Tooltip contentStyle={{ backgroundColor: isDark ? "#1e293b" : "#fff", border: `1px solid ${isDark ? "#334155" : "#e5e7eb"}`, borderRadius: 8 }} />
+              <Bar dataKey="units" fill="#10b981" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Top Customers */}
+      <div className={cardClass}>
+        <h3 className={`text-sm font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>Top 20 Customers</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead><tr className={isDark ? "border-b border-slate-700" : "border-b border-gray-200"}>
+              {["#", "Customer", "Revenue", "Units", "Txns", "Avg/Unit"].map(h => <th key={h} className={`px-3 py-2 text-left text-xs font-semibold uppercase ${isDark ? "text-slate-400" : "text-gray-500"}`}>{h}</th>)}
+            </tr></thead>
+            <tbody>
+              {topCustomers.map((c, i) => (
+                <tr key={i} className={isDark ? "border-t border-slate-700/50" : "border-t border-gray-100"}>
+                  <td className={`px-3 py-2 ${isDark ? "text-slate-500" : "text-gray-400"}`}>{i+1}</td>
+                  <td className={`px-3 py-2 font-medium ${isDark ? "text-white" : "text-gray-900"}`}>{c.name}</td>
+                  <td className={`px-3 py-2 font-mono ${isDark ? "text-emerald-400" : "text-emerald-600"}`}>{fmtCurrency(c.revenue)}</td>
+                  <td className={`px-3 py-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>{c.units}</td>
+                  <td className={`px-3 py-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>{c.txns}</td>
+                  <td className={`px-3 py-2 font-mono ${isDark ? "text-slate-400" : "text-gray-500"}`}>{c.units > 0 ? fmtCurrency(c.revenue / c.units) : "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
