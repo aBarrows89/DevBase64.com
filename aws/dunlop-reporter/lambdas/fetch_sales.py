@@ -98,6 +98,46 @@ def _aggregate(rows):
         by_customer[acct]["revenue"] += abs(r.get("ext_sell", 0))
         by_customer[acct]["txns"] += 1
 
+    # Day-of-week by location (for Saturday analysis)
+    from datetime import date as dt_date
+    DOW_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    dow_by_loc = defaultdict(lambda: defaultdict(lambda: {"units": 0, "revenue": 0, "transactions": 0}))
+    for r in sales:
+        d = r.get("date", "")
+        loc = r.get("loc", "Other")
+        if not d:
+            continue
+        try:
+            parts = d.split("-")
+            day = dt_date(int(parts[0]), int(parts[1]), int(parts[2]))
+            dow = DOW_NAMES[day.weekday()]
+            dow_by_loc[loc][dow]["units"] += abs(r.get("qty", 0))
+            dow_by_loc[loc][dow]["revenue"] += abs(r.get("ext_sell", 0))
+            dow_by_loc[loc][dow]["transactions"] += 1
+        except Exception:
+            continue
+
+    # Format day-of-week data
+    dow_data = []
+    for loc in sorted(dow_by_loc.keys()):
+        loc_total_rev = sum(dow_by_loc[loc][d]["revenue"] for d in DOW_NAMES)
+        days = []
+        for d in DOW_NAMES:
+            dd = dow_by_loc[loc][d]
+            pct = (dd["revenue"] / loc_total_rev * 100) if loc_total_rev > 0 else 0
+            days.append({"day": d, "revenue": round(dd["revenue"], 2), "units": dd["units"], "transactions": dd["transactions"], "pct": round(pct, 1)})
+        sat = dow_by_loc[loc]["Sat"]
+        sat_pct = (sat["revenue"] / loc_total_rev * 100) if loc_total_rev > 0 else 0
+        dow_data.append({
+            "loc": loc,
+            "totalRevenue": round(loc_total_rev, 2),
+            "saturdayRevenue": round(sat["revenue"], 2),
+            "saturdayPct": round(sat_pct, 1),
+            "saturdayUnits": sat["units"],
+            "saturdayTransactions": sat["transactions"],
+            "days": days,
+        })
+
     # Unique locations
     unique_locs = sorted(set(r.get("loc", "") for r in rows if r.get("loc")))
 
@@ -129,6 +169,7 @@ def _aggregate(rows):
             key=lambda x: -x["revenue"]
         )[:20],
         "uniqueLocations": unique_locs,
+        "dowByLocation": dow_data,
         "totalRows": len(rows),
     }
 

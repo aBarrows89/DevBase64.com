@@ -947,6 +947,7 @@ interface AggData {
   byTrnType: { name: string; value: number }[];
   topCustomers: { account: string; name: string; units: number; revenue: number; txns: number }[];
   uniqueLocations: string[];
+  dowByLocation: { loc: string; totalRevenue: number; saturdayRevenue: number; saturdayPct: number; saturdayUnits: number; saturdayTransactions: number; days: { day: string; revenue: number; units: number; transactions: number; pct: number }[] }[];
 }
 
 function SalesDashboard({ isDark }: { isDark: boolean }) {
@@ -1078,6 +1079,66 @@ function SalesDashboard({ isDark }: { isDark: boolean }) {
           </ResponsiveContainer>
         </div>
       </div>
+
+      {/* Day-of-Week Analysis */}
+      {agg?.dowByLocation && agg.dowByLocation.length > 0 && (
+        <div className={cardClass}>
+          <h3 className={`text-sm font-semibold mb-2 ${isDark ? "text-white" : "text-gray-900"}`}>Day-of-Week Revenue by Location</h3>
+          <p className={`text-xs mb-4 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+            Shows what % of each location&apos;s revenue falls on each day — useful for evaluating Saturday hours.
+          </p>
+
+          {/* Saturday summary */}
+          <div className={`rounded-lg p-4 mb-4 ${isDark ? "bg-slate-700/30" : "bg-amber-50"}`}>
+            <h4 className={`text-xs font-semibold uppercase mb-2 ${isDark ? "text-amber-400" : "text-amber-700"}`}>Saturday Impact</h4>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {agg.dowByLocation.filter((d: { saturdayTransactions: number }) => d.saturdayTransactions > 0).map((d: { loc: string; saturdayPct: number; saturdayRevenue: number; saturdayUnits: number; saturdayTransactions: number }) => (
+                <div key={d.loc} className={`text-center p-2 rounded ${isDark ? "bg-slate-800/50" : "bg-white"}`}>
+                  <p className={`text-xs font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>{LOC_NAMES[d.loc] || d.loc}</p>
+                  <p className={`text-lg font-bold ${d.saturdayPct > 15 ? isDark ? "text-emerald-400" : "text-emerald-600" : isDark ? "text-slate-300" : "text-gray-700"}`}>{d.saturdayPct}%</p>
+                  <p className={`text-[10px] ${isDark ? "text-slate-500" : "text-gray-400"}`}>{fmtCurrency(d.saturdayRevenue)} / {d.saturdayUnits} units</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Full heatmap table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className={isDark ? "border-b border-slate-700" : "border-b border-gray-200"}>
+                  <th className={`px-3 py-2 text-left text-xs font-semibold ${isDark ? "text-slate-400" : "text-gray-500"}`}>Location</th>
+                  {["Mon","Tue","Wed","Thu","Fri","Sat"].map(d => (
+                    <th key={d} className={`px-3 py-2 text-center text-xs font-semibold ${d === "Sat" ? isDark ? "text-amber-400" : "text-amber-600" : isDark ? "text-slate-400" : "text-gray-500"}`}>{d}</th>
+                  ))}
+                  <th className={`px-3 py-2 text-right text-xs font-semibold ${isDark ? "text-slate-400" : "text-gray-500"}`}>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {agg.dowByLocation.map((loc: { loc: string; totalRevenue: number; days: { day: string; revenue: number; pct: number }[] }) => (
+                  <tr key={loc.loc} className={isDark ? "border-t border-slate-700/50" : "border-t border-gray-100"}>
+                    <td className={`px-3 py-2 font-medium text-xs ${isDark ? "text-white" : "text-gray-900"}`}>{LOC_NAMES[loc.loc] || loc.loc}</td>
+                    {loc.days.filter(d => d.day !== "Sun").map(d => {
+                      const intensity = Math.min(d.pct / 25, 1);
+                      const bg = d.day === "Sat"
+                        ? `rgba(${isDark ? "251,191,36" : "217,119,6"}, ${intensity * 0.4})`
+                        : `rgba(${isDark ? "6,182,212" : "8,145,178"}, ${intensity * 0.4})`;
+                      return (
+                        <td key={d.day} className="px-3 py-2 text-center" style={{ backgroundColor: bg }}>
+                          <span className={`text-xs font-mono font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{d.pct}%</span>
+                          <br />
+                          <span className={`text-[10px] ${isDark ? "text-slate-400" : "text-gray-500"}`}>{fmtCurrency(d.revenue)}</span>
+                        </td>
+                      );
+                    })}
+                    <td className={`px-3 py-2 text-right font-mono text-xs font-bold ${isDark ? "text-emerald-400" : "text-emerald-600"}`}>{fmtCurrency(loc.totalRevenue)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Top Customers */}
       <div className={cardClass}>
