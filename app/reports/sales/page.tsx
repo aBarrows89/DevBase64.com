@@ -301,7 +301,7 @@ export default function SalesDashboardPage() {
                       <Tooltip
                         contentStyle={{ backgroundColor: isDark ? "#1e293b" : "#fff", border: `1px solid ${isDark ? "#334155" : "#e5e7eb"}`, borderRadius: 8 }}
                         labelStyle={{ color: isDark ? "#e2e8f0" : "#111827" }}
-                        formatter={(value: number) => [formatCurrency(value), "Revenue"]}
+                        formatter={(value) => [formatCurrency(Number(value)), "Revenue"]}
                       />
                       <Line type="monotone" dataKey="revenue" stroke="#06b6d4" strokeWidth={2} dot={{ fill: "#06b6d4", r: 4 }} />
                     </LineChart>
@@ -320,7 +320,7 @@ export default function SalesDashboardPage() {
                         <YAxis type="category" dataKey="name" stroke={isDark ? "#94a3b8" : "#6b7280"} fontSize={11} width={130} />
                         <Tooltip
                           contentStyle={{ backgroundColor: isDark ? "#1e293b" : "#fff", border: `1px solid ${isDark ? "#334155" : "#e5e7eb"}`, borderRadius: 8 }}
-                          formatter={(value: number) => [formatCurrency(value), "Revenue"]}
+                          formatter={(value) => [formatCurrency(Number(value)), "Revenue"]}
                         />
                         <Bar dataKey="revenue" fill="#06b6d4" radius={[0, 4, 4, 0]} />
                       </BarChart>
@@ -337,7 +337,7 @@ export default function SalesDashboardPage() {
                         <YAxis type="category" dataKey="name" stroke={isDark ? "#94a3b8" : "#6b7280"} fontSize={11} width={60} />
                         <Tooltip
                           contentStyle={{ backgroundColor: isDark ? "#1e293b" : "#fff", border: `1px solid ${isDark ? "#334155" : "#e5e7eb"}`, borderRadius: 8 }}
-                          formatter={(value: number) => [formatCurrency(value), "Revenue"]}
+                          formatter={(value) => [formatCurrency(Number(value)), "Revenue"]}
                         />
                         <Bar dataKey="revenue" radius={[0, 4, 4, 0]}>
                           {byBrand.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
