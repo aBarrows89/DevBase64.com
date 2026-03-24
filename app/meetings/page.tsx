@@ -50,6 +50,7 @@ export default function MeetingsPage() {
   const [lookupCode, setLookupCode] = useState<string | null>(null);
 
   const [showPast, setShowPast] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
 
   const userId = user?._id as Id<"users"> | undefined;
   const upcomingMeetings = useQuery(api.meetings.listUpcoming, userId ? { userId } : "skip");
@@ -136,17 +137,71 @@ export default function MeetingsPage() {
               >
                 Meetings
               </h1>
-              <button
-                onClick={() => setShowNewMeeting(!showNewMeeting)}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                  isDark
-                    ? "bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30"
-                    : "bg-blue-100 text-blue-600 hover:bg-blue-200"
-                }`}
-              >
-                {showNewMeeting ? "Cancel" : "New Meeting"}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowInfo(!showInfo)}
+                  className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${
+                    isDark
+                      ? "text-slate-400 hover:bg-slate-800 hover:text-slate-300"
+                      : "text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                  }`}
+                  title="Why IE Meetings?"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => setShowNewMeeting(!showNewMeeting)}
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                    isDark
+                      ? "bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30"
+                      : "bg-blue-100 text-blue-600 hover:bg-blue-200"
+                  }`}
+                >
+                  {showNewMeeting ? "Cancel" : "New Meeting"}
+                </button>
+              </div>
             </div>
+
+            {/* Info Panel */}
+            {showInfo && (
+              <div className={`border rounded-xl p-5 sm:p-6 ${isDark ? "bg-gradient-to-br from-slate-800/80 to-slate-800/40 border-slate-700" : "bg-gradient-to-br from-blue-50 to-white border-blue-200 shadow-sm"}`}>
+                <div className="flex items-start justify-between mb-4">
+                  <h2 className={`text-lg font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
+                    Why IE Meetings?
+                  </h2>
+                  <button onClick={() => setShowInfo(false)} className={`${isDark ? "text-slate-400 hover:text-slate-300" : "text-gray-400 hover:text-gray-600"}`}>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <p className={`text-sm mb-4 ${isDark ? "text-slate-300" : "text-gray-600"}`}>
+                  IE Meetings is built into IE Central with features designed specifically for our team. No extra accounts, no monthly fees, no third-party data sharing.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {[
+                    { icon: "M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z", title: "AI Meeting Notes", desc: "Automatic transcription, summaries, action items, and decisions — powered by AI. Never miss a detail." },
+                    { icon: "M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z", title: "Remote Desktop Control", desc: "Take control of a coworker's screen during a call for real-time troubleshooting. Works with the Companion App." },
+                    { icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z", title: "Works with Anyone", desc: "Invite external contacts via email — they join with a link, no account needed. Share a code or send an invite." },
+                    { icon: "M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z", title: "HD Video & Screen Sharing", desc: "Peer-to-peer video calls with screen sharing, camera toggle, and noise suppression built in." },
+                    { icon: "M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z", title: "Private & Secure", desc: "All data stays in our infrastructure. No Zoom, no Teams, no third parties recording or storing your calls." },
+                    { icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z", title: "Zero Cost", desc: "No per-user fees, no meeting limits, no time caps. It's part of IE Central — already included." },
+                  ].map((item, i) => (
+                    <div key={i} className={`flex gap-3 p-3 rounded-lg ${isDark ? "bg-slate-700/30" : "bg-white/80"}`}>
+                      <svg className={`w-5 h-5 mt-0.5 flex-shrink-0 ${isDark ? "text-cyan-400" : "text-blue-500"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={item.icon} />
+                      </svg>
+                      <div>
+                        <h3 className={`text-sm font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>{item.title}</h3>
+                        <p className={`text-xs mt-0.5 ${isDark ? "text-slate-400" : "text-gray-500"}`}>{item.desc}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* New Meeting Form */}
             {showNewMeeting && (
