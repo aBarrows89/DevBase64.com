@@ -42,8 +42,7 @@ const ENVIRONMENTS = [
   { value: "staging", label: "Staging" },
 ];
 
-// Tech team emails for access
-const TECH_EMAILS = ["andy@ietires.com", "nick@ietires.com", "abarrows@ietires.com", "nquinn@ietires.com"];
+import { usePermissions } from "@/lib/usePermissions";
 
 function CredentialsContent() {
   const { theme } = useTheme();
@@ -71,8 +70,8 @@ function CredentialsContent() {
   const updateCredential = useMutation(api.credentials.update);
   const removeCredential = useMutation(api.credentials.remove);
 
-  // Check if user has dev team access
-  const hasAccess = user?.role === "super_admin" || TECH_EMAILS.includes(user?.email?.toLowerCase() || "");
+  const permissions = usePermissions();
+  const hasAccess = permissions.tier >= 5;
 
   if (!hasAccess) {
     return (

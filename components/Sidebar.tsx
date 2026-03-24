@@ -110,6 +110,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/reports", label: "Reports", icon: "M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
       { href: "/dealer-rebates", label: "Dealer Rebates", icon: "M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" },
       { href: "/dunlop-reporting", label: "Dunlop Reporting", icon: "M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" },
+      { href: "/settings/credentials", label: "Credentials", icon: "M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" },
       { href: "https://tiretrack-admin.vercel.app", label: "TireTrack Admin", icon: "M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z", external: true },
       { href: "http://34.228.222.11/classic", label: "IE Price System", icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z", external: true },
     ],
@@ -134,7 +135,6 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/audit-log", label: "Audit Log", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
       { href: "/deleted-records", label: "Deleted Records", icon: "M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" }, // T4+ via permissions
       { href: "/tech-wizard", label: "Tech Wizard", icon: "M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z", techOnly: true },
-      { href: "/settings/credentials", label: "Credentials", icon: "M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z", techOnly: true },
     ],
   },
 ];
@@ -755,6 +755,7 @@ export default function Sidebar() {
                 "/reports": permissions.menu.reports,
                 "/dealer-rebates": permissions.menu.dealerRebates,
                 "/dunlop-reporting": permissions.menu.dunlopReporting,
+                "/settings/credentials": tier >= 5,
                 "/suggestions": permissions.menu.suggestions,
                 // People & Org
                 "/org-chart": permissions.menu.orgChart,
