@@ -1108,8 +1108,8 @@ function SalesDashboard({ isDark }: { isDark: boolean }) {
               <thead>
                 <tr className={isDark ? "border-b border-slate-700" : "border-b border-gray-200"}>
                   <th className={`px-3 py-2 text-left text-xs font-semibold ${isDark ? "text-slate-400" : "text-gray-500"}`}>Location</th>
-                  {["Mon","Tue","Wed","Thu","Fri","Sat"].map(d => (
-                    <th key={d} className={`px-3 py-2 text-center text-xs font-semibold ${d === "Sat" ? isDark ? "text-amber-400" : "text-amber-600" : isDark ? "text-slate-400" : "text-gray-500"}`}>{d}</th>
+                  {[{d:"Mon",l:"M"},{d:"Tue",l:"T"},{d:"Wed",l:"W"},{d:"Thu",l:"T"},{d:"Fri",l:"F"},{d:"Sat",l:"S"}].map(({d,l}) => (
+                    <th key={d} className={`px-3 py-2 text-center text-xs font-semibold ${d === "Sat" ? isDark ? "text-amber-400" : "text-amber-600" : isDark ? "text-slate-400" : "text-gray-500"}`}>{l}</th>
                   ))}
                   <th className={`px-3 py-2 text-right text-xs font-semibold ${isDark ? "text-slate-400" : "text-gray-500"}`}>Total</th>
                 </tr>
