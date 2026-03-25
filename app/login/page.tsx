@@ -149,6 +149,21 @@ export default function LoginPage() {
           </form>
         </div>
 
+        {/* Meeting Code */}
+        <div className={`mt-6 border rounded-xl p-4 text-center ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white/50 border-gray-200"}`}>
+          <p className={`text-xs font-medium mb-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+            Have a meeting code?
+          </p>
+          <button
+            onClick={() => router.push("/join")}
+            className={`w-full py-2.5 rounded-lg font-medium text-sm transition-colors ${
+              isDark ? "bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30" : "bg-blue-100 text-blue-600 hover:bg-blue-200"
+            }`}
+          >
+            Join a Meeting
+          </button>
+        </div>
+
         {/* Footer */}
         <p className={`text-center text-sm mt-6 ${isDark ? "text-slate-600" : "text-gray-500"}`}>
           &copy; {new Date().getFullYear()} Import Export Tire Company. All rights reserved.
