@@ -74,7 +74,11 @@ def handler(event, context):
         month = body.get("month")
         env = body.get("env", "dev")
         run_by = body.get("runBy", "system")
+
+        # Fetch Fanatic dealer JMKs — prefer from request, fall back to Convex API
         fanatic_jmks = set(body.get("fanaticJmks", []))
+        if not fanatic_jmks:
+            fanatic_jmks = _fetch_fanatic_jmks()
 
         if not s3_key or not month:
             return _response(400, {"error": "s3_key and month are required"})
@@ -378,6 +382,34 @@ def _upload_sftp(csv_content, filename, env):
 
 
 # ─── HELPERS ──────────────────────────────────────────────────────────────────
+
+def _fetch_fanatic_jmks():
+    """Fetch Fanatic dealer JMK list directly from Convex HTTP API."""
+    import urllib.request
+
+    CONVEX_URL = os.environ.get("CONVEX_URL", "https://outstanding-dalmatian-787.convex.cloud")
+    try:
+        req = urllib.request.Request(
+            f"{CONVEX_URL}/api/query",
+            data=json.dumps({
+                "path": "dealerRebates:listDealers",
+                "args": {"program": "falken", "activeOnly": True},
+            }).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        resp = urllib.request.urlopen(req, timeout=10)
+        data = json.loads(resp.read().decode("utf-8"))
+        dealers = data.get("value", [])
+        jmks = set()
+        for d in dealers:
+            if d.get("fanaticId") and d.get("jmk"):
+                jmks.add(d["jmk"].lower().strip())
+        jmks.discard("0")
+        jmks.discard("")
+        return jmks
+    except Exception:
+        return set()
+
 
 def _save_sales_data(rows, month):
     """Save full parsed sales data to S3 for the sales dashboard.

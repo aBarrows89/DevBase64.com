@@ -323,6 +323,7 @@ Resources:
           S3_RUN_LOGS_BUCKET: !Ref RunLogsBucket
           S3_SALES_DATA_BUCKET: ietires-sales-data
           SFTP_SECRETS_ARN: !Ref SftpCredentials
+          CONVEX_URL: https://outstanding-dalmatian-787.convex.cloud
       Layers:
         - !Ref ParamikoLayer
       Events:
