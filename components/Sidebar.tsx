@@ -10,6 +10,7 @@ import { useSidebar } from "@/app/sidebar-context";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { usePermissions } from "@/lib/usePermissions";
+import { useAppearance } from "@/app/appearance-context";
 
 interface NavItem {
   href: string;
@@ -147,9 +148,13 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { user, logout, canViewPersonnel, canViewShifts, canManageTimeOff, canAccessDepartmentPortal, isOfficeManager } = useAuth();
   const { theme } = useTheme();
+  const { appearance } = useAppearance();
   const { isOpen, close } = useSidebar();
   const [openGroups, setOpenGroups] = useState<string[]>([]); // All closed by default
   const permissions = usePermissions();
+
+  // Hide sidebar in desktop and JMK modes — those have their own navigation
+  if (appearance !== "modern") return null;
 
   const isDark = theme === "dark";
 
@@ -935,9 +940,12 @@ export default function Sidebar() {
 // Mobile header component with hamburger menu
 export function MobileHeader() {
   const { theme } = useTheme();
+  const { appearance } = useAppearance();
   const { toggle } = useSidebar();
   const { user } = useAuth();
   const isDark = theme === "dark";
+
+  if (appearance !== "modern") return null;
 
   // Get unread notification count
   const unreadNotificationCount = useQuery(

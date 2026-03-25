@@ -3,10 +3,12 @@ import { v } from "convex/values";
 import { api } from "./_generated/api";
 
 // Get all active documents (optionally filter by folder)
+// Respects document visibility: private docs only shown to owner or shared users
 export const getAll = query({
   args: {
     folderId: v.optional(v.union(v.id("documentFolders"), v.null())),
     rootOnly: v.optional(v.boolean()), // If true, only return documents not in any folder
+    userId: v.optional(v.id("users")), // Current user — used for visibility filtering
   },
   handler: async (ctx, args) => {
     let documents = await ctx.db
@@ -23,21 +25,65 @@ export const getAll = query({
       documents = documents.filter((d) => !d.folderId);
     }
 
+    // Apply visibility filtering if userId provided
+    if (args.userId) {
+      // Get groups the user belongs to for group-based sharing
+      const allGroups = await ctx.db
+        .query("groups")
+        .withIndex("by_active", (q) => q.eq("isActive", true))
+        .collect();
+      const userGroupIds = new Set(
+        allGroups.filter((g) => g.memberIds.includes(args.userId!)).map((g) => g._id)
+      );
+
+      documents = documents.filter((d) => {
+        const vis = d.visibility || "private";
+        // Community/internal docs visible to all authenticated users
+        if (vis === "community" || vis === "internal") return true;
+        // Owner always sees their own docs
+        if (d.uploadedBy === args.userId) return true;
+        // Shared with user directly
+        if (d.sharedWith && d.sharedWith.includes(args.userId!)) return true;
+        // Shared with a group the user belongs to
+        if (d.sharedWithGroups && d.sharedWithGroups.some((gId) => userGroupIds.has(gId))) return true;
+        return false;
+      });
+    }
+
     return documents;
   },
 });
 
 // Get root documents (not in any folder)
 export const getRootDocuments = query({
-  args: {},
-  handler: async (ctx) => {
-    const documents = await ctx.db
+  args: {
+    userId: v.optional(v.id("users")),
+  },
+  handler: async (ctx, args) => {
+    let documents = await ctx.db
       .query("documents")
       .withIndex("by_active", (q) => q.eq("isActive", true))
       .order("desc")
       .collect();
 
-    return documents.filter((d) => !d.folderId);
+    documents = documents.filter((d) => !d.folderId);
+
+    // Apply visibility filtering
+    if (args.userId) {
+      const allGroups = await ctx.db.query("groups").withIndex("by_active", (q) => q.eq("isActive", true)).collect();
+      const userGroupIds = new Set(allGroups.filter((g) => g.memberIds.includes(args.userId!)).map((g) => g._id));
+
+      documents = documents.filter((d) => {
+        const vis = d.visibility || "private";
+        if (vis === "community" || vis === "internal") return true;
+        if (d.uploadedBy === args.userId) return true;
+        if (d.sharedWith && d.sharedWith.includes(args.userId!)) return true;
+        if (d.sharedWithGroups && d.sharedWithGroups.some((gId) => userGroupIds.has(gId))) return true;
+        return false;
+      });
+    }
+
+    return documents;
   },
 });
 
@@ -59,6 +105,7 @@ export const search = query({
   args: {
     query: v.string(),
     category: v.optional(v.string()),
+    userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
     if (!args.query.trim()) return [];
@@ -80,6 +127,21 @@ export const search = query({
 
     if (args.category) {
       results = results.filter((d) => d.category === args.category);
+    }
+
+    // Apply visibility filtering
+    if (args.userId) {
+      const allGroups = await ctx.db.query("groups").withIndex("by_active", (q) => q.eq("isActive", true)).collect();
+      const userGroupIds = new Set(allGroups.filter((g) => g.memberIds.includes(args.userId!)).map((g) => g._id));
+
+      results = results.filter((d) => {
+        const vis = d.visibility || "private";
+        if (vis === "community" || vis === "internal") return true;
+        if (d.uploadedBy === args.userId) return true;
+        if (d.sharedWith && d.sharedWith.includes(args.userId!)) return true;
+        if (d.sharedWithGroups && d.sharedWithGroups.some((gId) => userGroupIds.has(gId))) return true;
+        return false;
+      });
     }
 
     return results.slice(0, 50); // Limit results
@@ -124,11 +186,14 @@ export const create = mutation({
     uploadedBy: v.id("users"),
     uploadedByName: v.string(),
     requiresSignature: v.optional(v.boolean()),
+    visibility: v.optional(v.string()), // "private" | "internal" | "community" — defaults to "private"
   },
   handler: async (ctx, args) => {
     const now = Date.now();
+    const { visibility: vis, ...rest } = args;
     return await ctx.db.insert("documents", {
-      ...args,
+      ...rest,
+      visibility: vis || "private",
       isActive: true,
       downloadCount: 0,
       signatureCount: args.requiresSignature ? 0 : undefined,
@@ -145,6 +210,7 @@ export const update = mutation({
     name: v.optional(v.string()),
     description: v.optional(v.string()),
     category: v.optional(v.string()),
+    visibility: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { documentId, ...updates } = args;
@@ -153,6 +219,75 @@ export const update = mutation({
     );
     await ctx.db.patch(documentId, {
       ...filteredUpdates,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+// Share a document with specific users
+export const shareWith = mutation({
+  args: {
+    documentId: v.id("documents"),
+    userIds: v.array(v.id("users")),
+  },
+  handler: async (ctx, args) => {
+    const doc = await ctx.db.get(args.documentId);
+    if (!doc) throw new Error("Document not found");
+    const existing = doc.sharedWith || [];
+    const merged = [...new Set([...existing, ...args.userIds])];
+    await ctx.db.patch(args.documentId, {
+      sharedWith: merged,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+// Unshare a document with a user
+export const unshareWith = mutation({
+  args: {
+    documentId: v.id("documents"),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const doc = await ctx.db.get(args.documentId);
+    if (!doc) throw new Error("Document not found");
+    const updated = (doc.sharedWith || []).filter(id => id !== args.userId);
+    await ctx.db.patch(args.documentId, {
+      sharedWith: updated,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+// Share a document with groups
+export const shareWithGroups = mutation({
+  args: {
+    documentId: v.id("documents"),
+    groupIds: v.array(v.id("groups")),
+  },
+  handler: async (ctx, args) => {
+    const doc = await ctx.db.get(args.documentId);
+    if (!doc) throw new Error("Document not found");
+    const existing = doc.sharedWithGroups || [];
+    const merged = [...new Set([...existing, ...args.groupIds])];
+    await ctx.db.patch(args.documentId, {
+      sharedWithGroups: merged,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+// Unshare a document from a group
+export const unshareWithGroup = mutation({
+  args: {
+    documentId: v.id("documents"),
+    groupId: v.id("groups"),
+  },
+  handler: async (ctx, args) => {
+    const doc = await ctx.db.get(args.documentId);
+    if (!doc) throw new Error("Document not found");
+    await ctx.db.patch(args.documentId, {
+      sharedWithGroups: (doc.sharedWithGroups || []).filter((id) => id !== args.groupId),
       updatedAt: Date.now(),
     });
   },

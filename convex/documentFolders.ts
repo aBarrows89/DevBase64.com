@@ -379,6 +379,20 @@ export const update = mutation({
   },
 });
 
+// Update shared groups on a folder
+export const updateSharedGroups = mutation({
+  args: {
+    folderId: v.id("documentFolders"),
+    groupIds: v.array(v.id("groups")),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.folderId, {
+      sharedWithGroups: args.groupIds,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
 // Set or change password on a folder
 export const setPassword = mutation({
   args: {
@@ -624,6 +638,27 @@ export const getProtectedDocuments = action({
           // Continue if access check fails - try other methods
           console.error("Access check error:", e);
         }
+      }
+
+      // 3b. Check if user belongs to a group that has access
+      if (!hasAccess && args.userId && folder.sharedWithGroups && folder.sharedWithGroups.length > 0) {
+        try {
+          const allGroups = await ctx.runQuery(api.groups.list);
+          const userGroups = allGroups.filter((g: { memberIds: string[] }) => g.memberIds.includes(args.userId!));
+          const hasGroupAccess = userGroups.some((g: { _id: string }) => folder.sharedWithGroups!.includes(g._id as any));
+          if (hasGroupAccess) {
+            hasAccess = true;
+            accessMethod = "grant";
+          }
+        } catch (e) {
+          console.error("Group access check error:", e);
+        }
+      }
+
+      // 3c. Check if folder visibility is "internal" (all employees)
+      if (!hasAccess && args.userId && folderVisibility === "internal") {
+        hasAccess = true;
+        accessMethod = "community";
       }
 
       // 4. Check password if still no access

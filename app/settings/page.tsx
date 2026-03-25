@@ -5,12 +5,14 @@ import Protected from "../protected";
 import Sidebar, { MobileHeader } from "@/components/Sidebar";
 import { useAuth } from "../auth-context";
 import { useTheme } from "../theme-context";
+import { useAppearance, type Appearance } from "../appearance-context";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 
 function SettingsContent() {
   const { user, canManageUsers } = useAuth();
   const { theme, setTheme } = useTheme();
+  const { appearance, setAppearance } = useAppearance();
   const users = useQuery(api.auth.getAllUsers);
   const locations = useQuery(api.locations.list);
   const changePassword = useMutation(api.auth.changePassword);
@@ -379,6 +381,123 @@ function SettingsContent() {
                         </div>
                       )}
                     </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Layout / Shell Mode */}
+              <div className={`border rounded-xl p-6 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200 shadow-sm"}`}>
+                <h2 className={`text-lg font-semibold mb-2 ${isDark ? "text-white" : "text-gray-900"}`}>
+                  Layout Mode
+                </h2>
+                <p className={`text-sm mb-6 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                  Choose how IE Central looks and feels
+                </p>
+
+                <div className="grid grid-cols-3 gap-4">
+                  {/* Modern */}
+                  <button
+                    onClick={() => setAppearance("modern")}
+                    className={`relative p-4 rounded-xl border-2 transition-all ${
+                      appearance === "modern"
+                        ? isDark ? "border-cyan-500 ring-2 ring-cyan-500/20" : "border-blue-500 ring-2 ring-blue-500/20"
+                        : isDark ? "border-slate-600 hover:border-slate-500" : "border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <div className={`aspect-[4/3] rounded-lg overflow-hidden mb-3 ${isDark ? "bg-slate-800" : "bg-gray-100"}`}>
+                      <div className="h-full flex">
+                        <div className={`w-1/4 p-1.5 ${isDark ? "bg-slate-900 border-r border-slate-700" : "bg-white border-r border-gray-200"}`}>
+                          <div className={`w-full h-1.5 rounded mb-1 ${isDark ? "bg-cyan-500" : "bg-blue-500"}`}></div>
+                          <div className={`w-3/4 h-1 rounded mb-0.5 ${isDark ? "bg-slate-600" : "bg-gray-300"}`}></div>
+                          <div className={`w-2/3 h-1 rounded ${isDark ? "bg-slate-600" : "bg-gray-300"}`}></div>
+                        </div>
+                        <div className="flex-1 p-1.5">
+                          <div className={`w-1/2 h-1.5 rounded mb-1.5 ${isDark ? "bg-slate-500" : "bg-gray-400"}`}></div>
+                          <div className={`w-full h-6 rounded ${isDark ? "bg-slate-700" : "bg-white border border-gray-200"}`}></div>
+                        </div>
+                      </div>
+                    </div>
+                    <p className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"}`}>Modern</p>
+                    <p className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>Sidebar navigation</p>
+                    {appearance === "modern" && (
+                      <div className={`absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center ${isDark ? "bg-cyan-500" : "bg-blue-500"}`}>
+                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                    )}
+                  </button>
+
+                  {/* Desktop */}
+                  <button
+                    onClick={() => setAppearance("desktop")}
+                    className={`relative p-4 rounded-xl border-2 transition-all ${
+                      appearance === "desktop"
+                        ? isDark ? "border-cyan-500 ring-2 ring-cyan-500/20" : "border-blue-500 ring-2 ring-blue-500/20"
+                        : isDark ? "border-slate-600 hover:border-slate-500" : "border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <div className={`aspect-[4/3] rounded-lg overflow-hidden mb-3 relative ${isDark ? "bg-gradient-to-br from-slate-900 to-indigo-950" : "bg-gradient-to-br from-sky-200 to-teal-100"}`}>
+                      {/* Mini desktop icons */}
+                      <div className="absolute top-1.5 left-1.5 flex flex-col gap-1.5">
+                        {["📁", "📧", "📅"].map((e, i) => (
+                          <div key={i} className="text-[8px] text-center">
+                            <div>{e}</div>
+                          </div>
+                        ))}
+                      </div>
+                      {/* Mini window */}
+                      <div className={`absolute top-3 left-6 right-2 bottom-3 rounded-sm overflow-hidden ${isDark ? "bg-slate-800 border border-slate-600" : "bg-white border border-gray-300"}`}>
+                        <div className={`h-2 flex items-center gap-0.5 px-1 ${isDark ? "bg-slate-700" : "bg-gray-200"}`}>
+                          <div className="w-1 h-1 rounded-full bg-red-500"></div>
+                          <div className="w-1 h-1 rounded-full bg-yellow-500"></div>
+                          <div className="w-1 h-1 rounded-full bg-green-500"></div>
+                        </div>
+                      </div>
+                      {/* Mini taskbar */}
+                      <div className={`absolute bottom-0 left-0 right-0 h-2 ${isDark ? "bg-slate-800/80" : "bg-white/80"}`}></div>
+                    </div>
+                    <p className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"}`}>Desktop</p>
+                    <p className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>Windows & icons</p>
+                    {appearance === "desktop" && (
+                      <div className={`absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center ${isDark ? "bg-cyan-500" : "bg-blue-500"}`}>
+                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                    )}
+                  </button>
+
+                  {/* JMK Terminal */}
+                  <button
+                    onClick={() => setAppearance("jmk")}
+                    className={`relative p-4 rounded-xl border-2 transition-all ${
+                      appearance === "jmk"
+                        ? "border-green-500 ring-2 ring-green-500/20"
+                        : isDark ? "border-slate-600 hover:border-slate-500" : "border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <div className="aspect-[4/3] rounded-lg overflow-hidden mb-3 bg-black p-1.5 font-mono">
+                      <p className="text-green-500 text-[7px] leading-tight">IE CENTRAL — JMK</p>
+                      <p className="text-cyan-500 text-[6px] leading-tight mt-1">IMPORT EXPORT TIRE</p>
+                      <div className="mt-1 border border-green-700/40 p-0.5">
+                        <p className="text-green-400 text-[6px] bg-green-500/20">1. Dashboard</p>
+                        <p className="text-green-400 text-[6px]">2. Messages</p>
+                        <p className="text-green-400 text-[6px]">3. Email</p>
+                      </div>
+                      <div className="absolute bottom-1.5 left-1.5 right-1.5">
+                        <p className="text-green-700 text-[5px]">F1Help  F3Menu  F12Modern</p>
+                      </div>
+                    </div>
+                    <p className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"}`}>JMK Terminal</p>
+                    <p className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>Retro tribute</p>
+                    {appearance === "jmk" && (
+                      <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-green-500 flex items-center justify-center">
+                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                    )}
                   </button>
                 </div>
               </div>

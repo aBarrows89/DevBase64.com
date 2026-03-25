@@ -1104,6 +1104,11 @@ export default defineSchema({
     uploadedByName: v.string(), // For display purposes
     isActive: v.boolean(),
     downloadCount: v.number(), // Track usage
+    // Visibility: "private" (owner only), "internal" (all employees), "community" (public/shared)
+    visibility: v.optional(v.string()), // Defaults to "private" if not set
+    // Shared with specific users and groups
+    sharedWith: v.optional(v.array(v.id("users"))),
+    sharedWithGroups: v.optional(v.array(v.id("groups"))),
     // Public access settings
     isPublic: v.optional(v.boolean()), // Whether document is publicly accessible
     publicSlug: v.optional(v.string()), // URL-friendly slug for public access
@@ -1119,7 +1124,9 @@ export default defineSchema({
     .index("by_active", ["isActive"])
     .index("by_created", ["createdAt"])
     .index("by_public_slug", ["publicSlug"])
-    .index("by_folder", ["folderId"]),
+    .index("by_folder", ["folderId"])
+    .index("by_owner", ["uploadedBy"])
+    .index("by_visibility", ["visibility"]),
 
   // ============ DOCUMENT HUB E-SIGNATURES ============
   docHubSignatures: defineTable({
@@ -1145,7 +1152,8 @@ export default defineSchema({
     // HIPAA-compliant visibility levels:
     // "private" - Only owner can see (default for password-protected)
     // "community" - All users can see (for policies, handbooks, etc.)
-    visibility: v.optional(v.string()), // "private" | "community" - defaults to "private"
+    visibility: v.optional(v.string()), // "private" | "internal" | "community" - defaults to "private"
+    sharedWithGroups: v.optional(v.array(v.id("groups"))), // Groups that can access this folder
     createdBy: v.id("users"),
     createdByName: v.string(),
     isActive: v.boolean(),
@@ -1202,6 +1210,21 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_user_section", ["userId", "section"]),
+
+  // ============ CUSTOM GROUPS (for Doc Hub sharing) ============
+  groups: defineTable({
+    name: v.string(),
+    description: v.optional(v.string()),
+    color: v.optional(v.string()), // Hex color for display
+    memberIds: v.array(v.id("users")),
+    createdBy: v.id("users"),
+    createdByName: v.string(),
+    isActive: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_active", ["isActive"])
+    .index("by_created", ["createdAt"]),
 
   // ============ BROADCAST MESSAGES ============
   // System-wide announcements from super users

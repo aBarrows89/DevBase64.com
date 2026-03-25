@@ -62,6 +62,7 @@ import type * as equipment from "../equipment.js";
 import type * as events from "../events.js";
 import type * as exitInterviews from "../exitInterviews.js";
 import type * as expenseReports from "../expenseReports.js";
+import type * as groups from "../groups.js";
 import type * as holidays from "../holidays.js";
 import type * as indeedActions from "../indeedActions.js";
 import type * as indeedIntegration from "../indeedIntegration.js";
@@ -164,6 +165,7 @@ declare const fullApi: ApiFromModules<{
   events: typeof events;
   exitInterviews: typeof exitInterviews;
   expenseReports: typeof expenseReports;
+  groups: typeof groups;
   holidays: typeof holidays;
   indeedActions: typeof indeedActions;
   indeedIntegration: typeof indeedIntegration;

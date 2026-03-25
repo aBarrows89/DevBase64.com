@@ -3,7 +3,9 @@
 import { ConvexProvider, ConvexReactClient } from "convex/react";
 import { AuthProvider } from "./auth-context";
 import { ThemeProvider } from "./theme-context";
+import { AppearanceProvider } from "./appearance-context";
 import { SidebarProvider } from "./sidebar-context";
+import AppShell from "@/components/shell/AppShell";
 import GlobalSearch from "@/components/GlobalSearch";
 import KeyboardShortcuts from "@/components/KeyboardShortcuts";
 import SystemBanner from "@/components/SystemBanner";
@@ -18,15 +20,19 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ConvexProvider client={convex}>
       <ThemeProvider>
-        <SidebarProvider>
-          <AuthProvider>
-            <SystemBanner />
-            {children}
-            <GlobalSearch />
-            <KeyboardShortcuts />
-            <PushNotificationPrompt />
-          </AuthProvider>
-        </SidebarProvider>
+        <AppearanceProvider>
+          <SidebarProvider>
+            <AuthProvider>
+              <AppShell>
+                <SystemBanner />
+                {children}
+                <GlobalSearch />
+                <KeyboardShortcuts />
+                <PushNotificationPrompt />
+              </AppShell>
+            </AuthProvider>
+          </SidebarProvider>
+        </AppearanceProvider>
       </ThemeProvider>
     </ConvexProvider>
   );

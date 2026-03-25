@@ -597,3 +597,256 @@ button {
 .dark .email-body th {
   border-color: #475569 !important;
 }
+
+/* ============================================================
+   JMK TERMINAL MODE — DOS-style override for all page content
+   Applied via .jmk-mode class on the content wrapper
+   ============================================================ */
+
+.jmk-mode * {
+  font-family: 'IBM Plex Mono', 'Courier New', Courier, monospace !important;
+  border-radius: 0 !important;
+}
+
+/* Backgrounds → black */
+.jmk-mode,
+.jmk-mode div,
+.jmk-mode main,
+.jmk-mode section,
+.jmk-mode article,
+.jmk-mode aside,
+.jmk-mode header,
+.jmk-mode footer,
+.jmk-mode nav,
+.jmk-mode form {
+  background-color: #000000 !important;
+  background-image: none !important;
+}
+
+/* Cards and containers → dark green border */
+.jmk-mode [class*="card"],
+.jmk-mode [class*="rounded"],
+.jmk-mode [class*="border"],
+.jmk-mode [class*="shadow"] {
+  background-color: #000000 !important;
+  background-image: none !important;
+  border-color: #14532d !important;
+  box-shadow: none !important;
+}
+
+/* All text → green shades */
+.jmk-mode h1,
+.jmk-mode h2,
+.jmk-mode h3,
+.jmk-mode h4,
+.jmk-mode h5,
+.jmk-mode h6,
+.jmk-mode strong,
+.jmk-mode b {
+  color: #4ade80 !important;
+}
+
+.jmk-mode p,
+.jmk-mode span,
+.jmk-mode div,
+.jmk-mode li,
+.jmk-mode td,
+.jmk-mode th,
+.jmk-mode label,
+.jmk-mode a {
+  color: #22c55e !important;
+}
+
+.jmk-mode [class*="text-slate"],
+.jmk-mode [class*="text-gray"],
+.jmk-mode [class*="text-zinc"],
+.jmk-mode [class*="text-neutral"],
+.jmk-mode [class*="text-white"],
+.jmk-mode [class*="text-muted"],
+.jmk-mode [class*="text-tertiary"],
+.jmk-mode [class*="text-secondary"] {
+  color: #16a34a !important;
+}
+
+/* Buttons → terminal style */
+.jmk-mode button,
+.jmk-mode [role="button"] {
+  background-color: #000000 !important;
+  color: #22c55e !important;
+  border: 1px solid #14532d !important;
+  box-shadow: none !important;
+}
+
+.jmk-mode button:hover,
+.jmk-mode [role="button"]:hover {
+  background-color: #14532d !important;
+  color: #4ade80 !important;
+}
+
+/* Primary / accent buttons → highlighted green */
+.jmk-mode button[class*="bg-cyan"],
+.jmk-mode button[class*="bg-blue"],
+.jmk-mode button[class*="bg-indigo"],
+.jmk-mode button[class*="bg-emerald"] {
+  background-color: #22c55e !important;
+  color: #000000 !important;
+  border-color: #22c55e !important;
+}
+
+.jmk-mode button[class*="bg-cyan"]:hover,
+.jmk-mode button[class*="bg-blue"]:hover {
+  background-color: #4ade80 !important;
+}
+
+/* Danger buttons → red stays but terminal-ified */
+.jmk-mode button[class*="bg-red"],
+.jmk-mode button[class*="text-red"] {
+  color: #ef4444 !important;
+  border-color: #7f1d1d !important;
+}
+
+/* Inputs → terminal style */
+.jmk-mode input,
+.jmk-mode textarea,
+.jmk-mode select {
+  background-color: #000000 !important;
+  color: #4ade80 !important;
+  border: 1px solid #14532d !important;
+  caret-color: #22c55e !important;
+}
+
+.jmk-mode input::placeholder,
+.jmk-mode textarea::placeholder {
+  color: #166534 !important;
+}
+
+.jmk-mode input:focus,
+.jmk-mode textarea:focus,
+.jmk-mode select:focus {
+  border-color: #22c55e !important;
+  outline: none !important;
+  box-shadow: 0 0 0 1px #22c55e !important;
+}
+
+/* Tables → terminal grid */
+.jmk-mode table {
+  border-collapse: collapse !important;
+}
+
+.jmk-mode table,
+.jmk-mode tr,
+.jmk-mode td,
+.jmk-mode th {
+  border-color: #14532d !important;
+}
+
+.jmk-mode thead,
+.jmk-mode th {
+  background-color: #14532d !important;
+  color: #4ade80 !important;
+}
+
+.jmk-mode tbody tr:hover {
+  background-color: #052e16 !important;
+}
+
+/* Badges / pills → monochrome green */
+.jmk-mode [class*="rounded-full"] {
+  background-color: transparent !important;
+  border: 1px solid #14532d !important;
+  color: #22c55e !important;
+}
+
+/* Active/selected states → inverse (green bg, black text) */
+.jmk-mode [class*="bg-cyan-500"],
+.jmk-mode [class*="bg-blue-600"],
+.jmk-mode [class*="bg-blue-500"],
+.jmk-mode [aria-selected="true"],
+.jmk-mode [data-active="true"] {
+  background-color: #22c55e !important;
+  color: #000000 !important;
+}
+
+/* Scrollbar → terminal style */
+.jmk-mode ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.jmk-mode ::-webkit-scrollbar-track {
+  background: #000000;
+}
+.jmk-mode ::-webkit-scrollbar-thumb {
+  background: #14532d;
+  border: 1px solid #166534;
+}
+.jmk-mode ::-webkit-scrollbar-thumb:hover {
+  background: #166534;
+}
+
+/* Images / avatars → green tinted */
+.jmk-mode img {
+  filter: grayscale(100%) sepia(100%) hue-rotate(70deg) saturate(300%) brightness(70%) !important;
+}
+
+/* SVG icons → green */
+.jmk-mode svg {
+  color: #22c55e !important;
+}
+.jmk-mode svg path,
+.jmk-mode svg circle,
+.jmk-mode svg rect,
+.jmk-mode svg line {
+  stroke: #22c55e !important;
+}
+.jmk-mode svg [fill]:not([fill="none"]) {
+  fill: #22c55e !important;
+}
+
+/* Links → cyan (like the JMK tool) */
+.jmk-mode a:hover {
+  color: #06b6d4 !important;
+}
+
+/* Modals / overlays → dark with green border */
+.jmk-mode [class*="fixed"][class*="inset"] {
+  background-color: rgba(0, 0, 0, 0.9) !important;
+}
+
+/* Remove all backdrop blur — not terminal */
+.jmk-mode [class*="backdrop-blur"] {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Remove all gradients */
+.jmk-mode [class*="gradient"] {
+  background-image: none !important;
+  background-color: #000000 !important;
+}
+
+/* Charts (recharts) → green */
+.jmk-mode .recharts-text {
+  fill: #22c55e !important;
+}
+.jmk-mode .recharts-cartesian-grid line {
+  stroke: #14532d !important;
+}
+
+/* Subtle scanline effect for extra DOS feel */
+.jmk-mode::after {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 9999;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 255, 0, 0.015) 0px,
+    rgba(0, 255, 0, 0.015) 1px,
+    transparent 1px,
+    transparent 2px
+  );
+}

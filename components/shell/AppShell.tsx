@@ -1,0 +1,34 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useAppearance } from "@/app/appearance-context";
+import DesktopShell from "./DesktopShell";
+import JMKShell from "./JMKShell";
+
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+  return isMobile;
+}
+
+export default function AppShell({ children }: { children: React.ReactNode }) {
+  const { appearance } = useAppearance();
+  const isMobile = useIsMobile();
+
+  // Always use modern on mobile
+  if (isMobile) return <>{children}</>;
+
+  switch (appearance) {
+    case "desktop":
+      return <DesktopShell>{children}</DesktopShell>;
+    case "jmk":
+      return <JMKShell>{children}</JMKShell>;
+    default:
+      return <>{children}</>;
+  }
+}

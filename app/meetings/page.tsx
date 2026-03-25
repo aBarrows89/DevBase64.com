@@ -9,6 +9,7 @@ import { useAuth } from "../auth-context";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
+import MeetingsHelpModal from "@/components/meetings/HelpModal";
 
 function formatDateTime(timestamp: number): string {
   return new Date(timestamp).toLocaleString("en-US", {
@@ -138,19 +139,7 @@ export default function MeetingsPage() {
                 Meetings
               </h1>
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setShowInfo(!showInfo)}
-                  className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${
-                    isDark
-                      ? "text-slate-400 hover:bg-slate-800 hover:text-slate-300"
-                      : "text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                  }`}
-                  title="Why IE Meetings?"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </button>
+                <MeetingsHelpModal isDark={isDark} />
                 <button
                   onClick={() => setShowNewMeeting(!showNewMeeting)}
                   className={`px-4 py-2 rounded-lg font-medium transition-colors ${
