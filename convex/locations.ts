@@ -25,6 +25,18 @@ export const listActive = query({
   },
 });
 
+// Get active warehouse locations only
+export const listActiveWarehouses = query({
+  args: {},
+  handler: async (ctx) => {
+    const all = await ctx.db
+      .query("locations")
+      .withIndex("by_active", (q) => q.eq("isActive", true))
+      .collect();
+    return all.filter((l) => !l.locationType || l.locationType === "warehouse");
+  },
+});
+
 // Get single location by ID
 export const get = query({
   args: { id: v.id("locations") },

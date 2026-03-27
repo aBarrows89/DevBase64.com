@@ -9,17 +9,22 @@ export const getScannerFleetOverview = query({
   handler: async (ctx) => {
     const scanners = await ctx.db.query("scanners").collect();
     const locations = await ctx.db.query("locations").collect();
-    const activeLocations = locations.filter((l) => l.isActive);
+    const activeLocations = locations.filter(
+      (l) => l.isActive && (!l.locationType || l.locationType === "warehouse")
+    );
 
     const now = Date.now();
     const twoHoursAgo = now - 2 * 60 * 60 * 1000;
 
-    const total = scanners.filter((s) => s.status !== "retired").length;
-    const online = scanners.filter((s) => s.isOnline && s.status !== "retired").length;
+    const warehouseLocationIds = new Set(activeLocations.map((l) => l._id));
+    const warehouseScanners = scanners.filter((s) => warehouseLocationIds.has(s.locationId));
+
+    const total = warehouseScanners.filter((s) => s.status !== "retired").length;
+    const online = warehouseScanners.filter((s) => s.isOnline && s.status !== "retired").length;
     const offline = total - online;
 
     // Scanners needing attention: offline >2hrs, battery <20%, not retired
-    const needsAttention = scanners.filter((s) => {
+    const needsAttention = warehouseScanners.filter((s) => {
       if (s.status === "retired") return false;
       if (s.mdmStatus !== "provisioned") return false;
       const offlineTooLong = !s.isOnline && s.lastSeen && s.lastSeen < twoHoursAgo;

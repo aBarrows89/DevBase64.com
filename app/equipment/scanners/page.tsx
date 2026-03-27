@@ -30,7 +30,7 @@ function ScannerDashboardContent() {
   const scanners = useQuery(api.equipment.listScanners, {
     locationId: locationFilter !== "all" ? locationFilter : undefined,
   });
-  const locations = useQuery(api.locations.listActive);
+  const locations = useQuery(api.locations.listActiveWarehouses);
   const alerts = useQuery(api.scannerMdm.getScannersNeedingAttention);
 
   const canEdit =
