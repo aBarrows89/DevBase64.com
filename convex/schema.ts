@@ -822,10 +822,10 @@ export default defineSchema({
   // ============ EQUIPMENT INVENTORY ============
   // Scanners (RF scanners, barcode scanners, etc.)
   scanners: defineTable({
-    number: v.string(), // Scanner identifier (e.g., "1", "A-12", "SC-001")
-    pin: v.optional(v.string()), // PIN code for the scanner
+    number: v.string(), // Scanner identifier (e.g., "W08-001", "R10-042")
+    pin: v.optional(v.string()),
     serialNumber: v.optional(v.string()),
-    model: v.optional(v.string()), // e.g., "Zebra MC3300", "Honeywell CT60"
+    model: v.optional(v.string()), // e.g., "Zebra TC51", "Zebra MC3300"
     locationId: v.id("locations"),
     status: v.string(), // "available" | "assigned" | "maintenance" | "lost" | "retired"
     assignedTo: v.optional(v.id("personnel")),
@@ -833,16 +833,43 @@ export default defineSchema({
     lastMaintenanceDate: v.optional(v.string()),
     purchaseDate: v.optional(v.string()),
     notes: v.optional(v.string()),
-    conditionNotes: v.optional(v.string()), // Current condition of the equipment
-    retiredAt: v.optional(v.number()), // When the equipment was retired
-    retiredReason: v.optional(v.string()), // Why it was retired
+    conditionNotes: v.optional(v.string()),
+    retiredAt: v.optional(v.number()),
+    retiredReason: v.optional(v.string()),
+    // IoT Core MDM fields
+    iotThingName: v.optional(v.string()), // AWS IoT thing name (e.g., "scanner-W08-001")
+    iotThingArn: v.optional(v.string()),
+    iotCertificateArn: v.optional(v.string()),
+    provisionedAt: v.optional(v.number()),
+    mdmStatus: v.optional(v.string()), // "provisioned" | "pending" | "deprovisioned"
+    // Live telemetry (updated by scanner-status Lambda)
+    isOnline: v.optional(v.boolean()),
+    lastSeen: v.optional(v.number()),
+    batteryLevel: v.optional(v.number()), // 0-100
+    wifiSignal: v.optional(v.number()), // dBm
+    gpsLatitude: v.optional(v.number()),
+    gpsLongitude: v.optional(v.number()),
+    installedApps: v.optional(v.object({
+      tireTrack: v.optional(v.string()),
+      rtLocator: v.optional(v.string()),
+      scannerAgent: v.optional(v.string()),
+    })),
+    agentVersion: v.optional(v.string()),
+    androidVersion: v.optional(v.string()),
+    // MDM state
+    isLocked: v.optional(v.boolean()),
+    lastCommandId: v.optional(v.string()),
+    lastCommandStatus: v.optional(v.string()), // "pending" | "acknowledged" | "completed" | "failed"
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_location", ["locationId"])
     .index("by_number", ["number"])
     .index("by_status", ["status"])
-    .index("by_assigned", ["assignedTo"]),
+    .index("by_assigned", ["assignedTo"])
+    .index("by_iot_thing", ["iotThingName"])
+    .index("by_serial", ["serialNumber"])
+    .index("by_online", ["isOnline"]),
 
   // Pickers (order picking devices/equipment)
   pickers: defineTable({
@@ -926,6 +953,52 @@ export default defineSchema({
     .index("by_equipment", ["equipmentType", "equipmentId"])
     .index("by_personnel", ["returnedBy"])
     .index("by_checked", ["checkedAt"]),
+
+  // ============ SCANNER MDM ============
+  // Per-location scanner setup configuration
+  scannerMdmConfigs: defineTable({
+    locationId: v.id("locations"),
+    locationCode: v.string(), // "W08", "R10", "W09"
+    rtLocatorUrl: v.string(),
+    defaultDeviceIdPrefix: v.string(), // e.g., "W08-"
+    screenTimeoutMs: v.number(), // Default 1800000 (30 min)
+    screenRotation: v.string(), // "auto" | "portrait" | "landscape"
+    bloatwarePackages: v.array(v.string()), // Package names to disable
+    wifiSsid: v.optional(v.string()),
+    wifiPassword: v.optional(v.string()),
+    tireTrackApkSource: v.string(), // "expo" | "s3"
+    tireTrackApkS3Key: v.optional(v.string()),
+    rtLocatorApkS3Key: v.optional(v.string()),
+    agentApkS3Key: v.optional(v.string()),
+    currentTireTrackVersion: v.optional(v.string()),
+    currentRtLocatorVersion: v.optional(v.string()),
+    currentAgentVersion: v.optional(v.string()),
+    rtConfigXml: v.optional(v.string()), // RT config XML template
+    notes: v.optional(v.string()),
+    updatedBy: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_location", ["locationId"])
+    .index("by_code", ["locationCode"]),
+
+  // Remote command audit log
+  scannerCommandLog: defineTable({
+    scannerId: v.id("scanners"),
+    scannerNumber: v.string(), // Denormalized for display
+    command: v.string(), // "lock" | "unlock" | "wipe" | "install_apk" | "push_config" | "restart" | "update_pin"
+    payload: v.optional(v.string()), // JSON payload sent with command
+    status: v.string(), // "sent" | "acknowledged" | "completed" | "failed" | "timeout"
+    issuedBy: v.id("users"),
+    issuedByName: v.string(), // Denormalized
+    issuedAt: v.number(),
+    acknowledgedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    errorMessage: v.optional(v.string()),
+  })
+    .index("by_scanner", ["scannerId"])
+    .index("by_status", ["status"])
+    .index("by_issued", ["issuedAt"]),
 
   // Vehicles (company fleet)
   vehicles: defineTable({

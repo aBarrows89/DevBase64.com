@@ -1,0 +1,67 @@
+import { httpRouter } from "convex/server";
+import { httpAction } from "./_generated/server";
+import { internal } from "./_generated/api";
+
+const http = httpRouter();
+
+// Webhook endpoint for scanner-status Lambda to POST telemetry updates
+http.route({
+  path: "/scanner-telemetry",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    // Validate shared secret
+    const authHeader = request.headers.get("x-webhook-secret");
+    const expectedSecret = process.env.SCANNER_WEBHOOK_SECRET;
+
+    if (!expectedSecret || authHeader !== expectedSecret) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    try {
+      const body = await request.json();
+
+      await ctx.runMutation(internal.scannerMdm.updateScannerTelemetry, {
+        iotThingName: body.iotThingName,
+        batteryLevel: body.batteryLevel,
+        wifiSignal: body.wifiSignal,
+        gpsLatitude: body.gpsLatitude,
+        gpsLongitude: body.gpsLongitude,
+        installedApps: body.installedApps,
+        agentVersion: body.agentVersion,
+        androidVersion: body.androidVersion,
+        isLocked: body.isLocked,
+        lastCommandAck: body.lastCommandAck,
+      });
+
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    } catch (error) {
+      return new Response(
+        JSON.stringify({ error: "Failed to process telemetry" }),
+        {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
+  }),
+});
+
+// Health check endpoint
+http.route({
+  path: "/health",
+  method: "GET",
+  handler: httpAction(async () => {
+    return new Response(JSON.stringify({ status: "ok" }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }),
+});
+
+export default http;

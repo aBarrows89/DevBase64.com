@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Protected from "../protected";
 import Sidebar, { MobileHeader } from "@/components/Sidebar";
 import { useTheme } from "../theme-context";
@@ -21,9 +22,10 @@ function EquipmentContent() {
   const isDark = theme === "dark";
   const { user } = useAuth();
 
+  const router = useRouter();
   const canEditEquipment = user?.role === "super_admin" || user?.role === "admin" || user?.role === "warehouse_director" || user?.role === "warehouse_manager";
 
-  const [activeTab, setActiveTab] = useState<EquipmentType>("scanners");
+  const [activeTab, setActiveTab] = useState<EquipmentType>("pickers");
   const [selectedLocation, setSelectedLocation] = useState<Id<"locations"> | "all">("all");
   const [showNewEquipment, setShowNewEquipment] = useState(false);
   const [editingId, setEditingId] = useState<Id<"scanners"> | Id<"pickers"> | null>(null);
@@ -838,14 +840,13 @@ By signing below, the Employee acknowledges that they have read, understand, and
             {/* Equipment Type Tabs */}
             <div className={`inline-flex rounded-lg p-1 ${isDark ? "bg-slate-800" : "bg-gray-200"}`}>
               <button
-                onClick={() => setActiveTab("scanners")}
-                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                  activeTab === "scanners"
-                    ? isDark ? "bg-cyan-500 text-white" : "bg-white text-gray-900 shadow-sm"
-                    : isDark ? "text-slate-400 hover:text-white" : "text-gray-600 hover:text-gray-900"
-                }`}
+                onClick={() => router.push("/equipment/scanners")}
+                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors flex items-center gap-1.5 ${isDark ? "text-slate-400 hover:text-white" : "text-gray-600 hover:text-gray-900"}`}
               >
-                Scanners ({scanners?.length ?? 0})
+                Scanners
+                <svg className="w-3.5 h-3.5 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
               </button>
               <button
                 onClick={() => setActiveTab("pickers")}

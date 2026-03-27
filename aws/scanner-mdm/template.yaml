@@ -1,0 +1,335 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Scanner MDM — IoT Core, S3, Lambda, API Gateway for scanner fleet management
+
+Parameters:
+  Stage:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, prod]
+  AlertEmail:
+    Type: String
+    Default: andy@ietires.com
+    Description: Email for CloudWatch alarm notifications
+  ConvexUrl:
+    Type: String
+    Default: https://outstanding-dalmatian-787.convex.cloud
+    Description: Convex deployment URL
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 30
+    MemorySize: 256
+    Tags:
+      Project: ScannerMDM
+
+Resources:
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # S3 BUCKET — APKs, RT configs, agent certificates
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  ScannerAssetsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: ietires-scanner-assets
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: Project
+          Value: ScannerMDM
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # SECRETS MANAGER — Convex deploy key + webhook secret
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  ConvexCredentials:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: scanner-mdm/convex-credentials
+      Description: Convex deploy key and webhook secret for scanner MDM
+      SecretString: !Sub |
+        {
+          "convex_deploy_key": "REPLACE_WITH_DEPLOY_KEY",
+          "webhook_secret": "REPLACE_WITH_WEBHOOK_SECRET"
+        }
+      Tags:
+        - Key: Project
+          Value: ScannerMDM
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # IOT CORE — Thing group, policy
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  ScannerThingGroup:
+    Type: AWS::IoT::ThingGroup
+    Properties:
+      ThingGroupName: ietires-scanners
+      ThingGroupProperties:
+        ThingGroupDescription: IE Tires warehouse scanner fleet
+
+  ScannerIoTPolicy:
+    Type: AWS::IoT::Policy
+    Properties:
+      PolicyName: ietires-scanner-policy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - iot:Connect
+            Resource:
+              - !Sub 'arn:aws:iot:${AWS::Region}:${AWS::AccountId}:client/scanner-*'
+          - Effect: Allow
+            Action:
+              - iot:Publish
+            Resource:
+              - !Sub 'arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topic/dt/scanners/*/telemetry'
+              - !Sub 'arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topic/cmd/scanners/*/ack'
+              - !Sub 'arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topic/$aws/things/*/shadow/update'
+          - Effect: Allow
+            Action:
+              - iot:Subscribe
+            Resource:
+              - !Sub 'arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topicfilter/cmd/scanners/*'
+              - !Sub 'arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topicfilter/$aws/things/*/shadow/*'
+          - Effect: Allow
+            Action:
+              - iot:Receive
+            Resource:
+              - !Sub 'arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topic/cmd/scanners/*'
+              - !Sub 'arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topic/$aws/things/*/shadow/*'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # IAM ROLE — Lambda execution role
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: scanner-mdm-lambda-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: ScannerMDMPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # IoT Core permissions
+              - Effect: Allow
+                Action:
+                  - iot:CreateThing
+                  - iot:AddThingToThingGroup
+                  - iot:CreateKeysAndCertificate
+                  - iot:AttachPolicy
+                  - iot:AttachThingPrincipal
+                  - iot:UpdateThingShadow
+                  - iot:GetThingShadow
+                  - iot:Publish
+                  - iot:DescribeEndpoint
+                  - iot:DeleteThing
+                  - iot:DetachPolicy
+                  - iot:DetachThingPrincipal
+                  - iot:UpdateCertificate
+                  - iot:DeleteCertificate
+                Resource: '*'
+              # S3 permissions
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt ScannerAssetsBucket.Arn
+                  - !Sub '${ScannerAssetsBucket.Arn}/*'
+              # Secrets Manager
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource:
+                  - !Ref ConvexCredentials
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # IOT RULE — Trigger status Lambda on device shadow updates
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  ScannerTelemetryRule:
+    Type: AWS::IoT::TopicRule
+    Properties:
+      RuleName: scanner_telemetry_to_lambda
+      TopicRulePayload:
+        Sql: "SELECT *, topic(3) as thingName FROM '$aws/things/+/shadow/update/documents' WHERE startswith(topic(3), 'scanner-')"
+        Actions:
+          - Lambda:
+              FunctionArn: !GetAtt StatusFunction.Arn
+        RuleDisabled: false
+
+  StatusFunctionInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref StatusFunction
+      Action: lambda:InvokeFunction
+      Principal: iot.amazonaws.com
+      SourceArn: !GetAtt ScannerTelemetryRule.Arn
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # API GATEWAY
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  ScannerMdmApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: scanner-mdm-api
+      StageName: !Ref Stage
+      Cors:
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization'"
+        AllowOrigin: "'*'"
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # LAMBDA FUNCTIONS
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  ProvisionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: scanner-provision
+      Handler: provision.handler
+      CodeUri: lambdas/
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 60
+      Environment:
+        Variables:
+          IOT_THING_GROUP: !Ref ScannerThingGroup
+          IOT_POLICY_NAME: ietires-scanner-policy
+          CONVEX_URL: !Ref ConvexUrl
+          SECRETS_ARN: !Ref ConvexCredentials
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /scanner-mdm/provision
+            Method: post
+            RestApiId: !Ref ScannerMdmApi
+
+  CommandFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: scanner-command
+      Handler: command.handler
+      CodeUri: lambdas/
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          S3_ASSETS_BUCKET: !Ref ScannerAssetsBucket
+          CONVEX_URL: !Ref ConvexUrl
+          SECRETS_ARN: !Ref ConvexCredentials
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /scanner-mdm/command
+            Method: post
+            RestApiId: !Ref ScannerMdmApi
+
+  StatusFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: scanner-status
+      Handler: status.handler
+      CodeUri: lambdas/
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          CONVEX_URL: !Ref ConvexUrl
+          SECRETS_ARN: !Ref ConvexCredentials
+
+  FetchApkFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: scanner-fetch-apk
+      Handler: fetch_apk.handler
+      CodeUri: lambdas/
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          S3_ASSETS_BUCKET: !Ref ScannerAssetsBucket
+          CONVEX_URL: !Ref ConvexUrl
+          SECRETS_ARN: !Ref ConvexCredentials
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /scanner-mdm/apk
+            Method: get
+            RestApiId: !Ref ScannerMdmApi
+
+  SetupConfigFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: scanner-setup-config
+      Handler: setup_config.handler
+      CodeUri: lambdas/
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          CONVEX_URL: !Ref ConvexUrl
+          SECRETS_ARN: !Ref ConvexCredentials
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /scanner-mdm/config/{locationCode}
+            Method: get
+            RestApiId: !Ref ScannerMdmApi
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # CLOUDWATCH ALARMS
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  AlarmTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: scanner-mdm-alarms
+      Subscription:
+        - Protocol: email
+          Endpoint: !Ref AlertEmail
+
+  ProvisionErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: scanner-provision-errors
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ProvisionFunction
+      AlarmActions:
+        - !Ref AlarmTopic
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway URL
+    Value: !Sub 'https://${ScannerMdmApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}'
+  S3Bucket:
+    Description: Scanner assets S3 bucket
+    Value: !Ref ScannerAssetsBucket
+  IoTEndpoint:
+    Description: AWS IoT endpoint (use aws iot describe-endpoint to get actual value)
+    Value: "Run: aws iot describe-endpoint --endpoint-type iot:Data-ATS"
+  ThingGroup:
+    Description: IoT Thing Group
+    Value: !Ref ScannerThingGroup

@@ -1,0 +1,196 @@
+"""
+Scanner Fetch APK Lambda
+Returns presigned download URL for the latest APK.
+Supports TireTrack (from Expo or S3), RT Locator (S3), and Agent (S3).
+"""
+
+import json
+import os
+import urllib.request
+import boto3
+
+s3 = boto3.client("s3")
+secrets = boto3.client("secretsmanager")
+
+S3_BUCKET = os.environ.get("S3_ASSETS_BUCKET", "ietires-scanner-assets")
+CONVEX_URL = os.environ.get("CONVEX_URL")
+SECRETS_ARN = os.environ.get("SECRETS_ARN")
+
+
+def get_convex_credentials():
+    resp = secrets.get_secret_value(SecretId=SECRETS_ARN)
+    return json.loads(resp["SecretString"])
+
+
+def query_convex(deploy_key, path, args):
+    url = f"{CONVEX_URL}/api/query"
+    data = json.dumps({"path": path, "args": args, "format": "json"}).encode()
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Convex {deploy_key}",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read())
+
+
+def get_latest_s3_apk(prefix):
+    """Find the most recently uploaded APK with given prefix in S3."""
+    try:
+        resp = s3.list_objects_v2(
+            Bucket=S3_BUCKET, Prefix=f"apks/{prefix}", MaxKeys=50
+        )
+        contents = resp.get("Contents", [])
+        apks = [c for c in contents if c["Key"].endswith(".apk")]
+        if not apks:
+            return None
+        # Sort by last modified, newest first
+        apks.sort(key=lambda x: x["LastModified"], reverse=True)
+        return apks[0]["Key"]
+    except Exception:
+        return None
+
+
+def handler(event, context):
+    try:
+        params = event.get("queryStringParameters") or {}
+        app = params.get("app")
+        location_code = params.get("locationCode")
+
+        if not app:
+            return response(400, {"error": "Missing app parameter"})
+
+        if app not in ("tiretrack", "rtlocator", "agent"):
+            return response(400, {"error": f"Invalid app: {app}"})
+
+        # Get MDM config if location specified
+        config = None
+        if location_code:
+            try:
+                creds = get_convex_credentials()
+                config = query_convex(
+                    creds["convex_deploy_key"],
+                    "scannerMdm:getMdmConfigByCode",
+                    {"locationCode": location_code},
+                )
+            except Exception as e:
+                print(f"Warning: Could not fetch MDM config: {e}")
+
+        # Determine source and fetch URL
+        if app == "tiretrack":
+            source = "s3"
+            if config and config.get("tireTrackApkSource") == "expo":
+                source = "expo"
+
+            if source == "expo":
+                # Try fetching from Expo/TireTrack Admin API
+                try:
+                    expo_url = get_expo_build_url()
+                    if expo_url:
+                        version = config.get("currentTireTrackVersion", "latest")
+                        return response(200, {
+                            "downloadUrl": expo_url,
+                            "version": version,
+                            "source": "expo",
+                        })
+                except Exception as e:
+                    print(f"Expo fetch failed, falling back to S3: {e}")
+
+            # S3 fallback or direct S3
+            s3_key = None
+            if config and config.get("tireTrackApkS3Key"):
+                s3_key = config["tireTrackApkS3Key"]
+            else:
+                s3_key = get_latest_s3_apk("tiretrack")
+
+            if not s3_key:
+                return response(404, {"error": "TireTrack APK not found"})
+
+            download_url = s3.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": S3_BUCKET, "Key": s3_key},
+                ExpiresIn=3600,
+            )
+            version = config.get("currentTireTrackVersion", "unknown") if config else "unknown"
+            return response(200, {
+                "downloadUrl": download_url,
+                "version": version,
+                "source": "s3",
+                "s3Key": s3_key,
+            })
+
+        elif app == "rtlocator":
+            s3_key = None
+            if config and config.get("rtLocatorApkS3Key"):
+                s3_key = config["rtLocatorApkS3Key"]
+            else:
+                s3_key = get_latest_s3_apk("rtlocator")
+
+            if not s3_key:
+                return response(404, {"error": "RT Locator APK not found"})
+
+            download_url = s3.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": S3_BUCKET, "Key": s3_key},
+                ExpiresIn=3600,
+            )
+            version = config.get("currentRtLocatorVersion", "unknown") if config else "unknown"
+            return response(200, {
+                "downloadUrl": download_url,
+                "version": version,
+                "source": "s3",
+                "s3Key": s3_key,
+            })
+
+        elif app == "agent":
+            s3_key = None
+            if config and config.get("agentApkS3Key"):
+                s3_key = config["agentApkS3Key"]
+            else:
+                s3_key = get_latest_s3_apk("scanner-agent")
+
+            if not s3_key:
+                return response(404, {"error": "Scanner Agent APK not found"})
+
+            download_url = s3.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": S3_BUCKET, "Key": s3_key},
+                ExpiresIn=3600,
+            )
+            version = config.get("currentAgentVersion", "unknown") if config else "unknown"
+            return response(200, {
+                "downloadUrl": download_url,
+                "version": version,
+                "source": "s3",
+                "s3Key": s3_key,
+            })
+
+    except Exception as e:
+        print(f"Error: {e}")
+        return response(500, {"error": str(e)})
+
+
+def get_expo_build_url():
+    """
+    Fetch the latest TireTrack APK URL from Expo.
+    This is a placeholder — needs the actual Expo project slug and API token.
+    """
+    # TODO: Implement Expo API integration
+    # expo_api = "https://api.expo.dev/v2/projects/{projectId}/builds"
+    # headers = {"Authorization": f"Bearer {EXPO_TOKEN}"}
+    return None
+
+
+def response(status_code, body):
+    return {
+        "statusCode": status_code,
+        "headers": {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
+        },
+        "body": json.dumps(body),
+    }
