@@ -197,6 +197,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user?.role === "department_manager" ||
     user?.role === "member";
 
+  // Helper: check permissionOverrides first, then fall back to role-based check
+  const overrides = user?.permissionOverrides || {};
+  const withOverride = (key: string, roleBased: boolean): boolean => {
+    if (key in overrides) return overrides[key];
+    return roleBased;
+  };
+
   // Super Admin, Admin & Warehouse Director can manage users
   const canManageUsers =
     user?.role === "super_admin" ||
@@ -207,36 +214,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const canManageAdmins = user?.role === "super_admin";
 
   // Personnel management permissions
-  // View personnel: super_admin, admin, warehouse_director, department_manager, warehouse_manager
-  const canViewPersonnel =
+  const canViewPersonnel = withOverride("viewPersonnel",
     user?.role === "super_admin" ||
     user?.role === "admin" ||
     user?.role === "warehouse_director" ||
     user?.role === "department_manager" ||
-    user?.role === "warehouse_manager";
+    user?.role === "warehouse_manager"
+  );
 
-  // Manage personnel (add, edit, delete records): super_admin, admin, warehouse_director, department_manager, warehouse_manager
-  const canManagePersonnel =
+  const canManagePersonnel = withOverride("managePersonnel",
     user?.role === "super_admin" ||
     user?.role === "admin" ||
     user?.role === "warehouse_director" ||
     user?.role === "department_manager" ||
-    user?.role === "warehouse_manager";
+    user?.role === "warehouse_manager"
+  );
 
-  // Edit shifts: super_admin, admin, warehouse_director, warehouse_manager
-  const canEditShifts =
+  // Edit shifts
+  const canEditShifts = withOverride("viewShifts",
     user?.role === "super_admin" ||
     user?.role === "admin" ||
     user?.role === "warehouse_director" ||
-    user?.role === "warehouse_manager";
+    user?.role === "warehouse_manager"
+  );
 
-  // View shifts: super_admin, admin, warehouse_director, warehouse_manager, member
-  const canViewShifts =
+  // View shifts
+  const canViewShifts = withOverride("viewShifts",
     user?.role === "super_admin" ||
     user?.role === "admin" ||
     user?.role === "warehouse_director" ||
     user?.role === "warehouse_manager" ||
-    user?.role === "member";
+    user?.role === "member"
+  );
 
   // Can view ALL locations (warehouse_director and above)
   const canViewAllShifts =
@@ -244,9 +253,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user?.role === "admin" ||
     user?.role === "warehouse_director";
 
-  // Department manager portal access (read-only view of their department)
-  const canAccessDepartmentPortal =
-    user?.role === "department_manager";
+  // Department manager portal access
+  const canAccessDepartmentPortal = withOverride("departmentPortal",
+    user?.role === "department_manager"
+  );
 
   // Employee portal access
   const isEmployee = user?.role === "employee";
@@ -279,33 +289,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user?.role === "warehouse_director";
 
   // Employee portal admin permissions
-  // Manage time off requests: super_admin, admin, warehouse_director only
-  // (Warehouse managers and department managers cannot approve - goes through directors)
-  const canManageTimeOff =
+  // Manage time off requests
+  const canManageTimeOff = withOverride("manageTimeOff",
     user?.role === "super_admin" ||
     user?.role === "admin" ||
-    user?.role === "warehouse_director";
+    user?.role === "warehouse_director"
+  );
 
-  // Manage call-offs: super_admin, admin, warehouse_director, department_manager, warehouse_manager
-  const canManageCallOffs =
+  // Manage call-offs
+  const canManageCallOffs = withOverride("manageCallOffs",
     user?.role === "super_admin" ||
     user?.role === "admin" ||
     user?.role === "warehouse_director" ||
     user?.role === "department_manager" ||
-    user?.role === "warehouse_manager";
+    user?.role === "warehouse_manager"
+  );
 
-  // Manage announcements: super_admin, admin, warehouse_director
-  const canManageAnnouncements =
+  // Manage announcements
+  const canManageAnnouncements = withOverride("manageAnnouncements",
     user?.role === "super_admin" ||
     user?.role === "admin" ||
-    user?.role === "warehouse_director";
+    user?.role === "warehouse_director"
+  );
 
-  // Moderate chat: super_admin, admin, warehouse_director, department_manager
-  const canModerateChat =
+  // Moderate chat
+  const canModerateChat = withOverride("moderateChat",
     user?.role === "super_admin" ||
     user?.role === "admin" ||
     user?.role === "warehouse_director" ||
-    user?.role === "department_manager";
+    user?.role === "department_manager"
+  );
 
   return (
     <AuthContext.Provider

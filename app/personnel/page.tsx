@@ -28,17 +28,14 @@ function PersonnelContent() {
   const router = useRouter();
   const { user, canViewPersonnel, canManagePersonnel } = useAuth();
 
-  // Restrict warehouse_manager role from accessing this page
-  const isWarehouseManager = user?.role === "warehouse_manager";
-
+  // Redirect if user doesn't have personnel permission (respects overrides)
   useEffect(() => {
-    if (isWarehouseManager) {
+    if (user && !canViewPersonnel) {
       router.push("/");
     }
-  }, [isWarehouseManager, router]);
+  }, [user, canViewPersonnel, router]);
 
-  // Show nothing while redirecting warehouse manager
-  if (isWarehouseManager) {
+  if (user && !canViewPersonnel) {
     return (
       <div className={`flex h-screen items-center justify-center ${isDark ? "bg-slate-900" : "bg-[#f2f2f7]"}`}>
         <div className={`text-center ${isDark ? "text-slate-400" : "text-gray-500"}`}>
