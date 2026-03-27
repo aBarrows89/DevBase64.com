@@ -1,6 +1,9 @@
 """
 Lambda: fetch-sales
 Trigger: API Gateway GET /dunlop/sales?months=202603
+  - No params: returns list of available months
+  - months=YYYYMM: returns aggregated data for that month
+  - months=YYYYMM&compare=true: returns current + prev month + same month last year
 Returns pre-aggregated sales data from S3.
 """
 
@@ -18,19 +21,42 @@ def handler(event, context):
     try:
         params = event.get("queryStringParameters") or {}
         months = params.get("months", "")
+        compare = params.get("compare", "").lower() == "true"
 
         if months:
             month_list = [m.strip() for m in months.split(",") if m.strip()]
+
+            if compare and len(month_list) == 1:
+                # Comparison mode: fetch current, previous month, and same month last year
+                current_month = month_list[0]
+                prev_month = _prev_month(current_month)
+                yoy_month = _yoy_month(current_month)
+
+                current_rows = _fetch_month(current_month)
+                prev_rows = _fetch_month(prev_month)
+                yoy_rows = _fetch_month(yoy_month)
+
+                result = {
+                    "current": _aggregate(current_rows),
+                    "currentMonth": current_month,
+                    "prevMonth": {
+                        "month": prev_month,
+                        "data": _aggregate(prev_rows) if prev_rows else None,
+                    },
+                    "yoyMonth": {
+                        "month": yoy_month,
+                        "data": _aggregate(yoy_rows) if yoy_rows else None,
+                    },
+                    # Multi-month trend: last 12 months of KPIs
+                    "monthlyTrend": _monthly_trend(current_month, 12),
+                }
+                return _response(200, result)
+
+            # Standard mode: aggregate across all requested months
             all_rows = []
             for month in month_list:
-                try:
-                    resp = s3.get_object(Bucket=S3_BUCKET, Key=f"processed/{month}.json")
-                    data = json.loads(resp["Body"].read().decode("utf-8"))
-                    all_rows.extend(data.get("rows", []))
-                except Exception:
-                    continue
+                all_rows.extend(_fetch_month(month))
 
-            # Pre-aggregate for dashboard
             result = _aggregate(all_rows)
             return _response(200, result)
 
@@ -50,6 +76,64 @@ def handler(event, context):
 
     except Exception as e:
         return _response(500, {"error": str(e)})
+
+
+def _fetch_month(month):
+    """Fetch a single month's rows from S3. Returns [] if not found."""
+    try:
+        resp = s3.get_object(Bucket=S3_BUCKET, Key=f"processed/{month}.json")
+        data = json.loads(resp["Body"].read().decode("utf-8"))
+        return data.get("rows", [])
+    except Exception:
+        return []
+
+
+def _prev_month(month_str):
+    """Get previous month string. e.g., '202603' -> '202602', '202601' -> '202512'."""
+    y, m = int(month_str[:4]), int(month_str[4:])
+    m -= 1
+    if m < 1:
+        m = 12
+        y -= 1
+    return f"{y}{m:02d}"
+
+
+def _yoy_month(month_str):
+    """Get same month last year. e.g., '202603' -> '202503'."""
+    y = int(month_str[:4]) - 1
+    m = month_str[4:]
+    return f"{y}{m}"
+
+
+def _monthly_trend(current_month, num_months=12):
+    """Get KPIs for the last N months for trend sparklines."""
+    EXCLUDE_BRANDS = {"IET-P", "IET-G", "IET-T"}
+    months = []
+    m = current_month
+    for _ in range(num_months):
+        months.append(m)
+        m = _prev_month(m)
+    months.reverse()
+
+    trend = []
+    for month in months:
+        rows = _fetch_month(month)
+        if not rows:
+            trend.append({"month": month, "revenue": 0, "units": 0, "customers": 0, "hasData": False})
+            continue
+        sales = [r for r in rows if r.get("trn") == "Sld" and r.get("brand", "") not in EXCLUDE_BRANDS]
+        revenue = sum(abs(r.get("ext_sell", 0)) for r in sales)
+        units = sum(abs(r.get("qty", 0)) for r in sales)
+        customers = len(set(r.get("account", "") for r in sales if r.get("account")))
+        trend.append({
+            "month": month,
+            "revenue": round(revenue, 2),
+            "units": units,
+            "customers": customers,
+            "hasData": True,
+        })
+
+    return trend
 
 
 def _aggregate(rows):
@@ -97,6 +181,17 @@ def _aggregate(rows):
         by_customer[acct]["units"] += abs(r.get("qty", 0))
         by_customer[acct]["revenue"] += abs(r.get("ext_sell", 0))
         by_customer[acct]["txns"] += 1
+
+    # By brand by location (for location/brand matrix)
+    brand_loc = defaultdict(lambda: defaultdict(lambda: {"units": 0, "revenue": 0}))
+    for r in sales:
+        brand = r.get("brand", "Other")
+        loc = r.get("loc", "Other")
+        brand_loc[brand][loc]["units"] += abs(r.get("qty", 0))
+        brand_loc[brand][loc]["revenue"] += abs(r.get("ext_sell", 0))
+
+    # Customer account set for retention analysis
+    customer_set = list(set(r.get("account", "") for r in sales if r.get("account")))
 
     # Day-of-week by location (for Saturday analysis)
     from datetime import date as dt_date
@@ -171,6 +266,7 @@ def _aggregate(rows):
         "uniqueLocations": unique_locs,
         "dowByLocation": dow_data,
         "totalRows": len(rows),
+        "customerAccounts": customer_set,
     }
 
 

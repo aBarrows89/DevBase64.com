@@ -948,13 +948,50 @@ interface AggData {
   topCustomers: { account: string; name: string; units: number; revenue: number; txns: number }[];
   uniqueLocations: string[];
   dowByLocation: { loc: string; totalRevenue: number; saturdayRevenue: number; saturdayPct: number; saturdayUnits: number; saturdayTransactions: number; days: { day: string; revenue: number; units: number; transactions: number; pct: number }[] }[];
+  customerAccounts?: string[];
+}
+
+interface CompareData {
+  current: AggData;
+  currentMonth: string;
+  prevMonth: { month: string; data: AggData | null };
+  yoyMonth: { month: string; data: AggData | null };
+  monthlyTrend: { month: string; revenue: number; units: number; customers: number; hasData: boolean }[];
+}
+
+function pctChange(current: number, previous: number): number | null {
+  if (!previous || previous === 0) return null;
+  return ((current - previous) / previous) * 100;
+}
+
+function ChangeBadge({ current, previous, format = "pct", isDark }: { current: number; previous: number | undefined; format?: "pct" | "val"; isDark: boolean }) {
+  if (previous === undefined || previous === 0) return null;
+  const change = pctChange(current, previous);
+  if (change === null) return null;
+  const isUp = change > 0;
+  const isDown = change < 0;
+  return (
+    <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold px-1.5 py-0.5 rounded-full ${
+      isUp ? isDark ? "bg-emerald-500/15 text-emerald-400" : "bg-emerald-50 text-emerald-600"
+        : isDown ? isDark ? "bg-red-500/15 text-red-400" : "bg-red-50 text-red-600"
+        : isDark ? "bg-slate-700 text-slate-400" : "bg-gray-100 text-gray-500"
+    }`}>
+      {isUp ? "↑" : isDown ? "↓" : "→"}{Math.abs(change).toFixed(1)}%
+    </span>
+  );
 }
 
 function SalesDashboard({ isDark }: { isDark: boolean }) {
   const [availableMonths, setAvailableMonths] = useState<string[]>([]);
   const [selectedMonth, setSelectedMonth] = useState("");
-  const [agg, setAgg] = useState<AggData | null>(null);
+  const [compareData, setCompareData] = useState<CompareData | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Derived data
+  const agg = compareData?.current || null;
+  const prevAgg = compareData?.prevMonth?.data || null;
+  const yoyAgg = compareData?.yoyMonth?.data || null;
+  const monthlyTrend = compareData?.monthlyTrend || [];
 
   useEffect(() => {
     (async () => {
@@ -974,18 +1011,47 @@ function SalesDashboard({ isDark }: { isDark: boolean }) {
     (async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/sales?months=${selectedMonth}`);
-        if (res.ok) setAgg(await res.json());
+        const res = await fetch(`/api/sales?months=${selectedMonth}&compare=true`);
+        if (res.ok) setCompareData(await res.json());
       } catch {} finally { setLoading(false); }
     })();
   }, [selectedMonth]);
 
   const byLocation = useMemo(() => (agg?.byLocation || []).map(l => ({ ...l, name: LOC_NAMES[l.name] || l.name })), [agg]);
+  const prevByLocation = useMemo(() => (prevAgg?.byLocation || []).map(l => ({ ...l, name: LOC_NAMES[l.name] || l.name })), [prevAgg]);
   const byBrand = agg?.byBrand || [];
   const dailyTrend = useMemo(() => (agg?.dailyTrend || []).map(d => ({ ...d, date: d.date.slice(5) })), [agg]);
   const byTrnType = agg?.byTrnType || [];
   const topCustomers = agg?.topCustomers || [];
   const kpis = agg?.kpis || { totalRevenue: 0, totalUnits: 0, avgPrice: 0, uniqueCustomers: 0 };
+  const prevKpis = prevAgg?.kpis;
+  const yoyKpis = yoyAgg?.kpis;
+
+  // Customer retention: how many of last month's customers are still buying
+  const retentionRate = useMemo(() => {
+    if (!agg?.customerAccounts || !prevAgg?.customerAccounts) return null;
+    const currentSet = new Set(agg.customerAccounts);
+    const prevSet = prevAgg.customerAccounts;
+    if (prevSet.length === 0) return null;
+    const retained = prevSet.filter(a => currentSet.has(a)).length;
+    return Math.round((retained / prevSet.length) * 100);
+  }, [agg, prevAgg]);
+
+  // Location comparison data for MoM chart
+  const locationComparison = useMemo(() => {
+    if (!byLocation.length) return [];
+    return byLocation.map(loc => {
+      const prev = prevByLocation.find(p => p.name === loc.name);
+      return {
+        name: loc.name.replace(/ \(.*\)/, ""), // Short name for chart
+        current: loc.revenue,
+        previous: prev?.revenue || 0,
+      };
+    });
+  }, [byLocation, prevByLocation]);
+
+  // Monthly trend for sparkline
+  const trendData = useMemo(() => monthlyTrend.filter(m => m.hasData), [monthlyTrend]);
 
   const cardClass = `rounded-xl border p-5 ${isDark ? "bg-slate-800/50 border-slate-700" : "bg-white border-gray-200"}`;
 
@@ -1005,15 +1071,93 @@ function SalesDashboard({ isDark }: { isDark: boolean }) {
         <select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className={`px-3 py-1.5 rounded-lg border text-sm ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-white border-gray-300 text-gray-900"}`}>
           {availableMonths.map(m => <option key={m} value={m}>{fmtMonth(m)}</option>)}
         </select>
+        {prevAgg && (
+          <span className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+            vs {fmtMonth(compareData?.prevMonth?.month || "")} (MoM)
+            {yoyAgg && ` / ${fmtMonth(compareData?.yoyMonth?.month || "")} (YoY)`}
+          </span>
+        )}
       </div>
 
-      {/* KPI Cards */}
+      {/* KPI Cards with MoM/YoY badges */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className={cardClass}><p className={`text-xs font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Total Revenue</p><p className={`text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{fmtCurrency(kpis.totalRevenue)}</p></div>
-        <div className={cardClass}><p className={`text-xs font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Units Sold</p><p className={`text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{kpis.totalUnits.toLocaleString()}</p></div>
-        <div className={cardClass}><p className={`text-xs font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Avg Price / Unit</p><p className={`text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{fmtCurrency(kpis.avgPrice)}</p></div>
-        <div className={cardClass}><p className={`text-xs font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Unique Customers</p><p className={`text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{kpis.uniqueCustomers.toLocaleString()}</p></div>
+        <div className={cardClass}>
+          <p className={`text-xs font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Total Revenue</p>
+          <p className={`text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{fmtCurrency(kpis.totalRevenue)}</p>
+          <div className="flex items-center gap-2 mt-1">
+            {prevKpis && <ChangeBadge current={kpis.totalRevenue} previous={prevKpis.totalRevenue} isDark={isDark} />}
+            {yoyKpis && <span className={`text-[10px] ${isDark ? "text-slate-500" : "text-gray-400"}`}>YoY: <ChangeBadge current={kpis.totalRevenue} previous={yoyKpis.totalRevenue} isDark={isDark} /></span>}
+          </div>
+        </div>
+        <div className={cardClass}>
+          <p className={`text-xs font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Units Sold</p>
+          <p className={`text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{kpis.totalUnits.toLocaleString()}</p>
+          <div className="flex items-center gap-2 mt-1">
+            {prevKpis && <ChangeBadge current={kpis.totalUnits} previous={prevKpis.totalUnits} isDark={isDark} />}
+            {yoyKpis && <span className={`text-[10px] ${isDark ? "text-slate-500" : "text-gray-400"}`}>YoY: <ChangeBadge current={kpis.totalUnits} previous={yoyKpis.totalUnits} isDark={isDark} /></span>}
+          </div>
+        </div>
+        <div className={cardClass}>
+          <p className={`text-xs font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Avg Price / Unit</p>
+          <p className={`text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{fmtCurrency(kpis.avgPrice)}</p>
+          <div className="flex items-center gap-2 mt-1">
+            {prevKpis && <ChangeBadge current={kpis.avgPrice} previous={prevKpis.avgPrice} isDark={isDark} />}
+          </div>
+        </div>
+        <div className={cardClass}>
+          <p className={`text-xs font-medium ${isDark ? "text-slate-400" : "text-gray-500"}`}>Unique Customers</p>
+          <p className={`text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{kpis.uniqueCustomers.toLocaleString()}</p>
+          <div className="flex items-center gap-2 mt-1">
+            {prevKpis && <ChangeBadge current={kpis.uniqueCustomers} previous={prevKpis.uniqueCustomers} isDark={isDark} />}
+            {retentionRate !== null && (
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${isDark ? "bg-blue-500/15 text-blue-400" : "bg-blue-50 text-blue-600"}`}>
+                {retentionRate}% retained
+              </span>
+            )}
+          </div>
+        </div>
       </div>
+
+      {/* Monthly Revenue Trend (12mo sparkline) */}
+      {trendData.length > 1 && (
+        <div className={cardClass}>
+          <h3 className={`text-sm font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>Monthly Revenue Trend</h3>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={trendData}>
+              <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#334155" : "#e5e7eb"} />
+              <XAxis dataKey="month" stroke={isDark ? "#94a3b8" : "#6b7280"} fontSize={11} tickFormatter={(m) => fmtMonth(m).slice(0, 3)} />
+              <YAxis stroke={isDark ? "#94a3b8" : "#6b7280"} fontSize={11} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
+              <Tooltip contentStyle={{ backgroundColor: isDark ? "#1e293b" : "#fff", border: `1px solid ${isDark ? "#334155" : "#e5e7eb"}`, borderRadius: 8 }}
+                formatter={(value) => [fmtCurrency(Number(value)), "Revenue"]}
+                labelFormatter={(m) => fmtMonth(String(m))} />
+              <Bar dataKey="revenue" radius={[4, 4, 0, 0]}>
+                {trendData.map((entry, i) => (
+                  <Cell key={i} fill={entry.month === selectedMonth ? "#06b6d4" : isDark ? "#334155" : "#cbd5e1"} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Location MoM Comparison */}
+      {locationComparison.length > 0 && prevAgg && (
+        <div className={cardClass}>
+          <h3 className={`text-sm font-semibold mb-1 ${isDark ? "text-white" : "text-gray-900"}`}>Revenue by Location — Month over Month</h3>
+          <p className={`text-xs mb-4 ${isDark ? "text-slate-400" : "text-gray-500"}`}>{fmtMonth(selectedMonth)} vs {fmtMonth(compareData?.prevMonth?.month || "")}</p>
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={locationComparison}>
+              <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#334155" : "#e5e7eb"} />
+              <XAxis dataKey="name" stroke={isDark ? "#94a3b8" : "#6b7280"} fontSize={11} />
+              <YAxis stroke={isDark ? "#94a3b8" : "#6b7280"} fontSize={11} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
+              <Tooltip contentStyle={{ backgroundColor: isDark ? "#1e293b" : "#fff", border: `1px solid ${isDark ? "#334155" : "#e5e7eb"}`, borderRadius: 8 }}
+                formatter={(value) => [fmtCurrency(Number(value))]} />
+              <Bar dataKey="previous" name={fmtMonth(compareData?.prevMonth?.month || "")} fill={isDark ? "#475569" : "#cbd5e1"} radius={[4, 4, 0, 0]} />
+              <Bar dataKey="current" name={fmtMonth(selectedMonth)} fill="#06b6d4" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
       {/* Daily Trend */}
       <div className={cardClass}>

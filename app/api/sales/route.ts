@@ -5,9 +5,12 @@ const API_GATEWAY_URL = process.env.DUNLOP_API_GATEWAY_URL || "https://jzdhz2de8
 export async function GET(request: NextRequest) {
   try {
     const months = request.nextUrl.searchParams.get("months");
-    const url = months
-      ? `${API_GATEWAY_URL}/dunlop/sales?months=${months}`
-      : `${API_GATEWAY_URL}/dunlop/sales`;
+    const compare = request.nextUrl.searchParams.get("compare");
+    let url = `${API_GATEWAY_URL}/dunlop/sales`;
+    const params = new URLSearchParams();
+    if (months) params.set("months", months);
+    if (compare) params.set("compare", compare);
+    if (params.toString()) url += `?${params.toString()}`;
 
     const res = await fetch(url, {
       method: "GET",
