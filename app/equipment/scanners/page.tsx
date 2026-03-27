@@ -202,7 +202,7 @@ function ScannerDashboardContent() {
                       <div className={`text-[11px] font-semibold uppercase tracking-wider ${isDark ? "text-slate-500" : "text-gray-400"}`}>Offline</div>
                       <div className={`text-2xl font-bold mt-0.5 tabular-nums ${isDark ? "text-slate-400" : "text-gray-500"}`}>{fleet.offline}</div>
                     </div>
-                    <div className={`text-xs font-medium tabular-nums ${isDark ? "text-slate-600" : "text-gray-400"}`}>
+                    <div className={`text-xs font-medium tabular-nums ${isDark ? "text-slate-400" : "text-gray-400"}`}>
                       {fleet.total > 0 ? Math.round((fleet.offline / fleet.total) * 100) : 0}%
                     </div>
                   </div>
@@ -215,7 +215,7 @@ function ScannerDashboardContent() {
                       <div className={`text-[11px] font-semibold uppercase tracking-wider ${isDark ? "text-slate-500" : "text-gray-400"}`}>Avg Battery</div>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className={`text-2xl font-bold tabular-nums ${
-                          stats.avgBattery === null ? (isDark ? "text-slate-600" : "text-gray-300")
+                          stats.avgBattery === null ? (isDark ? "text-slate-400" : "text-gray-300")
                           : stats.avgBattery > 50 ? (isDark ? "text-emerald-400" : "text-emerald-600")
                           : stats.avgBattery > 20 ? (isDark ? "text-amber-400" : "text-amber-600")
                           : (isDark ? "text-red-400" : "text-red-600")
@@ -231,7 +231,7 @@ function ScannerDashboardContent() {
                   <div className="flex items-center justify-between">
                     <div>
                       <div className={`text-[11px] font-semibold uppercase tracking-wider ${fleet.needsAttention > 0 ? (isDark ? "text-amber-400/70" : "text-amber-600/70") : isDark ? "text-slate-500" : "text-gray-400"}`}>Alerts</div>
-                      <div className={`text-2xl font-bold mt-0.5 tabular-nums ${fleet.needsAttention > 0 ? (isDark ? "text-amber-400" : "text-amber-600") : isDark ? "text-slate-600" : "text-gray-300"}`}>{fleet.needsAttention}</div>
+                      <div className={`text-2xl font-bold mt-0.5 tabular-nums ${fleet.needsAttention > 0 ? (isDark ? "text-amber-400" : "text-amber-600") : isDark ? "text-slate-400" : "text-gray-300"}`}>{fleet.needsAttention}</div>
                     </div>
                     {fleet.needsAttention > 0 && (
                       <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${isDark ? "bg-amber-500/10" : "bg-amber-100"}`}>
@@ -281,7 +281,7 @@ function ScannerDashboardContent() {
                     <span className={`text-[10px] flex items-center gap-1 ${isDark ? "text-slate-500" : "text-gray-400"}`}>
                       <span className={`w-1.5 h-1.5 rounded-full inline-block ${isDark ? "bg-slate-600" : "bg-gray-300"}`} /> {loc.offline} offline
                     </span>
-                    <span className={`text-[10px] ${isDark ? "text-slate-600" : "text-gray-300"}`}>
+                    <span className={`text-[10px] ${isDark ? "text-slate-400" : "text-gray-300"}`}>
                       {loc.assigned} assigned
                     </span>
                   </div>
@@ -350,7 +350,7 @@ function ScannerDashboardContent() {
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               )}
-              <span className={`text-[11px] ml-auto tabular-nums ${isDark ? "text-slate-600" : "text-gray-400"}`}>
+              <span className={`text-[11px] ml-auto tabular-nums ${isDark ? "text-slate-400" : "text-gray-400"}`}>
                 {filteredScanners.length} device{filteredScanners.length !== 1 ? "s" : ""}
               </span>
             </div>
@@ -379,7 +379,9 @@ function ScannerDashboardContent() {
                     {filteredScanners.map((scanner) => {
                       const health = getScannerHealth(scanner);
                       const isSelected = selectedScannerId === scanner._id;
+                      const colCount = 12;
                       return (
+                        <>
                         <tr
                           key={scanner._id}
                           onClick={() => setSelectedScannerId(isSelected ? null : scanner._id)}
@@ -408,7 +410,7 @@ function ScannerDashboardContent() {
                             <WifiSignalIcon signal={scanner.wifiSignal} />
                           </td>
                           <td className={`px-2 py-2.5 text-xs ${isDark ? "text-slate-300" : "text-gray-700"}`}>{scanner.locationName}</td>
-                          <td className={`px-2 py-2.5 text-xs ${scanner.assignedPersonName ? (isDark ? "text-slate-300" : "text-gray-700") : (isDark ? "text-slate-600" : "text-gray-300")}`}>
+                          <td className={`px-2 py-2.5 text-xs ${scanner.assignedPersonName ? (isDark ? "text-slate-300" : "text-gray-700") : (isDark ? "text-slate-500" : "text-gray-300")}`}>
                             {scanner.assignedPersonName ?? "—"}
                           </td>
                           <td className="px-2 py-2.5">
@@ -417,120 +419,113 @@ function ScannerDashboardContent() {
                                 v{scanner.installedApps.tireTrack}
                               </span>
                             ) : (
-                              <span className={`text-xs ${isDark ? "text-slate-700" : "text-gray-300"}`}>—</span>
+                              <span className={`text-xs ${isDark ? "text-slate-500" : "text-gray-300"}`}>—</span>
                             )}
                           </td>
                           <td className={`px-2 py-2.5 text-xs tabular-nums ${
                             scanner.lastSeen && (Date.now() - scanner.lastSeen) < 600000
                               ? (isDark ? "text-emerald-400/70" : "text-emerald-600")
-                              : isDark ? "text-slate-500" : "text-gray-400"
+                              : isDark ? "text-slate-400" : "text-gray-400"
                           }`}>
                             {timeAgo(scanner.lastSeen)}
                           </td>
-                          <td className={`px-2 py-2.5 text-[11px] font-mono ${isDark ? "text-slate-600" : "text-gray-300"}`}>
+                          <td className={`px-2 py-2.5 text-[11px] font-mono ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                             {scanner.serialNumber ?? "—"}
                           </td>
-                          <td className={`px-2 py-2.5 text-[11px] ${isDark ? "text-slate-600" : "text-gray-300"}`}>
+                          <td className={`px-2 py-2.5 text-[11px] ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                             {scanner.model ?? "—"}
                           </td>
                           <td className="px-2 pr-4 py-2.5">
                             {scanner.mdmStatus === "provisioned" ? (
                               <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20`}>managed</span>
                             ) : (
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${isDark ? "bg-slate-800 text-slate-500" : "bg-gray-100 text-gray-400"}`}>
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${isDark ? "bg-slate-800 text-slate-400" : "bg-gray-100 text-gray-400"}`}>
                                 {scanner.mdmStatus ?? "none"}
                               </span>
                             )}
                           </td>
                         </tr>
+                        {/* Inline detail — expands directly below selected row */}
+                        {isSelected && (
+                          <tr key={`${scanner._id}-detail`}>
+                            <td colSpan={colCount} className="p-0">
+                              <div className={`px-5 py-4 ${isDark ? "bg-slate-800/40 border-y border-cyan-500/10" : "bg-blue-50/30 border-y border-blue-200/40"}`}>
+                                <div className="flex items-center justify-between mb-3">
+                                  <div className="flex items-center gap-3">
+                                    <ScannerStatusDot health={health} size="lg" />
+                                    <div>
+                                      <span className={`text-base font-bold ${isDark ? "text-white" : "text-gray-900"}`}>Scanner {scanner.number}</span>
+                                      <span className={`text-xs ml-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>{scanner.model}</span>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <button onClick={() => router.push(`/equipment/scanners/${scanner._id}`)}
+                                      className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${isDark ? "bg-cyan-500/15 text-cyan-400 hover:bg-cyan-500/25" : "bg-blue-50 text-blue-600 hover:bg-blue-100"}`}>
+                                      Open Full Detail
+                                    </button>
+                                    <button onClick={(e) => { e.stopPropagation(); setSelectedScannerId(null); }} className={`p-1 rounded ${isDark ? "text-slate-400 hover:text-slate-200" : "text-gray-400 hover:text-gray-600"}`}>
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                    </button>
+                                  </div>
+                                </div>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-4">
+                                  <div>
+                                    <div className={`text-[10px] uppercase tracking-wider ${isDark ? "text-slate-500" : "text-gray-400"}`}>Battery</div>
+                                    <div className="mt-1"><ScannerBatteryBar level={scanner.batteryLevel} size="md" /></div>
+                                  </div>
+                                  <div>
+                                    <div className={`text-[10px] uppercase tracking-wider ${isDark ? "text-slate-500" : "text-gray-400"}`}>WiFi</div>
+                                    <div className="mt-1"><WifiSignalIcon signal={scanner.wifiSignal} showLabel /></div>
+                                  </div>
+                                  <div>
+                                    <div className={`text-[10px] uppercase tracking-wider ${isDark ? "text-slate-500" : "text-gray-400"}`}>Location</div>
+                                    <div className={`text-sm font-medium mt-1 ${isDark ? "text-slate-200" : "text-gray-700"}`}>{scanner.locationName}</div>
+                                  </div>
+                                  <div>
+                                    <div className={`text-[10px] uppercase tracking-wider ${isDark ? "text-slate-500" : "text-gray-400"}`}>Assigned</div>
+                                    <div className={`text-sm font-medium mt-1 ${isDark ? "text-slate-200" : "text-gray-700"}`}>{scanner.assignedPersonName ?? "Unassigned"}</div>
+                                  </div>
+                                  <div>
+                                    <div className={`text-[10px] uppercase tracking-wider ${isDark ? "text-slate-500" : "text-gray-400"}`}>Serial</div>
+                                    <div className={`text-xs font-mono mt-1 ${isDark ? "text-slate-300" : "text-gray-500"}`}>{scanner.serialNumber ?? "—"}</div>
+                                  </div>
+                                  <div>
+                                    <div className={`text-[10px] uppercase tracking-wider ${isDark ? "text-slate-500" : "text-gray-400"}`}>Last Seen</div>
+                                    <div className={`text-sm mt-1 ${isDark ? "text-slate-300" : "text-gray-500"}`}>{timeAgo(scanner.lastSeen)}</div>
+                                  </div>
+                                </div>
+                                {scanner.installedApps && (
+                                  <div className="flex items-center gap-2 mt-3 pt-3 border-t" style={{ borderColor: isDark ? "rgba(51,65,85,0.5)" : "rgba(229,231,235,0.8)" }}>
+                                    <span className={`text-[10px] uppercase tracking-wider ${isDark ? "text-slate-500" : "text-gray-400"}`}>Apps:</span>
+                                    {scanner.installedApps.tireTrack && <span className={`text-[11px] px-2 py-0.5 rounded-full ${isDark ? "bg-cyan-500/10 text-cyan-400" : "bg-blue-50 text-blue-600"}`}>TireTrack v{scanner.installedApps.tireTrack}</span>}
+                                    {scanner.installedApps.rtLocator && <span className={`text-[11px] px-2 py-0.5 rounded-full ${isDark ? "bg-purple-500/10 text-purple-400" : "bg-purple-50 text-purple-600"}`}>RT Locator v{scanner.installedApps.rtLocator}</span>}
+                                    {scanner.installedApps.scannerAgent && <span className={`text-[11px] px-2 py-0.5 rounded-full ${isDark ? "bg-slate-700 text-slate-300" : "bg-gray-100 text-gray-500"}`}>Agent v{scanner.installedApps.scannerAgent}</span>}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        </>
                       );
                     })}
                   </tbody>
                 </table>
               </div>
-
-              {/* Inline Detail Panel (slides open when row selected) */}
-              {selectedScanner && (
-                <div className={`border-t ${isDark ? "border-slate-800 bg-slate-900/60" : "border-gray-100 bg-gray-50/50"}`}>
-                  <div className="px-5 py-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <ScannerStatusDot health={getScannerHealth(selectedScanner)} size="lg" />
-                        <div>
-                          <span className={`text-lg font-bold ${isDark ? "text-white" : "text-gray-900"}`}>Scanner {selectedScanner.number}</span>
-                          <span className={`text-xs ml-2 ${isDark ? "text-slate-500" : "text-gray-400"}`}>{selectedScanner.model}</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => router.push(`/equipment/scanners/${selectedScanner._id}`)}
-                          className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${isDark ? "bg-cyan-500/15 text-cyan-400 hover:bg-cyan-500/25" : "bg-blue-50 text-blue-600 hover:bg-blue-100"}`}
-                        >
-                          Full Detail
-                        </button>
-                        <button onClick={() => setSelectedScannerId(null)} className={`p-1 rounded ${isDark ? "text-slate-500 hover:text-slate-300" : "text-gray-400 hover:text-gray-600"}`}>
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                        </button>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-4">
-                      <div>
-                        <div className={`text-[10px] uppercase tracking-wider ${isDark ? "text-slate-600" : "text-gray-400"}`}>Battery</div>
-                        <div className="mt-1"><ScannerBatteryBar level={selectedScanner.batteryLevel} size="md" /></div>
-                      </div>
-                      <div>
-                        <div className={`text-[10px] uppercase tracking-wider ${isDark ? "text-slate-600" : "text-gray-400"}`}>WiFi</div>
-                        <div className="mt-1"><WifiSignalIcon signal={selectedScanner.wifiSignal} showLabel /></div>
-                      </div>
-                      <div>
-                        <div className={`text-[10px] uppercase tracking-wider ${isDark ? "text-slate-600" : "text-gray-400"}`}>Location</div>
-                        <div className={`text-sm font-medium mt-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>{selectedScanner.locationName}</div>
-                      </div>
-                      <div>
-                        <div className={`text-[10px] uppercase tracking-wider ${isDark ? "text-slate-600" : "text-gray-400"}`}>Assigned</div>
-                        <div className={`text-sm font-medium mt-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>{selectedScanner.assignedPersonName ?? "Unassigned"}</div>
-                      </div>
-                      <div>
-                        <div className={`text-[10px] uppercase tracking-wider ${isDark ? "text-slate-600" : "text-gray-400"}`}>Serial</div>
-                        <div className={`text-xs font-mono mt-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>{selectedScanner.serialNumber ?? "—"}</div>
-                      </div>
-                      <div>
-                        <div className={`text-[10px] uppercase tracking-wider ${isDark ? "text-slate-600" : "text-gray-400"}`}>Last Seen</div>
-                        <div className={`text-sm mt-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>{timeAgo(selectedScanner.lastSeen)}</div>
-                      </div>
-                    </div>
-                    {/* Quick app info */}
-                    {selectedScanner.installedApps && (
-                      <div className="flex items-center gap-2 mt-3 pt-3 border-t" style={{ borderColor: isDark ? "rgba(51,65,85,0.5)" : "rgba(229,231,235,0.8)" }}>
-                        <span className={`text-[10px] uppercase tracking-wider ${isDark ? "text-slate-600" : "text-gray-400"}`}>Apps:</span>
-                        {selectedScanner.installedApps.tireTrack && (
-                          <span className={`text-[11px] px-2 py-0.5 rounded-full ${isDark ? "bg-cyan-500/10 text-cyan-400" : "bg-blue-50 text-blue-600"}`}>TireTrack v{selectedScanner.installedApps.tireTrack}</span>
-                        )}
-                        {selectedScanner.installedApps.rtLocator && (
-                          <span className={`text-[11px] px-2 py-0.5 rounded-full ${isDark ? "bg-purple-500/10 text-purple-400" : "bg-purple-50 text-purple-600"}`}>RT Locator v{selectedScanner.installedApps.rtLocator}</span>
-                        )}
-                        {selectedScanner.installedApps.scannerAgent && (
-                          <span className={`text-[11px] px-2 py-0.5 rounded-full ${isDark ? "bg-slate-800 text-slate-400" : "bg-gray-100 text-gray-500"}`}>Agent v{selectedScanner.installedApps.scannerAgent}</span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
             </div>
 
             {/* Empty state */}
             {filteredScanners.length === 0 && scanners !== undefined && (
               <div className={`text-center py-20 rounded-xl border ${isDark ? "bg-slate-900/20 border-slate-800/50" : "bg-white border-gray-200"}`}>
                 <div className={`w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center ${isDark ? "bg-slate-800/50" : "bg-gray-100"}`}>
-                  <svg className={`w-8 h-8 ${isDark ? "text-slate-600" : "text-gray-300"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className={`w-8 h-8 ${isDark ? "text-slate-400" : "text-gray-300"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
                   </svg>
                 </div>
                 <h3 className={`text-base font-semibold ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                   {searchQuery || statusFilter !== "all" ? "No matching scanners" : "No scanners in fleet"}
                 </h3>
-                <p className={`text-sm mt-1 max-w-sm mx-auto ${isDark ? "text-slate-600" : "text-gray-400"}`}>
+                <p className={`text-sm mt-1 max-w-sm mx-auto ${isDark ? "text-slate-400" : "text-gray-400"}`}>
                   {searchQuery || statusFilter !== "all"
                     ? "Try broadening your search or clearing filters."
                     : "Connect a scanner via USB and run the setup tool to add it to the fleet."}
