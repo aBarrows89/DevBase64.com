@@ -23,6 +23,9 @@ def handler(event, context):
         months = params.get("months", "")
         compare = params.get("compare", "").lower() == "true"
 
+        locations = params.get("locations", "")  # Comma-separated location filter (e.g., "W07,W08")
+        loc_filter = set(l.strip() for l in locations.split(",") if l.strip()) if locations else None
+
         if months:
             month_list = [m.strip() for m in months.split(",") if m.strip()]
 
@@ -32,9 +35,9 @@ def handler(event, context):
                 prev_month = _prev_month(current_month)
                 yoy_month = _yoy_month(current_month)
 
-                current_rows = _fetch_month(current_month)
-                prev_rows = _fetch_month(prev_month)
-                yoy_rows = _fetch_month(yoy_month)
+                current_rows = _fetch_month(current_month, loc_filter)
+                prev_rows = _fetch_month(prev_month, loc_filter)
+                yoy_rows = _fetch_month(yoy_month, loc_filter)
 
                 result = {
                     "current": _aggregate(current_rows),
@@ -48,14 +51,16 @@ def handler(event, context):
                         "data": _aggregate(yoy_rows) if yoy_rows else None,
                     },
                     # Multi-month trend: last 12 months of KPIs
-                    "monthlyTrend": _monthly_trend(current_month, 12),
+                    "monthlyTrend": _monthly_trend(current_month, 12, loc_filter),
+                    # All available locations (unfiltered) for the filter UI
+                    "allLocations": _get_all_locations(current_month),
                 }
                 return _response(200, result)
 
             # Standard mode: aggregate across all requested months
             all_rows = []
             for month in month_list:
-                all_rows.extend(_fetch_month(month))
+                all_rows.extend(_fetch_month(month, loc_filter))
 
             result = _aggregate(all_rows)
             return _response(200, result)
@@ -78,12 +83,26 @@ def handler(event, context):
         return _response(500, {"error": str(e)})
 
 
-def _fetch_month(month):
-    """Fetch a single month's rows from S3. Returns [] if not found."""
+def _fetch_month(month, loc_filter=None):
+    """Fetch a single month's rows from S3. Optionally filter by locations. Returns [] if not found."""
     try:
         resp = s3.get_object(Bucket=S3_BUCKET, Key=f"processed/{month}.json")
         data = json.loads(resp["Body"].read().decode("utf-8"))
-        return data.get("rows", [])
+        rows = data.get("rows", [])
+        if loc_filter:
+            rows = [r for r in rows if r.get("loc", "") in loc_filter]
+        return rows
+    except Exception:
+        return []
+
+
+def _get_all_locations(month):
+    """Get all unique location codes from a month (unfiltered) for the filter UI."""
+    try:
+        resp = s3.get_object(Bucket=S3_BUCKET, Key=f"processed/{month}.json")
+        data = json.loads(resp["Body"].read().decode("utf-8"))
+        rows = data.get("rows", [])
+        return sorted(set(r.get("loc", "") for r in rows if r.get("loc")))
     except Exception:
         return []
 
@@ -105,7 +124,7 @@ def _yoy_month(month_str):
     return f"{y}{m}"
 
 
-def _monthly_trend(current_month, num_months=12):
+def _monthly_trend(current_month, num_months=12, loc_filter=None):
     """Get KPIs for the last N months for trend sparklines."""
     EXCLUDE_BRANDS = {"IET-P", "IET-G", "IET-T"}
     months = []
@@ -117,7 +136,7 @@ def _monthly_trend(current_month, num_months=12):
 
     trend = []
     for month in months:
-        rows = _fetch_month(month)
+        rows = _fetch_month(month, loc_filter)
         if not rows:
             trend.append({"month": month, "revenue": 0, "units": 0, "customers": 0, "hasData": False})
             continue

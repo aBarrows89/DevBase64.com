@@ -957,6 +957,7 @@ interface CompareData {
   prevMonth: { month: string; data: AggData | null };
   yoyMonth: { month: string; data: AggData | null };
   monthlyTrend: { month: string; revenue: number; units: number; customers: number; hasData: boolean }[];
+  allLocations?: string[];
 }
 
 function pctChange(current: number, previous: number): number | null {
@@ -986,6 +987,8 @@ function SalesDashboard({ isDark }: { isDark: boolean }) {
   const [selectedMonth, setSelectedMonth] = useState("");
   const [compareData, setCompareData] = useState<CompareData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [allLocations, setAllLocations] = useState<string[]>([]);
+  const [selectedLocations, setSelectedLocations] = useState<Set<string>>(new Set()); // empty = all
 
   // Derived data
   const agg = compareData?.current || null;
@@ -1011,11 +1014,19 @@ function SalesDashboard({ isDark }: { isDark: boolean }) {
     (async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/sales?months=${selectedMonth}&compare=true`);
-        if (res.ok) setCompareData(await res.json());
+        const locParam = selectedLocations.size > 0 ? `&locations=${[...selectedLocations].join(",")}` : "";
+        const res = await fetch(`/api/sales?months=${selectedMonth}&compare=true${locParam}`);
+        if (res.ok) {
+          const data = await res.json();
+          setCompareData(data);
+          // Set all locations from response (only on first load or when no filter active)
+          if (data.allLocations && allLocations.length === 0) {
+            setAllLocations(data.allLocations);
+          }
+        }
       } catch {} finally { setLoading(false); }
     })();
-  }, [selectedMonth]);
+  }, [selectedMonth, selectedLocations]);
 
   const byLocation = useMemo(() => (agg?.byLocation || []).map(l => ({ ...l, name: LOC_NAMES[l.name] || l.name })), [agg]);
   const prevByLocation = useMemo(() => (prevAgg?.byLocation || []).map(l => ({ ...l, name: LOC_NAMES[l.name] || l.name })), [prevAgg]);
@@ -1071,6 +1082,50 @@ function SalesDashboard({ isDark }: { isDark: boolean }) {
         <select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className={`px-3 py-1.5 rounded-lg border text-sm ${isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-white border-gray-300 text-gray-900"}`}>
           {availableMonths.map(m => <option key={m} value={m}>{fmtMonth(m)}</option>)}
         </select>
+
+        {/* Location filter */}
+        {allLocations.length > 0 && (
+          <div className="flex items-center gap-1">
+            <span className={`text-xs mr-1 ${isDark ? "text-slate-500" : "text-gray-400"}`}>Locations:</span>
+            <button
+              onClick={() => setSelectedLocations(new Set())}
+              className={`px-2 py-1 text-xs rounded-md transition-colors ${
+                selectedLocations.size === 0
+                  ? isDark ? "bg-cyan-500/20 text-cyan-400 font-medium" : "bg-blue-100 text-blue-700 font-medium"
+                  : isDark ? "text-slate-400 hover:bg-slate-700" : "text-gray-500 hover:bg-gray-100"
+              }`}
+            >
+              All
+            </button>
+            {allLocations.map(loc => {
+              const isSelected = selectedLocations.has(loc);
+              return (
+                <button
+                  key={loc}
+                  onClick={() => {
+                    setSelectedLocations(prev => {
+                      const next = new Set(prev);
+                      if (isSelected) {
+                        next.delete(loc);
+                      } else {
+                        next.add(loc);
+                      }
+                      return next;
+                    });
+                  }}
+                  className={`px-2 py-1 text-xs rounded-md transition-colors ${
+                    isSelected
+                      ? isDark ? "bg-cyan-500/20 text-cyan-400 font-medium" : "bg-blue-100 text-blue-700 font-medium"
+                      : isDark ? "text-slate-400 hover:bg-slate-700" : "text-gray-500 hover:bg-gray-100"
+                  }`}
+                >
+                  {LOC_NAMES[loc]?.replace(/ \(.*\)/, "") || loc}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {prevAgg && (
           <span className={`text-xs ${isDark ? "text-slate-500" : "text-gray-400"}`}>
             vs {fmtMonth(compareData?.prevMonth?.month || "")} (MoM)
