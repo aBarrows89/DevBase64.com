@@ -1182,7 +1182,7 @@ function SalesDashboard({ isDark }: { isDark: boolean }) {
               <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#334155" : "#e5e7eb"} />
               <XAxis dataKey="month" stroke={isDark ? "#94a3b8" : "#6b7280"} fontSize={11} tickFormatter={(m) => fmtMonth(m).slice(0, 3)} />
               <YAxis stroke={isDark ? "#94a3b8" : "#6b7280"} fontSize={11} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
-              <Tooltip contentStyle={{ backgroundColor: isDark ? "#1e293b" : "#fff", border: `1px solid ${isDark ? "#334155" : "#e5e7eb"}`, borderRadius: 8 }}
+              <Tooltip contentStyle={{ backgroundColor: isDark ? "#1e293b" : "#fff", border: `1px solid ${isDark ? "#334155" : "#e5e7eb"}`, borderRadius: 8, color: isDark ? "#e2e8f0" : "#1f2937" }} labelStyle={{ color: isDark ? "#94a3b8" : "#6b7280" }}
                 formatter={(value) => [fmtCurrency(Number(value)), "Revenue"]}
                 labelFormatter={(m) => fmtMonth(String(m))} />
               <Bar dataKey="revenue" radius={[4, 4, 0, 0]}>
@@ -1205,7 +1205,7 @@ function SalesDashboard({ isDark }: { isDark: boolean }) {
               <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#334155" : "#e5e7eb"} />
               <XAxis dataKey="name" stroke={isDark ? "#94a3b8" : "#6b7280"} fontSize={11} />
               <YAxis stroke={isDark ? "#94a3b8" : "#6b7280"} fontSize={11} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
-              <Tooltip contentStyle={{ backgroundColor: isDark ? "#1e293b" : "#fff", border: `1px solid ${isDark ? "#334155" : "#e5e7eb"}`, borderRadius: 8 }}
+              <Tooltip contentStyle={{ backgroundColor: isDark ? "#1e293b" : "#fff", border: `1px solid ${isDark ? "#334155" : "#e5e7eb"}`, borderRadius: 8, color: isDark ? "#e2e8f0" : "#1f2937" }} labelStyle={{ color: isDark ? "#94a3b8" : "#6b7280" }}
                 formatter={(value) => [fmtCurrency(Number(value))]} />
               <Bar dataKey="previous" name={fmtMonth(compareData?.prevMonth?.month || "")} fill={isDark ? "#475569" : "#cbd5e1"} radius={[4, 4, 0, 0]} />
               <Bar dataKey="current" name={fmtMonth(selectedMonth)} fill="#06b6d4" radius={[4, 4, 0, 0]} />
@@ -1222,7 +1222,7 @@ function SalesDashboard({ isDark }: { isDark: boolean }) {
             <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#334155" : "#e5e7eb"} />
             <XAxis dataKey="date" stroke={isDark ? "#94a3b8" : "#6b7280"} fontSize={12} />
             <YAxis stroke={isDark ? "#94a3b8" : "#6b7280"} fontSize={12} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
-            <Tooltip contentStyle={{ backgroundColor: isDark ? "#1e293b" : "#fff", border: `1px solid ${isDark ? "#334155" : "#e5e7eb"}`, borderRadius: 8 }} formatter={(value) => [fmtCurrency(Number(value)), "Revenue"]} />
+            <Tooltip contentStyle={{ backgroundColor: isDark ? "#1e293b" : "#fff", border: `1px solid ${isDark ? "#334155" : "#e5e7eb"}`, borderRadius: 8, color: isDark ? "#e2e8f0" : "#1f2937" }} labelStyle={{ color: isDark ? "#94a3b8" : "#6b7280" }} formatter={(value) => [fmtCurrency(Number(value)), "Revenue"]} />
             <Line type="monotone" dataKey="revenue" stroke="#06b6d4" strokeWidth={2} dot={{ fill: "#06b6d4", r: 4 }} />
           </LineChart>
         </ResponsiveContainer>
@@ -1237,7 +1237,7 @@ function SalesDashboard({ isDark }: { isDark: boolean }) {
               <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#334155" : "#e5e7eb"} />
               <XAxis type="number" stroke={isDark ? "#94a3b8" : "#6b7280"} fontSize={12} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
               <YAxis type="category" dataKey="name" stroke={isDark ? "#94a3b8" : "#6b7280"} fontSize={11} width={130} />
-              <Tooltip contentStyle={{ backgroundColor: isDark ? "#1e293b" : "#fff", border: `1px solid ${isDark ? "#334155" : "#e5e7eb"}`, borderRadius: 8 }} formatter={(value) => [fmtCurrency(Number(value)), "Revenue"]} />
+              <Tooltip contentStyle={{ backgroundColor: isDark ? "#1e293b" : "#fff", border: `1px solid ${isDark ? "#334155" : "#e5e7eb"}`, borderRadius: 8, color: isDark ? "#e2e8f0" : "#1f2937" }} labelStyle={{ color: isDark ? "#94a3b8" : "#6b7280" }} formatter={(value) => [fmtCurrency(Number(value)), "Revenue"]} />
               <Bar dataKey="revenue" fill="#06b6d4" radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
@@ -1249,7 +1249,7 @@ function SalesDashboard({ isDark }: { isDark: boolean }) {
               <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#334155" : "#e5e7eb"} />
               <XAxis type="number" stroke={isDark ? "#94a3b8" : "#6b7280"} fontSize={12} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
               <YAxis type="category" dataKey="name" stroke={isDark ? "#94a3b8" : "#6b7280"} fontSize={11} width={60} />
-              <Tooltip contentStyle={{ backgroundColor: isDark ? "#1e293b" : "#fff", border: `1px solid ${isDark ? "#334155" : "#e5e7eb"}`, borderRadius: 8 }} formatter={(value) => [fmtCurrency(Number(value)), "Revenue"]} />
+              <Tooltip contentStyle={{ backgroundColor: isDark ? "#1e293b" : "#fff", border: `1px solid ${isDark ? "#334155" : "#e5e7eb"}`, borderRadius: 8, color: isDark ? "#e2e8f0" : "#1f2937" }} labelStyle={{ color: isDark ? "#94a3b8" : "#6b7280" }} formatter={(value) => [fmtCurrency(Number(value)), "Revenue"]} />
               <Bar dataKey="revenue" radius={[0, 4, 4, 0]}>{byBrand.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}</Bar>
             </BarChart>
           </ResponsiveContainer>
@@ -1272,7 +1272,7 @@ function SalesDashboard({ isDark }: { isDark: boolean }) {
               <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#334155" : "#e5e7eb"} />
               <XAxis dataKey="name" stroke={isDark ? "#94a3b8" : "#6b7280"} fontSize={10} angle={-20} textAnchor="end" height={60} />
               <YAxis stroke={isDark ? "#94a3b8" : "#6b7280"} fontSize={12} />
-              <Tooltip contentStyle={{ backgroundColor: isDark ? "#1e293b" : "#fff", border: `1px solid ${isDark ? "#334155" : "#e5e7eb"}`, borderRadius: 8 }} />
+              <Tooltip contentStyle={{ backgroundColor: isDark ? "#1e293b" : "#fff", border: `1px solid ${isDark ? "#334155" : "#e5e7eb"}`, borderRadius: 8, color: isDark ? "#e2e8f0" : "#1f2937" }} labelStyle={{ color: isDark ? "#94a3b8" : "#6b7280" }} />
               <Bar dataKey="units" fill="#10b981" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
