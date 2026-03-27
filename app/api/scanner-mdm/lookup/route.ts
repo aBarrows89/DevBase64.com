@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "@/convex/_generated/api";
 
-const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+function getConvexClient() {
+  const url = process.env.NEXT_PUBLIC_CONVEX_URL;
+  if (!url) throw new Error("NEXT_PUBLIC_CONVEX_URL not configured");
+  return new ConvexHttpClient(url);
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,6 +20,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const convex = getConvexClient();
     const scanner = await convex.query(
       api.scannerMdm.getScannerBySerialNumber,
       { serialNumber }
